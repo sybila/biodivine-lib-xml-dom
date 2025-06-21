@@ -116,7 +116,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                             local_name,
                             Namespace::prefixed(uri, prefix.to_string()),
                         );
-                        
+
                         // Copy namespace declarations and attributes
                         for (ns_prefix, ns_uri) in element.namespace_declarations() {
                             namespaced_element.declare_namespace(ns_prefix, ns_uri);
@@ -124,7 +124,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                         for attr in element.attributes() {
                             namespaced_element.add_attribute(attr);
                         }
-                        
+
                         namespaced_element
                     } else {
                         element
@@ -262,7 +262,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                             local_name,
                             Namespace::prefixed(uri, prefix.to_string()),
                         );
-                        
+
                         // Copy namespace declarations and attributes
                         for (ns_prefix, ns_uri) in element.namespace_declarations() {
                             namespaced_element.declare_namespace(ns_prefix, ns_uri);
@@ -270,7 +270,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                         for attr in element.attributes() {
                             namespaced_element.add_attribute(attr);
                         }
-                        
+
                         namespaced_element
                     } else {
                         element
@@ -473,34 +473,55 @@ mod tests {
         let root = doc.root().unwrap();
 
         // Check that the root has the default namespace declaration
-        assert_eq!(root.get_namespace_uri("default"), Some("http://default.com".to_string()));
+        assert_eq!(
+            root.get_namespace_uri("default"),
+            Some("http://default.com".to_string())
+        );
 
         // Check that the first child has the first ex namespace
         let first_child = root.children()[0].clone();
-        assert_eq!(first_child.get_namespace_uri("ex"), Some("http://example.com".to_string()));
+        assert_eq!(
+            first_child.get_namespace_uri("ex"),
+            Some("http://example.com".to_string())
+        );
 
         // Check that the nested element has a different ex namespace
         let nested = first_child.children()[1].clone(); // nested element
-        assert_eq!(nested.get_namespace_uri("ex"), Some("http://example-another.com".to_string()));
+        assert_eq!(
+            nested.get_namespace_uri("ex"),
+            Some("http://example-another.com".to_string())
+        );
 
         // Check that the deep element has yet another ex namespace
         let deep = nested.children()[1].clone(); // deep element
-        assert_eq!(deep.get_namespace_uri("ex"), Some("http://example-third.com".to_string()));
+        assert_eq!(
+            deep.get_namespace_uri("ex"),
+            Some("http://example-third.com".to_string())
+        );
 
         // Check that going back to original scope works
         let back_to_original = first_child.children()[2].clone(); // back_to_original element
-        assert_eq!(back_to_original.get_namespace_uri("ex"), Some("http://example.com".to_string()));
+        assert_eq!(
+            back_to_original.get_namespace_uri("ex"),
+            Some("http://example.com".to_string())
+        );
 
         // Check that the second child has a different ex namespace
         let second_child = root.children()[1].clone();
-        assert_eq!(second_child.get_namespace_uri("ex"), Some("http://example-another.com".to_string()));
+        assert_eq!(
+            second_child.get_namespace_uri("ex"),
+            Some("http://example-another.com".to_string())
+        );
 
         // Test round-trip
         let output = write_string(&doc).unwrap();
         let doc2 = parse_string(&output).unwrap();
-        
+
         // Verify that the namespace scoping is preserved
         let root2 = doc2.root().unwrap();
-        assert_eq!(root2.get_namespace_uri("default"), Some("http://default.com".to_string()));
+        assert_eq!(
+            root2.get_namespace_uri("default"),
+            Some("http://default.com".to_string())
+        );
     }
 }

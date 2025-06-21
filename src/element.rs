@@ -90,7 +90,9 @@ impl Element {
 
     /// Declare a default namespace on this element
     pub fn declare_default_namespace(&self, uri: String) {
-        self.namespace_declarations.write().insert("".to_string(), uri);
+        self.namespace_declarations
+            .write()
+            .insert("".to_string(), uri);
     }
 
     /// Get namespace URI by prefix, walking up the tree if not found on this element
@@ -109,7 +111,10 @@ impl Element {
     }
 
     /// Resolve a qualified name to local name and namespace using scoped namespace resolution
-    pub fn resolve_qualified_name(&self, qualified_name: &str) -> XmlResult<(String, Option<Namespace>)> {
+    pub fn resolve_qualified_name(
+        &self,
+        qualified_name: &str,
+    ) -> XmlResult<(String, Option<Namespace>)> {
         if let Some(colon_pos) = qualified_name.find(':') {
             let prefix = &qualified_name[..colon_pos];
             let local_name = &qualified_name[colon_pos + 1..];

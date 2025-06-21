@@ -24,7 +24,7 @@
 //! // Create elements
 //! let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml".to_string(), "html".to_string());
 //! let root = doc.create_element_with_namespace("html".to_string(), html_ns);
-//! 
+//!
 //! // Declare namespaces on elements
 //! root.declare_namespace("html".to_string(), "http://www.w3.org/1999/xhtml".to_string());
 //! doc.set_root(root.clone()).unwrap();

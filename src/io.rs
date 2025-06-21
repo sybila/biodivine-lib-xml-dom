@@ -1,18 +1,17 @@
+use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
+use quick_xml::Reader;
+use quick_xml::Writer;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 use std::sync::Arc;
-
-use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
-use quick_xml::Reader;
-use quick_xml::Writer;
 
 use crate::document::Document;
 use crate::element::Element;
 use crate::error::{XmlError, XmlResult};
 use crate::namespace::{Attribute, Namespace};
 
-/// Parse XML from a file path
+/// Parse XML from a file
 pub fn parse_file<P: AsRef<Path>>(path: P) -> XmlResult<Document> {
     let file = File::open(path)
         .map_err(|e| XmlError::InvalidXml(format!("Failed to open file: {}", e)))?;
@@ -22,7 +21,8 @@ pub fn parse_file<P: AsRef<Path>>(path: P) -> XmlResult<Document> {
 
 /// Parse XML from a string
 pub fn parse_string(xml: &str) -> XmlResult<Document> {
-    parse_reader(BufReader::new(xml.as_bytes()))
+    let reader = BufReader::new(xml.as_bytes());
+    parse_reader(reader)
 }
 
 /// Parse XML from a generic reader
@@ -37,110 +37,8 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
     loop {
         match xml_reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
-                let name = std::str::from_utf8(e.name().into_inner()).map_err(|e| {
-                    XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e))
-                })?;
-
-                // Parse namespace declarations from attributes
-                let mut namespace = None;
-                let mut attributes = Vec::new();
-
-                for attr in e.attributes() {
-                    let attr = attr
-                        .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
-                    let key = std::str::from_utf8(attr.key.into_inner()).map_err(|e| {
-                        XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e))
-                    })?;
-                    let value = attr.unescape_value().map_err(|e| {
-                        XmlError::InvalidXml(format!("Invalid attribute value: {}", e))
-                    })?;
-
-                    if let Some(_prefix) = key.strip_prefix("xmlns:") {
-                        // Prefixed namespace declaration - will be declared on the element
-                    } else if key == "xmlns" {
-                        // Default namespace declaration - will be declared on the element
-                        namespace = Some(Namespace::default(value.to_string()));
-                    } else {
-                        // Regular attribute
-                        attributes.push(Attribute::new(key.to_string(), value.to_string()));
-                    }
-                }
-
-                // Handle qualified names (prefix:local_name)
-                let (local_name, element_namespace) = if let Some(colon_pos) = name.find(':') {
-                    let _prefix = &name[..colon_pos];
-                    let local_name = &name[colon_pos + 1..];
-
-                    // We'll resolve the namespace after creating the element
-                    (local_name.to_string(), None)
-                } else {
-                    (name.to_string(), namespace)
-                };
-
-                // Create element
-                let element = if let Some(ns) = element_namespace {
-                    doc.create_element_with_namespace(local_name.clone(), ns)
-                } else {
-                    doc.create_element(local_name.clone())
-                };
-
-                // Now declare namespaces on this element
-                for attr in e.attributes() {
-                    let attr = attr
-                        .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
-                    let key = std::str::from_utf8(attr.key.into_inner()).map_err(|e| {
-                        XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e))
-                    })?;
-                    let value = attr.unescape_value().map_err(|e| {
-                        XmlError::InvalidXml(format!("Invalid attribute value: {}", e))
-                    })?;
-
-                    if let Some(prefix) = key.strip_prefix("xmlns:") {
-                        element.declare_namespace(prefix.to_string(), value.to_string());
-                    } else if key == "xmlns" {
-                        element.declare_default_namespace(value.to_string());
-                    }
-                }
-
-                // Add attributes
-                for attr in attributes {
-                    element.add_attribute(attr);
-                }
-
-                // Now resolve the element's namespace if it has a qualified name
-                let final_element = if let Some(colon_pos) = name.find(':') {
-                    let prefix = &name[..colon_pos];
-                    if let Some(uri) = element.get_namespace_uri(prefix) {
-                        // Create a new element with the resolved namespace
-                        let namespaced_element = doc.create_element_with_namespace(
-                            local_name,
-                            Namespace::prefixed(uri, prefix.to_string()),
-                        );
-
-                        // Copy namespace declarations and attributes
-                        for (ns_prefix, ns_uri) in element.namespace_declarations() {
-                            namespaced_element.declare_namespace(ns_prefix, ns_uri);
-                        }
-                        for attr in element.attributes() {
-                            namespaced_element.add_attribute(attr);
-                        }
-
-                        namespaced_element
-                    } else {
-                        element
-                    }
-                } else {
-                    element
-                };
-
-                // Add to parent or set as root
-                if let Some(parent) = stack.last() {
-                    parent.add_child(final_element.clone())?;
-                } else {
-                    doc.set_root(final_element.clone())?;
-                }
-
-                stack.push(final_element);
+                let element = parse_start_element(&doc, e)?;
+                add_element_to_tree(&doc, &mut stack, element)?;
             }
 
             Ok(Event::End(_)) => {
@@ -185,105 +83,8 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
             }
 
             Ok(Event::Empty(ref e)) => {
-                // Handle self-closing elements
-                let name = std::str::from_utf8(e.name().into_inner()).map_err(|e| {
-                    XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e))
-                })?;
-
-                let mut namespace = None;
-                let mut attributes = Vec::new();
-
-                for attr in e.attributes() {
-                    let attr = attr
-                        .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
-                    let key = std::str::from_utf8(attr.key.into_inner()).map_err(|e| {
-                        XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e))
-                    })?;
-                    let value = attr.unescape_value().map_err(|e| {
-                        XmlError::InvalidXml(format!("Invalid attribute value: {}", e))
-                    })?;
-
-                    if let Some(prefix) = key.strip_prefix("xmlns:") {
-                        // Prefixed namespace declaration - will be declared on the element
-                    } else if key == "xmlns" {
-                        // Default namespace declaration - will be declared on the element
-                        namespace = Some(Namespace::default(value.to_string()));
-                    } else {
-                        attributes.push(Attribute::new(key.to_string(), value.to_string()));
-                    }
-                }
-
-                // Handle qualified names (prefix:local_name)
-                let (local_name, element_namespace) = if let Some(colon_pos) = name.find(':') {
-                    let _prefix = &name[..colon_pos];
-                    let local_name = &name[colon_pos + 1..];
-
-                    // We'll resolve the namespace after creating the element
-                    (local_name.to_string(), None)
-                } else {
-                    (name.to_string(), namespace)
-                };
-
-                let element = if let Some(ns) = element_namespace {
-                    doc.create_element_with_namespace(local_name.clone(), ns)
-                } else {
-                    doc.create_element(local_name.clone())
-                };
-
-                // Now declare namespaces on this element
-                for attr in e.attributes() {
-                    let attr = attr
-                        .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
-                    let key = std::str::from_utf8(attr.key.into_inner()).map_err(|e| {
-                        XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e))
-                    })?;
-                    let value = attr.unescape_value().map_err(|e| {
-                        XmlError::InvalidXml(format!("Invalid attribute value: {}", e))
-                    })?;
-
-                    if let Some(prefix) = key.strip_prefix("xmlns:") {
-                        element.declare_namespace(prefix.to_string(), value.to_string());
-                    } else if key == "xmlns" {
-                        element.declare_default_namespace(value.to_string());
-                    }
-                }
-
-                // Add attributes
-                for attr in attributes {
-                    element.add_attribute(attr);
-                }
-
-                // Now resolve the element's namespace if it has a qualified name
-                let final_element = if let Some(colon_pos) = name.find(':') {
-                    let prefix = &name[..colon_pos];
-                    if let Some(uri) = element.get_namespace_uri(prefix) {
-                        // Create a new element with the resolved namespace
-                        let namespaced_element = doc.create_element_with_namespace(
-                            local_name,
-                            Namespace::prefixed(uri, prefix.to_string()),
-                        );
-
-                        // Copy namespace declarations and attributes
-                        for (ns_prefix, ns_uri) in element.namespace_declarations() {
-                            namespaced_element.declare_namespace(ns_prefix, ns_uri);
-                        }
-                        for attr in element.attributes() {
-                            namespaced_element.add_attribute(attr);
-                        }
-
-                        namespaced_element
-                    } else {
-                        element
-                    }
-                } else {
-                    element
-                };
-
-                if let Some(parent) = stack.last() {
-                    parent.add_child(final_element)?;
-                } else {
-                    doc.set_root(final_element)?;
-                }
+                let element = parse_empty_element(&doc, e)?;
+                add_element_to_tree(&doc, &mut stack, element)?;
             }
 
             Err(e) => return Err(XmlError::InvalidXml(format!("XML parsing error: {}", e))),
@@ -293,6 +94,166 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
     }
 
     Ok(doc)
+}
+
+/// Parse a start element and its attributes
+fn parse_start_element(doc: &Document, e: &BytesStart) -> XmlResult<Arc<Element>> {
+    let name = std::str::from_utf8(e.name().into_inner()).map_err(|e| {
+        XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e))
+    })?;
+
+    let (local_name, default_namespace) = parse_element_name(name);
+    let (attributes, namespace_declarations) = parse_attributes(e)?;
+
+    // Create the initial element
+    let element = if let Some(ns) = default_namespace {
+        doc.create_element_with_namespace(local_name.clone(), ns)
+    } else {
+        doc.create_element(local_name.clone())
+    };
+
+    // Declare namespaces on the element
+    for (prefix, uri) in namespace_declarations {
+        if prefix.is_empty() {
+            element.declare_default_namespace(uri);
+        } else {
+            element.declare_namespace(prefix, uri);
+        }
+    }
+
+    // Add regular attributes
+    for attr in attributes {
+        element.add_attribute(attr);
+    }
+
+    // Resolve the element's namespace if it has a qualified name
+    resolve_element_namespace(doc, element, name, local_name)
+}
+
+/// Parse an empty (self-closing) element and its attributes
+fn parse_empty_element(doc: &Document, e: &BytesStart) -> XmlResult<Arc<Element>> {
+    let name = std::str::from_utf8(e.name().into_inner()).map_err(|e| {
+        XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e))
+    })?;
+
+    let (local_name, default_namespace) = parse_element_name(name);
+    let (attributes, namespace_declarations) = parse_attributes(e)?;
+
+    // Create the initial element
+    let element = if let Some(ns) = default_namespace {
+        doc.create_element_with_namespace(local_name.clone(), ns)
+    } else {
+        doc.create_element(local_name.clone())
+    };
+
+    // Declare namespaces on the element
+    for (prefix, uri) in namespace_declarations {
+        if prefix.is_empty() {
+            element.declare_default_namespace(uri);
+        } else {
+            element.declare_namespace(prefix, uri);
+        }
+    }
+
+    // Add regular attributes
+    for attr in attributes {
+        element.add_attribute(attr);
+    }
+
+    // Resolve the element's namespace if it has a qualified name
+    resolve_element_namespace(doc, element, name, local_name)
+}
+
+/// Parse element name and extract local name and default namespace
+fn parse_element_name(name: &str) -> (String, Option<Namespace>) {
+    if let Some(colon_pos) = name.find(':') {
+        let local_name = &name[colon_pos + 1..];
+        (local_name.to_string(), None)
+    } else {
+        (name.to_string(), None)
+    }
+}
+
+/// Parse attributes and separate namespace declarations from regular attributes
+fn parse_attributes(e: &BytesStart) -> XmlResult<(Vec<Attribute>, Vec<(String, String)>)> {
+    let mut attributes = Vec::new();
+    let mut namespace_declarations = Vec::new();
+
+    for attr in e.attributes() {
+        let attr = attr
+            .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
+        let key = std::str::from_utf8(attr.key.into_inner()).map_err(|e| {
+            XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e))
+        })?;
+        let value = attr.unescape_value().map_err(|e| {
+            XmlError::InvalidXml(format!("Invalid attribute value: {}", e))
+        })?;
+
+        if let Some(prefix) = key.strip_prefix("xmlns:") {
+            // Prefixed namespace declaration
+            namespace_declarations.push((prefix.to_string(), value.to_string()));
+        } else if key == "xmlns" {
+            // Default namespace declaration
+            namespace_declarations.push(("".to_string(), value.to_string()));
+        } else {
+            // Regular attribute
+            attributes.push(Attribute::new(key.to_string(), value.to_string()));
+        }
+    }
+
+    Ok((attributes, namespace_declarations))
+}
+
+/// Resolve element namespace if it has a qualified name
+fn resolve_element_namespace(
+    doc: &Document,
+    element: Arc<Element>,
+    original_name: &str,
+    local_name: String,
+) -> XmlResult<Arc<Element>> {
+    if let Some(colon_pos) = original_name.find(':') {
+        let prefix = &original_name[..colon_pos];
+        if let Some(uri) = element.get_namespace_uri(prefix) {
+            // Create a new element with the resolved namespace
+            let namespaced_element = doc.create_element_with_namespace(
+                local_name,
+                Namespace::prefixed(uri, prefix.to_string()),
+            );
+
+            // Copy namespace declarations and attributes
+            for (ns_prefix, ns_uri) in element.namespace_declarations() {
+                if ns_prefix.is_empty() {
+                    namespaced_element.declare_default_namespace(ns_uri);
+                } else {
+                    namespaced_element.declare_namespace(ns_prefix, ns_uri);
+                }
+            }
+            for attr in element.attributes() {
+                namespaced_element.add_attribute(attr);
+            }
+
+            Ok(namespaced_element)
+        } else {
+            Ok(element)
+        }
+    } else {
+        Ok(element)
+    }
+}
+
+/// Add element to the document tree
+fn add_element_to_tree(
+    doc: &Document,
+    stack: &mut Vec<Arc<Element>>,
+    element: Arc<Element>,
+) -> XmlResult<()> {
+    if let Some(parent) = stack.last() {
+        parent.add_child(element.clone())?;
+    } else {
+        doc.set_root(element.clone())?;
+    }
+    stack.push(element);
+    Ok(())
 }
 
 /// Write XML document to a file

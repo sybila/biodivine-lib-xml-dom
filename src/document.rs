@@ -2,9 +2,9 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::element::Element;
 use crate::error::{XmlError, XmlResult};
 use crate::namespace::Namespace;
-use crate::element::Element;
 
 /// Internal document structure that handles Arc complexity
 #[derive(Debug)]
@@ -25,7 +25,7 @@ impl InternalDocument {
     pub(crate) fn new() -> Self {
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT_ID: AtomicU64 = AtomicU64::new(1);
-        
+
         Self {
             id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
             root: RwLock::new(None),
@@ -78,18 +78,22 @@ impl InternalDocument {
         format!("ns{}", id)
     }
 
-    pub(crate) fn resolve_qualified_name(&self, qualified_name: &str) -> XmlResult<(String, Option<Namespace>)> {
+    pub(crate) fn resolve_qualified_name(
+        &self,
+        qualified_name: &str,
+    ) -> XmlResult<(String, Option<Namespace>)> {
         if let Some(colon_pos) = qualified_name.find(':') {
             let prefix = &qualified_name[..colon_pos];
             let local_name = &qualified_name[colon_pos + 1..];
-            
+
             if let Some(uri) = self.get_namespace_uri(prefix) {
                 let namespace = Namespace::prefixed(uri, prefix.to_string());
                 Ok((local_name.to_string(), Some(namespace)))
             } else {
-                Err(XmlError::NamespaceError(
-                    format!("Undefined namespace prefix: {}", prefix)
-                ))
+                Err(XmlError::NamespaceError(format!(
+                    "Undefined namespace prefix: {}",
+                    prefix
+                )))
             }
         } else {
             // No prefix, use default namespace if available
@@ -145,8 +149,16 @@ impl Document {
     }
 
     /// Create a new namespaced element in this document
-    pub fn create_element_with_namespace(&self, name: String, namespace: Namespace) -> Arc<Element> {
-        Arc::new(Element::with_namespace(self.internal.clone(), name, namespace))
+    pub fn create_element_with_namespace(
+        &self,
+        name: String,
+        namespace: Namespace,
+    ) -> Arc<Element> {
+        Arc::new(Element::with_namespace(
+            self.internal.clone(),
+            name,
+            namespace,
+        ))
     }
 
     /// Declare a default namespace
@@ -170,7 +182,10 @@ impl Document {
     }
 
     /// Resolve a qualified name to local name and namespace
-    pub fn resolve_qualified_name(&self, qualified_name: &str) -> XmlResult<(String, Option<Namespace>)> {
+    pub fn resolve_qualified_name(
+        &self,
+        qualified_name: &str,
+    ) -> XmlResult<(String, Option<Namespace>)> {
         self.internal.resolve_qualified_name(qualified_name)
     }
-} 
+}

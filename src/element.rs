@@ -1,9 +1,9 @@
 use parking_lot::RwLock;
 use std::sync::Arc;
 
+use crate::document::InternalDocument;
 use crate::error::{XmlError, XmlResult};
 use crate::namespace::{Attribute, Namespace};
-use crate::document::InternalDocument;
 
 /// Represents an XML element node
 #[derive(Debug)]
@@ -39,7 +39,11 @@ impl Element {
     }
 
     /// Create a new namespaced element
-    pub(crate) fn with_namespace(document: Arc<InternalDocument>, name: String, namespace: Namespace) -> Self {
+    pub(crate) fn with_namespace(
+        document: Arc<InternalDocument>,
+        name: String,
+        namespace: Namespace,
+    ) -> Self {
         Self {
             document_id: document.id(),
             name,
@@ -116,7 +120,7 @@ impl Element {
     pub fn add_child(&self, child: Arc<Element>) -> XmlResult<()> {
         // Set this element as the parent of the child
         *child.parent.write() = Some(Arc::new(self.clone()));
-        
+
         // Add to children list
         self.children.write().push(child);
         Ok(())
@@ -154,7 +158,7 @@ impl Element {
     pub fn set_text_content(&self, text: String) {
         let mut text_content = self.text_content.write();
         let mut children = self.children.write();
-        
+
         *text_content = Some(text);
         children.clear();
     }
@@ -192,4 +196,4 @@ impl Clone for Element {
             parent: RwLock::new(None), // Don't clone parent to avoid cycles
         }
     }
-} 
+}

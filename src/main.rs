@@ -7,10 +7,16 @@ fn main() {
     // Example 1: Create XML programmatically
     println!("\n1. Creating XML programmatically:");
     let doc = create_document();
-    doc.declare_namespace("html".to_string(), "http://www.w3.org/1999/xhtml".to_string());
+    doc.declare_namespace(
+        "html".to_string(),
+        "http://www.w3.org/1999/xhtml".to_string(),
+    );
     doc.declare_namespace("svg".to_string(), "http://www.w3.org/2000/svg".to_string());
 
-    let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml".to_string(), "html".to_string());
+    let html_ns = Namespace::prefixed(
+        "http://www.w3.org/1999/xhtml".to_string(),
+        "html".to_string(),
+    );
     let root = doc.create_element_with_namespace("html".to_string(), html_ns);
     doc.set_root(root.clone()).unwrap();
 
@@ -69,7 +75,11 @@ fn main() {
     println!("Number of books: {}", root.children().len());
 
     for (i, book) in root.children().iter().enumerate() {
-        println!("Book {}: {}", i + 1, book.get_attribute("category").unwrap().value);
+        println!(
+            "Book {}: {}",
+            i + 1,
+            book.get_attribute("category").unwrap().value
+        );
         if let Some(title) = book.get_children_by_name("title").first() {
             if let Some(title_text) = title.text_content() {
                 println!("  Title: {}", title_text);
@@ -81,7 +91,10 @@ fn main() {
     println!("\n3. Round-trip test (parse -> modify -> write):");
     let round_trip_xml = write_string(&parsed_doc).unwrap();
     let round_trip_doc = parse_string(&round_trip_xml).unwrap();
-    println!("Round-trip successful: {}", round_trip_doc.root().unwrap().name() == "bookstore");
+    println!(
+        "Round-trip successful: {}",
+        round_trip_doc.root().unwrap().name() == "bookstore"
+    );
 
     println!("\nLibrary is ready for use!");
 }

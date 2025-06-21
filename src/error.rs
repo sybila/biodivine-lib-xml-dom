@@ -18,4 +18,4 @@ pub enum XmlError {
 }
 
 /// Result type for XML DOM operations
-pub type XmlResult<T> = Result<T, XmlError>; 
+pub type XmlResult<T> = Result<T, XmlError>;

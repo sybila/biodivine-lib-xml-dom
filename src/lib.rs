@@ -9,8 +9,11 @@
 //! - **Reference counting**: Automatic memory management with Arc
 //! - **Easy API**: Clean, ergonomic API that hides internal complexity
 //! - **Detached elements**: Support for elements not attached to the document tree
+//! - **XML parsing and writing**: Parse from files, strings, or readers; write to files, strings, or writers
 //! 
-//! # Example
+//! # Examples
+//! 
+//! ## Creating and manipulating XML
 //! 
 //! ```rust
 //! use biodivine_lib_xml_dom::{create_document, Attribute, Namespace};
@@ -32,18 +35,48 @@
 //! body.set_text_content("Hello, World!".to_string());
 //! root.add_child(body).unwrap();
 //! ```
+//! 
+//! ## Parsing XML
+//! 
+//! ```rust
+//! use biodivine_lib_xml_dom::{parse_string, parse_file};
+//! 
+//! // Parse from string
+//! let xml = r#"<root><child>Hello, World!</child></root>"#;
+//! let doc = parse_string(xml).unwrap();
+//! 
+//! // Parse from file
+//! let doc = parse_file("example.xml").unwrap();
+//! ```
+//! 
+//! ## Writing XML
+//! 
+//! ```rust
+//! use biodivine_lib_xml_dom::{write_string, write_file};
+//! 
+//! let doc = create_document();
+//! // ... build document ...
+//! 
+//! // Write to string
+//! let xml_string = write_string(&doc).unwrap();
+//! 
+//! // Write to file
+//! write_file(&doc, "output.xml").unwrap();
+//! ```
 
 // Module declarations
 mod error;
 mod namespace;
 mod element;
 mod document;
+mod io;
 
 // Re-export public API
 pub use error::{XmlError, XmlResult};
 pub use namespace::{Attribute, Namespace};
 pub use element::Element;
 pub use document::Document;
+pub use io::{parse_file, parse_string, parse_reader, write_file, write_string, write_writer};
 
 /// Main entry point for the library
 /// 

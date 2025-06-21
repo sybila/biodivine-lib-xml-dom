@@ -11,6 +11,10 @@ pub enum XmlError {
     ElementNotFound,
     #[error("Invalid operation: {0}")]
     InvalidOperation(String),
+    #[error("IO error: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("Quick XML error: {0}")]
+    QuickXmlError(#[from] quick_xml::Error),
 }
 
 /// Result type for XML DOM operations

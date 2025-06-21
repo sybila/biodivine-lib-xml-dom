@@ -125,6 +125,12 @@ pub struct Document {
     internal: Arc<InternalDocument>,
 }
 
+impl Default for Document {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Document {
     /// Create a new empty XML document
     pub fn new() -> Self {

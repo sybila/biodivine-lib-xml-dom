@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -55,9 +55,9 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                         XmlError::InvalidXml(format!("Invalid attribute value: {}", e))
                     })?;
 
-                    if key.starts_with("xmlns:") {
+                    if let Some(prefix) = key.strip_prefix("xmlns:") {
                         // Prefixed namespace declaration
-                        let prefix = &key[6..]; // Remove "xmlns:"
+                        // Remove "xmlns:"
                         doc.declare_namespace(prefix.to_string(), value.to_string());
                     } else if key == "xmlns" {
                         // Default namespace declaration
@@ -166,8 +166,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                         XmlError::InvalidXml(format!("Invalid attribute value: {}", e))
                     })?;
 
-                    if key.starts_with("xmlns:") {
-                        let prefix = &key[6..];
+                    if let Some(prefix) = key.strip_prefix("xmlns:") {
                         doc.declare_namespace(prefix.to_string(), value.to_string());
                     } else if key == "xmlns" {
                         doc.declare_default_namespace(value.to_string());

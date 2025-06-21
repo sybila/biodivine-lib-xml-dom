@@ -74,11 +74,108 @@ impl Attribute {
     }
 }
 
+/// Internal document structure that handles Arc complexity
+#[derive(Debug)]
+struct InternalDocument {
+    /// Unique identifier for this document
+    id: u64,
+    /// Root element of the document
+    root: RwLock<Option<Arc<Element>>>,
+    /// Default namespace declarations
+    default_namespaces: RwLock<HashMap<String, String>>,
+    /// Prefixed namespace declarations
+    prefixed_namespaces: RwLock<HashMap<String, String>>,
+    /// Next available prefix for auto-generated prefixes
+    next_prefix_id: RwLock<u32>,
+}
+
+impl InternalDocument {
+    fn new() -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+        
+        Self {
+            id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
+            root: RwLock::new(None),
+            default_namespaces: RwLock::new(HashMap::new()),
+            prefixed_namespaces: RwLock::new(HashMap::new()),
+            next_prefix_id: RwLock::new(0),
+        }
+    }
+
+    fn id(&self) -> u64 {
+        self.id
+    }
+
+    fn set_root(&self, root: Arc<Element>) -> XmlResult<()> {
+        // Ensure the element belongs to this document
+        if !root.belongs_to_document(self) {
+            return Err(XmlError::InvalidOperation(
+                "Element belongs to a different document".to_string(),
+            ));
+        }
+
+        *self.root.write() = Some(root);
+        Ok(())
+    }
+
+    fn root(&self) -> Option<Arc<Element>> {
+        self.root.read().clone()
+    }
+
+    fn declare_default_namespace(&self, uri: String) {
+        self.default_namespaces.write().insert("".to_string(), uri);
+    }
+
+    fn declare_namespace(&self, prefix: String, uri: String) {
+        self.prefixed_namespaces.write().insert(prefix, uri);
+    }
+
+    fn get_namespace_uri(&self, prefix: &str) -> Option<String> {
+        if prefix.is_empty() {
+            // Return default namespace
+            self.default_namespaces.read().get("").cloned()
+        } else {
+            self.prefixed_namespaces.read().get(prefix).cloned()
+        }
+    }
+
+    fn generate_prefix(&self) -> String {
+        let mut id = self.next_prefix_id.write();
+        *id += 1;
+        format!("ns{}", id)
+    }
+
+    fn resolve_qualified_name(&self, qualified_name: &str) -> XmlResult<(String, Option<Namespace>)> {
+        if let Some(colon_pos) = qualified_name.find(':') {
+            let prefix = &qualified_name[..colon_pos];
+            let local_name = &qualified_name[colon_pos + 1..];
+            
+            if let Some(uri) = self.get_namespace_uri(prefix) {
+                let namespace = Namespace::prefixed(uri, prefix.to_string());
+                Ok((local_name.to_string(), Some(namespace)))
+            } else {
+                Err(XmlError::NamespaceError(
+                    format!("Undefined namespace prefix: {}", prefix)
+                ))
+            }
+        } else {
+            // No prefix, use default namespace if available
+            if let Some(uri) = self.get_namespace_uri("") {
+                let namespace = Namespace::default(uri);
+                Ok((qualified_name.to_string(), Some(namespace)))
+            } else {
+                Ok((qualified_name.to_string(), None))
+            }
+        }
+    }
+}
+
 /// Represents an XML element node
 #[derive(Debug)]
 pub struct Element {
-    /// The document this element belongs to
-    document: Arc<Document>,
+    /// The ID of the internal document this element belongs to
+    document_id: u64,
     /// Element name (local name)
     name: String,
     /// Element namespace
@@ -95,9 +192,9 @@ pub struct Element {
 
 impl Element {
     /// Create a new element in the given document
-    pub fn new(document: Arc<Document>, name: String) -> Self {
+    fn new(document: Arc<InternalDocument>, name: String) -> Self {
         Self {
-            document,
+            document_id: document.id(),
             name,
             namespace: None,
             attributes: RwLock::new(Vec::new()),
@@ -108,9 +205,9 @@ impl Element {
     }
 
     /// Create a new namespaced element
-    pub fn with_namespace(document: Arc<Document>, name: String, namespace: Namespace) -> Self {
+    fn with_namespace(document: Arc<InternalDocument>, name: String, namespace: Namespace) -> Self {
         Self {
-            document,
+            document_id: document.id(),
             name,
             namespace: Some(namespace),
             attributes: RwLock::new(Vec::new()),
@@ -243,29 +340,16 @@ impl Element {
         self.parent.read().is_some()
     }
 
-    /// Get the document this element belongs to
-    pub fn document(&self) -> Arc<Document> {
-        self.document.clone()
-    }
-
-    /// Check if this element belongs to the given document
-    pub fn belongs_to_document(&self, doc: &Document) -> bool {
-        // Since we're comparing with a Document reference, we need to create a temporary Arc
-        // and compare the underlying pointers
-        let temp_doc = Arc::new(doc.clone());
-        Arc::ptr_eq(&self.document, &temp_doc)
-    }
-
-    /// Check if this element belongs to the given document
-    pub fn belongs_to_document_arc(&self, doc: &Arc<Document>) -> bool {
-        Arc::ptr_eq(&self.document, doc)
+    /// Check if this element belongs to the given internal document
+    fn belongs_to_document(&self, doc: &InternalDocument) -> bool {
+        self.document_id == doc.id()
     }
 }
 
 impl Clone for Element {
     fn clone(&self) -> Self {
         Self {
-            document: self.document.clone(),
+            document_id: self.document_id,
             name: self.name.clone(),
             namespace: self.namespace.clone(),
             attributes: RwLock::new(self.attributes.read().clone()),
@@ -276,114 +360,10 @@ impl Clone for Element {
     }
 }
 
-/// Represents an XML document with root element and namespace management
-#[derive(Debug)]
-pub struct Document {
-    /// Root element of the document
-    root: RwLock<Option<Arc<Element>>>,
-    /// Default namespace declarations
-    default_namespaces: RwLock<HashMap<String, String>>,
-    /// Prefixed namespace declarations
-    prefixed_namespaces: RwLock<HashMap<String, String>>,
-    /// Next available prefix for auto-generated prefixes
-    next_prefix_id: RwLock<u32>,
-}
-
-impl Document {
-    /// Create a new empty XML document
-    pub fn new() -> Self {
-        Self {
-            root: RwLock::new(None),
-            default_namespaces: RwLock::new(HashMap::new()),
-            prefixed_namespaces: RwLock::new(HashMap::new()),
-            next_prefix_id: RwLock::new(0),
-        }
-    }
-
-    /// Set the root element
-    pub fn set_root(&self, root: Arc<Element>) -> XmlResult<()> {
-        // Ensure the element belongs to this document
-        if !root.belongs_to_document_arc(&Arc::new(self.clone())) {
-            return Err(XmlError::InvalidOperation(
-                "Element belongs to a different document".to_string(),
-            ));
-        }
-
-        *self.root.write() = Some(root);
-        Ok(())
-    }
-
-    /// Get the root element
-    pub fn root(&self) -> Option<Arc<Element>> {
-        self.root.read().clone()
-    }
-
-    /// Create a new element in this document
-    pub fn create_element(&self, name: String) -> Arc<Element> {
-        Arc::new(Element::new(Arc::new(self.clone()), name))
-    }
-
-    /// Create a new namespaced element in this document
-    pub fn create_element_with_namespace(&self, name: String, namespace: Namespace) -> Arc<Element> {
-        Arc::new(Element::with_namespace(Arc::new(self.clone()), name, namespace))
-    }
-
-    /// Declare a default namespace
-    pub fn declare_default_namespace(&self, uri: String) {
-        self.default_namespaces.write().insert("".to_string(), uri);
-    }
-
-    /// Declare a prefixed namespace
-    pub fn declare_namespace(&self, prefix: String, uri: String) {
-        self.prefixed_namespaces.write().insert(prefix, uri);
-    }
-
-    /// Get namespace URI by prefix
-    pub fn get_namespace_uri(&self, prefix: &str) -> Option<String> {
-        if prefix.is_empty() {
-            // Return default namespace
-            self.default_namespaces.read().get("").cloned()
-        } else {
-            self.prefixed_namespaces.read().get(prefix).cloned()
-        }
-    }
-
-    /// Generate a unique prefix for a namespace
-    pub fn generate_prefix(&self) -> String {
-        let mut id = self.next_prefix_id.write();
-        *id += 1;
-        format!("ns{}", id)
-    }
-
-    /// Resolve a qualified name to local name and namespace
-    pub fn resolve_qualified_name(&self, qualified_name: &str) -> XmlResult<(String, Option<Namespace>)> {
-        if let Some(colon_pos) = qualified_name.find(':') {
-            let prefix = &qualified_name[..colon_pos];
-            let local_name = &qualified_name[colon_pos + 1..];
-            
-            if let Some(uri) = self.get_namespace_uri(prefix) {
-                let namespace = Namespace::prefixed(uri, prefix.to_string());
-                Ok((local_name.to_string(), Some(namespace)))
-            } else {
-                Err(XmlError::NamespaceError(
-                    format!("Undefined namespace prefix: {}", prefix)
-                ))
-            }
-        } else {
-            // No prefix, use default namespace if available
-            if let Some(uri) = self.get_namespace_uri("") {
-                let namespace = Namespace::default(uri);
-                Ok((qualified_name.to_string(), Some(namespace)))
-            } else {
-                Ok((qualified_name.to_string(), None))
-            }
-        }
-    }
-}
-
-impl Clone for Document {
+impl Clone for InternalDocument {
     fn clone(&self) -> Self {
         Self {
+            id: self.id(),
             root: RwLock::new(self.root.read().clone()),
             default_namespaces: RwLock::new(self.default_namespaces.read().clone()),
             prefixed_namespaces: RwLock::new(self.prefixed_namespaces.read().clone()),
@@ -392,9 +372,69 @@ impl Clone for Document {
     }
 }
 
+/// Public document structure that wraps the internal document
+#[derive(Debug, Clone)]
+pub struct Document {
+    internal: Arc<InternalDocument>,
+}
+
+impl Document {
+    /// Create a new empty XML document
+    pub fn new() -> Self {
+        Self {
+            internal: Arc::new(InternalDocument::new()),
+        }
+    }
+
+    /// Set the root element
+    pub fn set_root(&self, root: Arc<Element>) -> XmlResult<()> {
+        self.internal.set_root(root)
+    }
+
+    /// Get the root element
+    pub fn root(&self) -> Option<Arc<Element>> {
+        self.internal.root()
+    }
+
+    /// Create a new element in this document
+    pub fn create_element(&self, name: String) -> Arc<Element> {
+        Arc::new(Element::new(self.internal.clone(), name))
+    }
+
+    /// Create a new namespaced element in this document
+    pub fn create_element_with_namespace(&self, name: String, namespace: Namespace) -> Arc<Element> {
+        Arc::new(Element::with_namespace(self.internal.clone(), name, namespace))
+    }
+
+    /// Declare a default namespace
+    pub fn declare_default_namespace(&self, uri: String) {
+        self.internal.declare_default_namespace(uri);
+    }
+
+    /// Declare a prefixed namespace
+    pub fn declare_namespace(&self, prefix: String, uri: String) {
+        self.internal.declare_namespace(prefix, uri);
+    }
+
+    /// Get namespace URI by prefix
+    pub fn get_namespace_uri(&self, prefix: &str) -> Option<String> {
+        self.internal.get_namespace_uri(prefix)
+    }
+
+    /// Generate a unique prefix for a namespace
+    pub fn generate_prefix(&self) -> String {
+        self.internal.generate_prefix()
+    }
+
+    /// Resolve a qualified name to local name and namespace
+    pub fn resolve_qualified_name(&self, qualified_name: &str) -> XmlResult<(String, Option<Namespace>)> {
+        self.internal.resolve_qualified_name(qualified_name)
+    }
+}
+
 /// Main entry point for the library
-pub fn create_document() -> Arc<Document> {
-    Arc::new(Document::new())
+pub fn create_document() -> Document {
+    Document::new()
 }
 
 #[cfg(test)]
@@ -479,9 +519,6 @@ mod tests {
     fn test_document_reference() {
         let doc = create_document();
         let element = doc.create_element("test".to_string());
-        
-        // This should work
-        assert!(element.belongs_to_document_arc(&doc));
         
         // Set as root should work
         doc.set_root(element).unwrap();

@@ -103,7 +103,8 @@ fn parse_start_element(doc: &Document, e: &BytesStart) -> XmlResult<Arc<Element>
     })?;
 
     let (local_name, default_namespace) = parse_element_name(name);
-    let (attributes, namespace_declarations) = parse_attributes(e)?;
+    let namespace_declarations = extract_namespace_declarations(e)?;
+    let attributes = extract_regular_attributes(e)?;
 
     // Create the initial element
     let element = if let Some(ns) = default_namespace {
@@ -137,7 +138,8 @@ fn parse_empty_element(doc: &Document, e: &BytesStart) -> XmlResult<Arc<Element>
     })?;
 
     let (local_name, default_namespace) = parse_element_name(name);
-    let (attributes, namespace_declarations) = parse_attributes(e)?;
+    let namespace_declarations = extract_namespace_declarations(e)?;
+    let attributes = extract_regular_attributes(e)?;
 
     // Create the initial element
     let element = if let Some(ns) = default_namespace {
@@ -174,11 +176,9 @@ fn parse_element_name(name: &str) -> (String, Option<Namespace>) {
     }
 }
 
-/// Parse attributes and separate namespace declarations from regular attributes
-fn parse_attributes(e: &BytesStart) -> XmlResult<(Vec<Attribute>, Vec<(String, String)>)> {
-    let mut attributes = Vec::new();
+/// Extract namespace declarations from attributes
+fn extract_namespace_declarations(e: &BytesStart) -> XmlResult<Vec<(String, String)>> {
     let mut namespace_declarations = Vec::new();
-
     for attr in e.attributes() {
         let attr = attr
             .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
@@ -188,20 +188,32 @@ fn parse_attributes(e: &BytesStart) -> XmlResult<(Vec<Attribute>, Vec<(String, S
         let value = attr.unescape_value().map_err(|e| {
             XmlError::InvalidXml(format!("Invalid attribute value: {}", e))
         })?;
-
         if let Some(prefix) = key.strip_prefix("xmlns:") {
-            // Prefixed namespace declaration
             namespace_declarations.push((prefix.to_string(), value.to_string()));
         } else if key == "xmlns" {
-            // Default namespace declaration
             namespace_declarations.push(("".to_string(), value.to_string()));
-        } else {
-            // Regular attribute
+        }
+    }
+    Ok(namespace_declarations)
+}
+
+/// Extract regular (non-namespace) attributes
+fn extract_regular_attributes(e: &BytesStart) -> XmlResult<Vec<Attribute>> {
+    let mut attributes = Vec::new();
+    for attr in e.attributes() {
+        let attr = attr
+            .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
+        let key = std::str::from_utf8(attr.key.into_inner()).map_err(|e| {
+            XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e))
+        })?;
+        let value = attr.unescape_value().map_err(|e| {
+            XmlError::InvalidXml(format!("Invalid attribute value: {}", e))
+        })?;
+        if !key.starts_with("xmlns") {
             attributes.push(Attribute::new(key.to_string(), value.to_string()));
         }
     }
-
-    Ok((attributes, namespace_declarations))
+    Ok(attributes)
 }
 
 /// Resolve element namespace if it has a qualified name

@@ -39,21 +39,18 @@
 //! ## Parsing XML
 //! 
 //! ```rust
-//! use biodivine_lib_xml_dom::{parse_string, parse_file};
-//! 
-//! // Parse from string
-//! let xml = r#"<root><child>Hello, World!</child></root>"#;
-//! let doc = parse_string(xml).unwrap();
-//! 
-//! // Parse from file
-//! let doc = parse_file("example.xml").unwrap();
+//! use biodivine_lib_xml_dom::parse_file;
+//!
+//! // This test expects a file at "tests/assets/example.xml" with valid XML content.
+//! let doc = parse_file("tests/assets/example.xml").unwrap();
+//! assert!(doc.root().is_some());
 //! ```
 //! 
 //! ## Writing XML
 //! 
 //! ```rust
-//! use biodivine_lib_xml_dom::{write_string, write_file};
 //! 
+//! use biodivine_lib_xml_dom::{create_document, write_string, write_file};
 //! let doc = create_document();
 //! // ... build document ...
 //! 

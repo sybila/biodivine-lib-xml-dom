@@ -1,4 +1,5 @@
 use parking_lot::RwLock;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::document::InternalDocument;
@@ -22,6 +23,8 @@ pub struct Element {
     text_content: RwLock<Option<String>>,
     /// Parent element (None if root or detached)
     parent: RwLock<Option<Arc<Element>>>,
+    /// Namespace declarations on this element (prefix -> URI)
+    namespace_declarations: RwLock<HashMap<String, String>>,
 }
 
 impl Element {
@@ -35,6 +38,7 @@ impl Element {
             children: RwLock::new(Vec::new()),
             text_content: RwLock::new(None),
             parent: RwLock::new(None),
+            namespace_declarations: RwLock::new(HashMap::new()),
         }
     }
 
@@ -52,6 +56,7 @@ impl Element {
             children: RwLock::new(Vec::new()),
             text_content: RwLock::new(None),
             parent: RwLock::new(None),
+            namespace_declarations: RwLock::new(HashMap::new()),
         }
     }
 
@@ -76,6 +81,62 @@ impl Element {
         } else {
             self.name.clone()
         }
+    }
+
+    /// Declare a namespace on this element
+    pub fn declare_namespace(&self, prefix: String, uri: String) {
+        self.namespace_declarations.write().insert(prefix, uri);
+    }
+
+    /// Declare a default namespace on this element
+    pub fn declare_default_namespace(&self, uri: String) {
+        self.namespace_declarations.write().insert("".to_string(), uri);
+    }
+
+    /// Get namespace URI by prefix, walking up the tree if not found on this element
+    pub fn get_namespace_uri(&self, prefix: &str) -> Option<String> {
+        // First check this element's declarations
+        if let Some(uri) = self.namespace_declarations.read().get(prefix) {
+            return Some(uri.clone());
+        }
+
+        // Then check parent elements
+        if let Some(parent) = self.parent.read().as_ref() {
+            parent.get_namespace_uri(prefix)
+        } else {
+            None
+        }
+    }
+
+    /// Resolve a qualified name to local name and namespace using scoped namespace resolution
+    pub fn resolve_qualified_name(&self, qualified_name: &str) -> XmlResult<(String, Option<Namespace>)> {
+        if let Some(colon_pos) = qualified_name.find(':') {
+            let prefix = &qualified_name[..colon_pos];
+            let local_name = &qualified_name[colon_pos + 1..];
+
+            if let Some(uri) = self.get_namespace_uri(prefix) {
+                let namespace = Namespace::prefixed(uri, prefix.to_string());
+                Ok((local_name.to_string(), Some(namespace)))
+            } else {
+                Err(XmlError::NamespaceError(format!(
+                    "Undefined namespace prefix: {}",
+                    prefix
+                )))
+            }
+        } else {
+            // No prefix, use default namespace if available
+            if let Some(uri) = self.get_namespace_uri("") {
+                let namespace = Namespace::default(uri);
+                Ok((qualified_name.to_string(), Some(namespace)))
+            } else {
+                Ok((qualified_name.to_string(), None))
+            }
+        }
+    }
+
+    /// Get all namespace declarations on this element (not inherited)
+    pub fn namespace_declarations(&self) -> HashMap<String, String> {
+        self.namespace_declarations.read().clone()
     }
 
     /// Add an attribute to this element
@@ -194,6 +255,7 @@ impl Clone for Element {
             children: RwLock::new(self.children.read().clone()),
             text_content: RwLock::new(self.text_content.read().clone()),
             parent: RwLock::new(None), // Don't clone parent to avoid cycles
+            namespace_declarations: RwLock::new(self.namespace_declarations.read().clone()),
         }
     }
 }

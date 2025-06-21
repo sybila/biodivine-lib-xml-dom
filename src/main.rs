@@ -7,17 +7,20 @@ fn main() {
     // Example 1: Create XML programmatically
     println!("\n1. Creating XML programmatically:");
     let doc = create_document();
-    doc.declare_namespace(
-        "html".to_string(),
-        "http://www.w3.org/1999/xhtml".to_string(),
-    );
-    doc.declare_namespace("svg".to_string(), "http://www.w3.org/2000/svg".to_string());
 
     let html_ns = Namespace::prefixed(
         "http://www.w3.org/1999/xhtml".to_string(),
         "html".to_string(),
     );
     let root = doc.create_element_with_namespace("html".to_string(), html_ns);
+    
+    // Declare namespaces on the root element
+    root.declare_namespace(
+        "html".to_string(),
+        "http://www.w3.org/1999/xhtml".to_string(),
+    );
+    root.declare_namespace("svg".to_string(), "http://www.w3.org/2000/svg".to_string());
+    
     doc.set_root(root.clone()).unwrap();
 
     let head = doc.create_element("head".to_string());

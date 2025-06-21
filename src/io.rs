@@ -55,13 +55,10 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                         XmlError::InvalidXml(format!("Invalid attribute value: {}", e))
                     })?;
 
-                    if let Some(prefix) = key.strip_prefix("xmlns:") {
-                        // Prefixed namespace declaration
-                        // Remove "xmlns:"
-                        doc.declare_namespace(prefix.to_string(), value.to_string());
+                    if let Some(_prefix) = key.strip_prefix("xmlns:") {
+                        // Prefixed namespace declaration - will be declared on the element
                     } else if key == "xmlns" {
-                        // Default namespace declaration
-                        doc.declare_default_namespace(value.to_string());
+                        // Default namespace declaration - will be declared on the element
                         namespace = Some(Namespace::default(value.to_string()));
                     } else {
                         // Regular attribute
@@ -71,39 +68,79 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
 
                 // Handle qualified names (prefix:local_name)
                 let (local_name, element_namespace) = if let Some(colon_pos) = name.find(':') {
-                    let prefix = &name[..colon_pos];
+                    let _prefix = &name[..colon_pos];
                     let local_name = &name[colon_pos + 1..];
 
-                    if let Some(uri) = doc.get_namespace_uri(prefix) {
-                        let ns = Namespace::prefixed(uri, prefix.to_string());
-                        (local_name.to_string(), Some(ns))
-                    } else {
-                        (name.to_string(), None)
-                    }
+                    // We'll resolve the namespace after creating the element
+                    (local_name.to_string(), None)
                 } else {
                     (name.to_string(), namespace)
                 };
 
                 // Create element
                 let element = if let Some(ns) = element_namespace {
-                    doc.create_element_with_namespace(local_name, ns)
+                    doc.create_element_with_namespace(local_name.clone(), ns)
                 } else {
-                    doc.create_element(local_name)
+                    doc.create_element(local_name.clone())
                 };
+
+                // Now declare namespaces on this element
+                for attr in e.attributes() {
+                    let attr = attr
+                        .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
+                    let key = std::str::from_utf8(attr.key.into_inner()).map_err(|e| {
+                        XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e))
+                    })?;
+                    let value = attr.unescape_value().map_err(|e| {
+                        XmlError::InvalidXml(format!("Invalid attribute value: {}", e))
+                    })?;
+
+                    if let Some(prefix) = key.strip_prefix("xmlns:") {
+                        element.declare_namespace(prefix.to_string(), value.to_string());
+                    } else if key == "xmlns" {
+                        element.declare_default_namespace(value.to_string());
+                    }
+                }
 
                 // Add attributes
                 for attr in attributes {
                     element.add_attribute(attr);
                 }
 
+                // Now resolve the element's namespace if it has a qualified name
+                let final_element = if let Some(colon_pos) = name.find(':') {
+                    let prefix = &name[..colon_pos];
+                    if let Some(uri) = element.get_namespace_uri(prefix) {
+                        // Create a new element with the resolved namespace
+                        let namespaced_element = doc.create_element_with_namespace(
+                            local_name,
+                            Namespace::prefixed(uri, prefix.to_string()),
+                        );
+                        
+                        // Copy namespace declarations and attributes
+                        for (ns_prefix, ns_uri) in element.namespace_declarations() {
+                            namespaced_element.declare_namespace(ns_prefix, ns_uri);
+                        }
+                        for attr in element.attributes() {
+                            namespaced_element.add_attribute(attr);
+                        }
+                        
+                        namespaced_element
+                    } else {
+                        element
+                    }
+                } else {
+                    element
+                };
+
                 // Add to parent or set as root
                 if let Some(parent) = stack.last() {
-                    parent.add_child(element.clone())?;
+                    parent.add_child(final_element.clone())?;
                 } else {
-                    doc.set_root(element.clone())?;
+                    doc.set_root(final_element.clone())?;
                 }
 
-                stack.push(element);
+                stack.push(final_element);
             }
 
             Ok(Event::End(_)) => {
@@ -167,9 +204,9 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                     })?;
 
                     if let Some(prefix) = key.strip_prefix("xmlns:") {
-                        doc.declare_namespace(prefix.to_string(), value.to_string());
+                        // Prefixed namespace declaration - will be declared on the element
                     } else if key == "xmlns" {
-                        doc.declare_default_namespace(value.to_string());
+                        // Default namespace declaration - will be declared on the element
                         namespace = Some(Namespace::default(value.to_string()));
                     } else {
                         attributes.push(Attribute::new(key.to_string(), value.to_string()));
@@ -178,33 +215,74 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
 
                 // Handle qualified names (prefix:local_name)
                 let (local_name, element_namespace) = if let Some(colon_pos) = name.find(':') {
-                    let prefix = &name[..colon_pos];
+                    let _prefix = &name[..colon_pos];
                     let local_name = &name[colon_pos + 1..];
 
-                    if let Some(uri) = doc.get_namespace_uri(prefix) {
-                        let ns = Namespace::prefixed(uri, prefix.to_string());
-                        (local_name.to_string(), Some(ns))
-                    } else {
-                        (name.to_string(), None)
-                    }
+                    // We'll resolve the namespace after creating the element
+                    (local_name.to_string(), None)
                 } else {
                     (name.to_string(), namespace)
                 };
 
                 let element = if let Some(ns) = element_namespace {
-                    doc.create_element_with_namespace(local_name, ns)
+                    doc.create_element_with_namespace(local_name.clone(), ns)
                 } else {
-                    doc.create_element(local_name)
+                    doc.create_element(local_name.clone())
                 };
 
+                // Now declare namespaces on this element
+                for attr in e.attributes() {
+                    let attr = attr
+                        .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
+                    let key = std::str::from_utf8(attr.key.into_inner()).map_err(|e| {
+                        XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e))
+                    })?;
+                    let value = attr.unescape_value().map_err(|e| {
+                        XmlError::InvalidXml(format!("Invalid attribute value: {}", e))
+                    })?;
+
+                    if let Some(prefix) = key.strip_prefix("xmlns:") {
+                        element.declare_namespace(prefix.to_string(), value.to_string());
+                    } else if key == "xmlns" {
+                        element.declare_default_namespace(value.to_string());
+                    }
+                }
+
+                // Add attributes
                 for attr in attributes {
                     element.add_attribute(attr);
                 }
 
-                if let Some(parent) = stack.last() {
-                    parent.add_child(element)?;
+                // Now resolve the element's namespace if it has a qualified name
+                let final_element = if let Some(colon_pos) = name.find(':') {
+                    let prefix = &name[..colon_pos];
+                    if let Some(uri) = element.get_namespace_uri(prefix) {
+                        // Create a new element with the resolved namespace
+                        let namespaced_element = doc.create_element_with_namespace(
+                            local_name,
+                            Namespace::prefixed(uri, prefix.to_string()),
+                        );
+                        
+                        // Copy namespace declarations and attributes
+                        for (ns_prefix, ns_uri) in element.namespace_declarations() {
+                            namespaced_element.declare_namespace(ns_prefix, ns_uri);
+                        }
+                        for attr in element.attributes() {
+                            namespaced_element.add_attribute(attr);
+                        }
+                        
+                        namespaced_element
+                    } else {
+                        element
+                    }
                 } else {
-                    doc.set_root(element)?;
+                    element
+                };
+
+                if let Some(parent) = stack.last() {
+                    parent.add_child(final_element)?;
+                } else {
+                    doc.set_root(final_element)?;
                 }
             }
 
@@ -248,7 +326,18 @@ pub fn write_writer<W: Write>(doc: &Document, writer: W) -> XmlResult<()> {
 fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResult<()> {
     let mut attrs = Vec::new();
 
-    // Add element attributes - collect them first to avoid lifetime issues
+    // Add namespace declarations first
+    for (prefix, uri) in element.namespace_declarations() {
+        if prefix.is_empty() {
+            // Default namespace
+            attrs.push(("xmlns".to_string(), uri));
+        } else {
+            // Prefixed namespace
+            attrs.push((format!("xmlns:{}", prefix), uri));
+        }
+    }
+
+    // Add element attributes
     for attr in element.attributes() {
         attrs.push((attr.name.clone(), attr.value.clone()));
     }
@@ -330,16 +419,16 @@ mod tests {
     #[test]
     fn test_write_created_document() {
         let doc = create_document();
-        doc.declare_namespace(
-            "html".to_string(),
-            "http://www.w3.org/1999/xhtml".to_string(),
-        );
 
         let html_ns = Namespace::prefixed(
             "http://www.w3.org/1999/xhtml".to_string(),
             "html".to_string(),
         );
         let root = doc.create_element_with_namespace("html".to_string(), html_ns);
+        root.declare_namespace(
+            "html".to_string(),
+            "http://www.w3.org/1999/xhtml".to_string(),
+        );
         doc.set_root(root.clone()).unwrap();
 
         let head = doc.create_element("head".to_string());
@@ -352,5 +441,66 @@ mod tests {
         assert!(output.contains("<html"));
         assert!(output.contains("<head"));
         assert!(output.contains("<title>Test Page</title>"));
+    }
+
+    #[test]
+    fn test_scoped_namespaces() {
+        // Test that namespaces are properly scoped to elements
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<root xmlns:default="http://default.com">
+    <child xmlns:ex="http://example.com">
+        <ex:element>Hello, <ex:s>World!</ex:s></ex:element>
+        <nested xmlns:ex="http://example-another.com">
+            <ex:element>Different namespace <ex:s>here!</ex:s></ex:element>
+            <deep xmlns:ex="http://example-third.com">
+                <ex:element>Third namespace <ex:s>here!</ex:s></ex:element>
+            </deep>
+        </nested>
+        <back_to_original>
+            <ex:element>Back to first namespace <ex:s>here!</ex:s></ex:element>
+        </back_to_original>
+    </child>
+    <child xmlns:ex="http://example-another.com">
+        <ex:element>Hello, <ex:s>World!</ex:s></ex:element>
+        <nested xmlns:ex="http://example-fourth.com">
+            <ex:element>Fourth namespace <ex:s>here!</ex:s></ex:element>
+        </nested>
+    </child>
+    <default:element>Default namespace element</default:element>
+</root>"#;
+
+        let doc = parse_string(xml).unwrap();
+        let root = doc.root().unwrap();
+
+        // Check that the root has the default namespace declaration
+        assert_eq!(root.get_namespace_uri("default"), Some("http://default.com".to_string()));
+
+        // Check that the first child has the first ex namespace
+        let first_child = root.children()[0].clone();
+        assert_eq!(first_child.get_namespace_uri("ex"), Some("http://example.com".to_string()));
+
+        // Check that the nested element has a different ex namespace
+        let nested = first_child.children()[1].clone(); // nested element
+        assert_eq!(nested.get_namespace_uri("ex"), Some("http://example-another.com".to_string()));
+
+        // Check that the deep element has yet another ex namespace
+        let deep = nested.children()[1].clone(); // deep element
+        assert_eq!(deep.get_namespace_uri("ex"), Some("http://example-third.com".to_string()));
+
+        // Check that going back to original scope works
+        let back_to_original = first_child.children()[2].clone(); // back_to_original element
+        assert_eq!(back_to_original.get_namespace_uri("ex"), Some("http://example.com".to_string()));
+
+        // Check that the second child has a different ex namespace
+        let second_child = root.children()[1].clone();
+        assert_eq!(second_child.get_namespace_uri("ex"), Some("http://example-another.com".to_string()));
+
+        // Test round-trip
+        let output = write_string(&doc).unwrap();
+        let doc2 = parse_string(&output).unwrap();
+        
+        // Verify that the namespace scoping is preserved
+        let root2 = doc2.root().unwrap();
+        assert_eq!(root2.get_namespace_uri("default"), Some("http://default.com".to_string()));
     }
 }

@@ -1,15 +1,15 @@
 //! XML DOM Library
 //!
-//! A thread-safe, reference-counted XML Document Object Model library with full namespace support.
+//! A thread-safe XML DOM library with full namespace support, reference counting,
+//! and read-write locks for memory management.
 //!
 //! # Features
 //!
-//! - **Full namespace support**: Complete XML namespace handling with prefixes and URIs
-//! - **Thread safety**: All operations are thread-safe using read-write locks
-//! - **Reference counting**: Automatic memory management with Arc
-//! - **Easy API**: Clean, ergonomic API that hides internal complexity
-//! - **Detached elements**: Support for elements not attached to the document tree
-//! - **XML parsing and writing**: Parse from files, strings, or readers; write to files, strings, or writers
+//! - **Thread Safety**: Uses `Arc` and `RwLock` for safe concurrent access
+//! - **Namespace Support**: Full XML namespace support with scoped declarations
+//! - **Memory Management**: Reference counting for automatic cleanup
+//! - **Parsing & Writing**: Parse from files/strings and write back to XML
+//! - **Element Manipulation**: Create, modify, and traverse XML elements
 //!
 //! # Examples
 //!
@@ -21,12 +21,12 @@
 //! // Create a new document
 //! let doc = create_document();
 //!
-//! // Declare namespaces
-//! doc.declare_namespace("html".to_string(), "http://www.w3.org/1999/xhtml".to_string());
-//!
 //! // Create elements
 //! let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml".to_string(), "html".to_string());
 //! let root = doc.create_element_with_namespace("html".to_string(), html_ns);
+//! 
+//! // Declare namespaces on elements
+//! root.declare_namespace("html".to_string(), "http://www.w3.org/1999/xhtml".to_string());
 //! doc.set_root(root.clone()).unwrap();
 //!
 //! // Add attributes and content
@@ -39,26 +39,25 @@
 //! ## Parsing XML
 //!
 //! ```rust
-//! use biodivine_lib_xml_dom::parse_file;
+//! use biodivine_lib_xml_dom::parse_string;
 //!
-//! // This test expects a file at "tests/assets/example.xml" with valid XML content.
-//! let doc = parse_file("tests/assets/example.xml").unwrap();
-//! assert!(doc.root().is_some());
+//! let xml = r#"<root xmlns:ex="http://example.com">
+//!     <ex:element>Hello, World!</ex:element>
+//! </root>"#;
+//!
+//! let doc = parse_string(xml).unwrap();
+//! let root = doc.root().unwrap();
+//! assert_eq!(root.name(), "root");
 //! ```
 //!
 //! ## Writing XML
 //!
 //! ```rust
 //!
-//! use biodivine_lib_xml_dom::{create_document, write_string, write_file};
+//! use biodivine_lib_xml_dom::{create_document, write_string};
 //! let doc = create_document();
 //! // ... build document ...
-//!
-//! // Write to string
-//! let xml_string = write_string(&doc).unwrap();
-//!
-//! // Write to file
-//! write_file(&doc, "output.xml").unwrap();
+//! let xml = write_string(&doc).unwrap();
 //! ```
 
 // Module declarations
@@ -155,10 +154,11 @@ mod tests {
     #[test]
     fn test_namespace_declaration() {
         let doc = create_document();
-        doc.declare_namespace("ex".to_string(), "http://example.com".to_string());
+        let root = doc.create_element("root".to_string());
+        root.declare_namespace("ex".to_string(), "http://example.com".to_string());
 
         assert_eq!(
-            doc.get_namespace_uri("ex"),
+            root.get_namespace_uri("ex"),
             Some("http://example.com".to_string())
         );
     }
@@ -166,9 +166,10 @@ mod tests {
     #[test]
     fn test_qualified_name_resolution() {
         let doc = create_document();
-        doc.declare_namespace("ex".to_string(), "http://example.com".to_string());
+        let root = doc.create_element("root".to_string());
+        root.declare_namespace("ex".to_string(), "http://example.com".to_string());
 
-        let (local_name, namespace) = doc.resolve_qualified_name("ex:test").unwrap();
+        let (local_name, namespace) = root.resolve_qualified_name("ex:test").unwrap();
         assert_eq!(local_name, "test");
         assert_eq!(namespace.unwrap().uri, "http://example.com");
     }

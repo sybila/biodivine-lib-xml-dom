@@ -33,7 +33,7 @@
 //! let body = doc.create_element("body".to_string());
 //! body.add_attribute(Attribute::new("class".to_string(), "main".to_string()));
 //! body.add_text("Hello, World!".to_string());
-//! root.add_child_element(body).unwrap();
+//! root.add_child_element(body);
 //! ```
 //!
 //! ## Parsing XML
@@ -143,7 +143,7 @@ mod tests {
         let parent = doc.create_element("parent".to_string());
         let child = doc.create_element("child".to_string());
 
-        parent.add_child_element(child.clone()).unwrap();
+        parent.add_child_element(child.clone());
 
         let children = parent.children();
         assert_eq!(children.len(), 1);

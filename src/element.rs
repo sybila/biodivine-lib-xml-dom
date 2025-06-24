@@ -161,10 +161,9 @@ impl Element {
         }).cloned()
     }
 
-    pub fn add_child_element(&self, child: Element) -> XmlResult<()> {
+    pub fn add_child_element(&self, child: Element) {
         child.0.write().parent = Some(self.clone());
         self.0.write().children.push(XmlNode::Element(child));
-        Ok(())
     }
 
     pub fn add_text(&self, text: String) {

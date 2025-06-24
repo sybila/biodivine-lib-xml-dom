@@ -309,10 +309,10 @@ mod tests {
 
     #[test]
     fn test_parse_and_write_simple_xml() {
-        let xml = r#"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
 <root>
-    <child id=\"1\">Hello, World!</child>
-    <child id=\"2\">Another child</child>
+    <child id="1">Hello, World!</child>
+    <child id="2">Another child</child>
 </root>"#;
 
         let doc = parse_string(xml).unwrap();
@@ -325,8 +325,8 @@ mod tests {
 
     #[test]
     fn test_parse_with_namespaces() {
-        let xml = r#"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<html:html xmlns:html=\"http://www.w3.org/1999/xhtml\">
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<html:html xmlns:html="http://www.w3.org/1999/xhtml">
     <html:head>
         <html:title>Test Page</html:title>
     </html:head>
@@ -374,13 +374,13 @@ mod tests {
     #[test]
     fn test_scoped_namespaces() {
         // Test that namespaces are properly scoped to elements
-        let xml = r#"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<root xmlns:default=\"http://default.com\">
-    <child xmlns:ex=\"http://example.com\">
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<root xmlns:default="http://default.com">
+    <child xmlns:ex="http://example.com">
         <ex:element>Hello, <ex:s>World!</ex:s></ex:element>
-        <nested xmlns:ex=\"http://example-another.com\">
+        <nested xmlns:ex="http://example-another.com">
             <ex:element>Different namespace <ex:s>here!</ex:s></ex:element>
-            <deep xmlns:ex=\"http://example-third.com\">
+            <deep xmlns:ex="http://example-third.com">
                 <ex:element>Third namespace <ex:s>here!</ex:s></ex:element>
             </deep>
         </nested>
@@ -388,9 +388,9 @@ mod tests {
             <ex:element>Back to first namespace <ex:s>here!</ex:s></ex:element>
         </back_to_original>
     </child>
-    <child xmlns:ex=\"http://example-another.com\">
+    <child xmlns:ex="http://example-another.com">
         <ex:element>Hello, <ex:s>World!</ex:s></ex:element>
-        <nested xmlns:ex=\"http://example-fourth.com\">
+        <nested xmlns:ex="http://example-fourth.com">
             <ex:element>Fourth namespace <ex:s>here!</ex:s></ex:element>
         </nested>
     </child>

@@ -1,6 +1,6 @@
 use biodivine_lib_xml_dom::{create_document, parse_string, write_string, Attribute, Namespace};
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("XML DOM Library Example");
     println!("=======================");
 
@@ -21,36 +21,36 @@ fn main() {
     );
     root.declare_namespace("svg".to_string(), "http://www.w3.org/2000/svg".to_string());
 
-    doc.set_root(root.clone()).unwrap();
+    doc.set_root(root.clone())?;
 
     let head = doc.create_element("head".to_string());
     let title = doc.create_element("title".to_string());
     title.add_text("My XML Document".to_string());
-    head.add_child_element(title).unwrap();
-    root.add_child_element(head.clone()).unwrap();
+    head.add_child_element(title)?;
+    root.add_child_element(head.clone())?;
 
     let body = doc.create_element("body".to_string());
     let p = doc.create_element("p".to_string());
     p.add_attribute(Attribute::new("class".to_string(), "example".to_string()));
     p.add_attribute(Attribute::new("id".to_string(), "intro".to_string()));
     p.add_text("This is an example XML document created with our DOM library.".to_string());
-    body.add_child_element(p).unwrap();
-    root.add_child_element(body.clone()).unwrap();
+    body.add_child_element(p)?;
+    root.add_child_element(body.clone())?;
 
     let svg_ns = Namespace::prefixed("http://www.w3.org/2000/svg".to_string(), "svg".to_string());
     let svg = doc.create_element_with_namespace("svg".to_string(), svg_ns);
     svg.add_attribute(Attribute::new("width".to_string(), "100".to_string()));
     svg.add_attribute(Attribute::new("height".to_string(), "100".to_string()));
-    body.add_child_element(svg.clone()).unwrap();
+    body.add_child_element(svg.clone())?;
 
     let circle = doc.create_element("circle".to_string());
     circle.add_attribute(Attribute::new("cx".to_string(), "50".to_string()));
     circle.add_attribute(Attribute::new("cy".to_string(), "50".to_string()));
     circle.add_attribute(Attribute::new("r".to_string(), "40".to_string()));
     circle.add_attribute(Attribute::new("fill".to_string(), "blue".to_string()));
-    svg.add_child_element(circle).unwrap();
+    svg.add_child_element(circle)?;
 
-    let xml_output = write_string(&doc).unwrap();
+    let xml_output = write_string(&doc)?;
     println!("Generated XML:");
     println!("{}", xml_output);
 
@@ -72,8 +72,8 @@ fn main() {
     </book>
 </bookstore>"#;
 
-    let parsed_doc = parse_string(xml_input).unwrap();
-    let root = parsed_doc.root().unwrap();
+    let parsed_doc = parse_string(xml_input)?;
+    let root = parsed_doc.root().ok_or("Parsed document has no root element")?;
     println!("Parsed document root: {}", root.name());
     let books: Vec<_> = root.element_children();
     println!("Number of books: {}", books.len());
@@ -82,7 +82,7 @@ fn main() {
         println!(
             "Book {}: {}",
             i + 1,
-            book.get_attribute("category").unwrap().value
+            book.get_attribute("category").ok_or("Book element missing 'category' attribute")?.value
         );
         let titles: Vec<_> = book
             .element_children()
@@ -97,12 +97,13 @@ fn main() {
 
     // Example 3: Round-trip test
     println!("\n3. Round-trip test (parse -> modify -> write):");
-    let round_trip_xml = write_string(&parsed_doc).unwrap();
-    let round_trip_doc = parse_string(&round_trip_xml).unwrap();
+    let round_trip_xml = write_string(&parsed_doc)?;
+    let round_trip_doc = parse_string(&round_trip_xml)?;
     println!(
         "Round-trip successful: {}",
-        round_trip_doc.root().unwrap().name() == "bookstore"
+        round_trip_doc.root().ok_or("Round-trip document has no root element")?.name() == "bookstore"
     );
 
     println!("\nLibrary is ready for use!");
+    Ok(())
 }

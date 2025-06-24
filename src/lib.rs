@@ -28,7 +28,7 @@
 //! body.add_attribute(Attribute::new("class".to_string(), "main".to_string()));
 //! body.add_text("Hello, World!".to_string());
 //! root.add_child_element(body).unwrap();
-//! }
+//! ```
 //!
 //! ## Parsing XML
 //!

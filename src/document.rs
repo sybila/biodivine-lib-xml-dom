@@ -11,7 +11,7 @@ pub(crate) struct InternalDocument {
     /// Unique identifier for this document
     id: u64,
     /// Root element of the document
-    root: RwLock<Option<Arc<Element>>>,
+    root: RwLock<Option<Element>>,
     /// Next available prefix for auto-generated prefixes
     next_prefix_id: RwLock<u32>,
 }
@@ -32,19 +32,17 @@ impl InternalDocument {
         self.id
     }
 
-    pub(crate) fn set_root(&self, root: Arc<Element>) -> XmlResult<()> {
-        // Ensure the element belongs to this document
+    pub(crate) fn set_root(&self, root: Element) -> XmlResult<()> {
         if !root.belongs_to_document(self) {
             return Err(XmlError::InvalidOperation(
                 "Element belongs to a different document".to_string(),
             ));
         }
-
         *self.root.write() = Some(root);
         Ok(())
     }
 
-    pub(crate) fn root(&self) -> Option<Arc<Element>> {
+    pub(crate) fn root(&self) -> Option<Element> {
         self.root.read().clone()
     }
 
@@ -86,31 +84,23 @@ impl Document {
     }
 
     /// Set the root element
-    pub fn set_root(&self, root: Arc<Element>) -> XmlResult<()> {
+    pub fn set_root(&self, root: Element) -> XmlResult<()> {
         self.internal.set_root(root)
     }
 
     /// Get the root element
-    pub fn root(&self) -> Option<Arc<Element>> {
+    pub fn root(&self) -> Option<Element> {
         self.internal.root()
     }
 
     /// Create a new element in this document
-    pub fn create_element(&self, name: String) -> Arc<Element> {
-        Arc::new(Element::new(self.internal.clone(), name))
+    pub fn create_element(&self, name: String) -> Element {
+        Element::new(self.internal.clone(), name)
     }
 
     /// Create a new namespaced element in this document
-    pub fn create_element_with_namespace(
-        &self,
-        name: String,
-        namespace: Namespace,
-    ) -> Arc<Element> {
-        Arc::new(Element::with_namespace(
-            self.internal.clone(),
-            name,
-            namespace,
-        ))
+    pub fn create_element_with_namespace(&self, name: String, namespace: Namespace) -> Element {
+        Element::with_namespace(self.internal.clone(), name, namespace)
     }
 
     /// Generate a unique prefix for a namespace

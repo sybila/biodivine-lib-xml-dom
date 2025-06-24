@@ -31,7 +31,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
     xml_reader.trim_text(true);
 
     let doc = Document::new();
-    let mut stack: Vec<Arc<Element>> = Vec::new();
+    let mut stack: Vec<Element> = Vec::new();
     let mut buf = Vec::new();
 
     loop {
@@ -97,7 +97,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
 }
 
 /// Parse a start element and its attributes
-fn parse_start_element(doc: &Document, e: &BytesStart) -> XmlResult<Arc<Element>> {
+fn parse_start_element(doc: &Document, e: &BytesStart) -> XmlResult<Element> {
     let name = std::str::from_utf8(e.name().into_inner()).map_err(|e| {
         XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e))
     })?;
@@ -132,7 +132,7 @@ fn parse_start_element(doc: &Document, e: &BytesStart) -> XmlResult<Arc<Element>
 }
 
 /// Parse an empty (self-closing) element and its attributes
-fn parse_empty_element(doc: &Document, e: &BytesStart) -> XmlResult<Arc<Element>> {
+fn parse_empty_element(doc: &Document, e: &BytesStart) -> XmlResult<Element> {
     let name = std::str::from_utf8(e.name().into_inner()).map_err(|e| {
         XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e))
     })?;
@@ -219,10 +219,10 @@ fn extract_regular_attributes(e: &BytesStart) -> XmlResult<Vec<Attribute>> {
 /// Resolve element namespace if it has a qualified name
 fn resolve_element_namespace(
     doc: &Document,
-    element: Arc<Element>,
+    element: Element,
     original_name: &str,
     local_name: String,
-) -> XmlResult<Arc<Element>> {
+) -> XmlResult<Element> {
     if let Some(colon_pos) = original_name.find(':') {
         let prefix = &original_name[..colon_pos];
         if let Some(uri) = element.get_namespace_uri(prefix) {
@@ -256,8 +256,8 @@ fn resolve_element_namespace(
 /// Add element to the document tree
 fn add_element_to_tree(
     doc: &Document,
-    stack: &mut Vec<Arc<Element>>,
-    element: Arc<Element>,
+    stack: &mut Vec<Element>,
+    element: Element,
 ) -> XmlResult<()> {
     if let Some(parent) = stack.last() {
         parent.add_child(element.clone())?;

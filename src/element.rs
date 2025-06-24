@@ -6,40 +6,43 @@ use crate::document::InternalDocument;
 use crate::error::{XmlError, XmlResult};
 use crate::namespace::{Attribute, Namespace};
 
-/// Represents an XML element node
+/// Internal representation of an XML element node
 #[derive(Debug)]
-pub struct Element {
+pub(crate) struct InternalElement {
     /// The ID of the internal document this element belongs to
-    document_id: u64,
+    pub document_id: u64,
     /// Element name (local name)
-    name: String,
+    pub name: String,
     /// Element namespace
-    namespace: Option<Namespace>,
+    pub namespace: Option<Namespace>,
     /// Element attributes
-    attributes: RwLock<Vec<Attribute>>,
+    pub attributes: Vec<Attribute>,
     /// Child elements
-    children: RwLock<Vec<Arc<Element>>>,
+    pub children: Vec<Element>,
     /// Text content (if this element contains only text)
-    text_content: RwLock<Option<String>>,
+    pub text_content: Option<String>,
     /// Parent element (None if root or detached)
-    parent: RwLock<Option<Arc<Element>>>,
+    pub parent: Option<Element>,
     /// Namespace declarations on this element (prefix -> URI)
-    namespace_declarations: RwLock<HashMap<String, String>>,
+    pub namespace_declarations: HashMap<String, String>,
 }
+
+#[derive(Debug, Clone)]
+pub struct Element(Arc<RwLock<InternalElement>>);
 
 impl Element {
     /// Create a new element in the given document
     pub(crate) fn new(document: Arc<InternalDocument>, name: String) -> Self {
-        Self {
+        Self(Arc::new(RwLock::new(InternalElement {
             document_id: document.id(),
             name,
             namespace: None,
-            attributes: RwLock::new(Vec::new()),
-            children: RwLock::new(Vec::new()),
-            text_content: RwLock::new(None),
-            parent: RwLock::new(None),
-            namespace_declarations: RwLock::new(HashMap::new()),
-        }
+            attributes: Vec::new(),
+            children: Vec::new(),
+            text_content: None,
+            parent: None,
+            namespace_declarations: HashMap::new(),
+        })))
     }
 
     /// Create a new namespaced element
@@ -48,69 +51,59 @@ impl Element {
         name: String,
         namespace: Namespace,
     ) -> Self {
-        Self {
+        Self(Arc::new(RwLock::new(InternalElement {
             document_id: document.id(),
             name,
             namespace: Some(namespace),
-            attributes: RwLock::new(Vec::new()),
-            children: RwLock::new(Vec::new()),
-            text_content: RwLock::new(None),
-            parent: RwLock::new(None),
-            namespace_declarations: RwLock::new(HashMap::new()),
-        }
+            attributes: Vec::new(),
+            children: Vec::new(),
+            text_content: None,
+            parent: None,
+            namespace_declarations: HashMap::new(),
+        })))
     }
 
-    /// Get the element name
-    pub fn name(&self) -> &str {
-        &self.name
+    pub fn name(&self) -> String {
+        self.0.read().name.clone()
     }
 
-    /// Get the element namespace
-    pub fn namespace(&self) -> Option<&Namespace> {
-        self.namespace.as_ref()
+    pub fn namespace(&self) -> Option<Namespace> {
+        self.0.read().namespace.clone()
     }
 
-    /// Get the qualified name (prefix:local_name or just local_name)
     pub fn qualified_name(&self) -> String {
-        if let Some(ref ns) = self.namespace {
+        let inner = self.0.read();
+        if let Some(ref ns) = inner.namespace {
             if let Some(ref prefix) = ns.prefix {
-                format!("{}:{}", prefix, self.name)
+                format!("{}:{}", prefix, inner.name)
             } else {
-                self.name.clone()
+                inner.name.clone()
             }
         } else {
-            self.name.clone()
+            inner.name.clone()
         }
     }
 
-    /// Declare a namespace on this element
     pub fn declare_namespace(&self, prefix: String, uri: String) {
-        self.namespace_declarations.write().insert(prefix, uri);
+        self.0.write().namespace_declarations.insert(prefix, uri);
     }
 
-    /// Declare a default namespace on this element
     pub fn declare_default_namespace(&self, uri: String) {
-        self.namespace_declarations
-            .write()
-            .insert("".to_string(), uri);
+        self.0.write().namespace_declarations.insert("".to_string(), uri);
     }
 
-    /// Get namespace URI by prefix, walking up the tree if not found on this element
     pub fn get_namespace_uri(&self, prefix: &str) -> Option<String> {
-        // First check this element's declarations
-        if let Some(uri) = self.namespace_declarations.read().get(prefix) {
+        let inner = self.0.read();
+        if let Some(uri) = inner.namespace_declarations.get(prefix) {
             return Some(uri.clone());
         }
-
-        // Then check parent elements
-        if let Some(parent) = self.parent.read().as_ref() {
+        if let Some(parent) = &inner.parent {
             parent.get_namespace_uri(prefix)
         } else {
             None
         }
     }
 
-    /// Resolve a qualified name to local name and namespace using scoped namespace resolution
     pub fn resolve_qualified_name(
         &self,
         qualified_name: &str,
@@ -129,7 +122,6 @@ impl Element {
                 )))
             }
         } else {
-            // No prefix, use default namespace if available
             if let Some(uri) = self.get_namespace_uri("") {
                 let namespace = Namespace::default(uri);
                 Ok((qualified_name.to_string(), Some(namespace)))
@@ -139,128 +131,81 @@ impl Element {
         }
     }
 
-    /// Get all namespace declarations on this element (not inherited)
     pub fn namespace_declarations(&self) -> HashMap<String, String> {
-        self.namespace_declarations.read().clone()
+        self.0.read().namespace_declarations.clone()
     }
 
-    /// Add an attribute to this element
     pub fn add_attribute(&self, attribute: Attribute) {
-        self.attributes.write().push(attribute);
+        self.0.write().attributes.push(attribute);
     }
 
-    /// Get all attributes
     pub fn attributes(&self) -> Vec<Attribute> {
-        self.attributes.read().clone()
+        self.0.read().attributes.clone()
     }
 
-    /// Get attribute by name (local name only)
     pub fn get_attribute(&self, name: &str) -> Option<Attribute> {
-        self.attributes
-            .read()
-            .iter()
-            .find(|attr| attr.name == name)
-            .cloned()
+        self.0.read().attributes.iter().find(|attr| attr.name == name).cloned()
     }
 
-    /// Get attribute by qualified name (prefix:name)
     pub fn get_attribute_by_qualified_name(&self, qualified_name: &str) -> Option<Attribute> {
-        self.attributes
-            .read()
-            .iter()
-            .find(|attr| {
-                if let Some(ref ns) = attr.namespace {
-                    if let Some(ref prefix) = ns.prefix {
-                        format!("{}:{}", prefix, attr.name) == qualified_name
-                    } else {
-                        attr.name == qualified_name
-                    }
+        self.0.read().attributes.iter().find(|attr| {
+            if let Some(ref ns) = attr.namespace {
+                if let Some(ref prefix) = ns.prefix {
+                    format!("{}:{}", prefix, attr.name) == qualified_name
                 } else {
                     attr.name == qualified_name
                 }
-            })
-            .cloned()
+            } else {
+                attr.name == qualified_name
+            }
+        }).cloned()
     }
 
-    /// Add a child element
-    pub fn add_child(&self, child: Arc<Element>) -> XmlResult<()> {
-        // Set this element as the parent of the child
-        *child.parent.write() = Some(Arc::new(self.clone()));
-
-        // Add to children list
-        self.children.write().push(child);
+    pub fn add_child(&self, child: Element) -> XmlResult<()> {
+        child.0.write().parent = Some(self.clone());
+        self.0.write().children.push(child);
         Ok(())
     }
 
-    /// Remove a child element
-    pub fn remove_child(&self, child: &Arc<Element>) -> XmlResult<()> {
-        let mut children = self.children.write();
-        if let Some(pos) = children.iter().position(|c| Arc::ptr_eq(c, child)) {
-            children.remove(pos);
-            // Clear the parent reference
-            *child.parent.write() = None;
+    pub fn remove_child(&self, child: &Element) -> XmlResult<()> {
+        let mut inner = self.0.write();
+        if let Some(pos) = inner.children.iter().position(|c| Arc::ptr_eq(&c.0, &child.0)) {
+            let mut child_inner = child.0.write();
+            child_inner.parent = None;
+            inner.children.remove(pos);
             Ok(())
         } else {
             Err(XmlError::ElementNotFound)
         }
     }
 
-    /// Get all child elements
-    pub fn children(&self) -> Vec<Arc<Element>> {
-        self.children.read().clone()
+    pub fn children(&self) -> Vec<Element> {
+        self.0.read().children.clone()
     }
 
-    /// Get child elements by name
-    pub fn get_children_by_name(&self, name: &str) -> Vec<Arc<Element>> {
-        self.children
-            .read()
-            .iter()
-            .filter(|child| child.name() == name)
-            .cloned()
-            .collect()
+    pub fn get_children_by_name(&self, name: &str) -> Vec<Element> {
+        self.0.read().children.iter().filter(|child| child.name() == name).cloned().collect()
     }
 
-    /// Set text content (clears children if any)
     pub fn set_text_content(&self, text: String) {
-        let mut text_content = self.text_content.write();
-        let mut children = self.children.write();
-
-        *text_content = Some(text);
-        children.clear();
+        let mut inner = self.0.write();
+        inner.text_content = Some(text);
+        inner.children.clear();
     }
 
-    /// Get text content
     pub fn text_content(&self) -> Option<String> {
-        self.text_content.read().clone()
+        self.0.read().text_content.clone()
     }
 
-    /// Get parent element
-    pub fn parent(&self) -> Option<Arc<Element>> {
-        self.parent.read().clone()
+    pub fn parent(&self) -> Option<Element> {
+        self.0.read().parent.clone()
     }
 
-    /// Check if element is attached to a document tree
     pub fn is_attached(&self) -> bool {
-        self.parent.read().is_some()
+        self.0.read().parent.is_some()
     }
 
-    /// Check if this element belongs to the given internal document
     pub(crate) fn belongs_to_document(&self, doc: &InternalDocument) -> bool {
-        self.document_id == doc.id()
-    }
-}
-
-impl Clone for Element {
-    fn clone(&self) -> Self {
-        Self {
-            document_id: self.document_id,
-            name: self.name.clone(),
-            namespace: self.namespace.clone(),
-            attributes: RwLock::new(self.attributes.read().clone()),
-            children: RwLock::new(self.children.read().clone()),
-            text_content: RwLock::new(self.text_content.read().clone()),
-            parent: RwLock::new(None), // Don't clone parent to avoid cycles
-            namespace_declarations: RwLock::new(self.namespace_declarations.read().clone()),
-        }
+        self.0.read().document_id == doc.id()
     }
 }

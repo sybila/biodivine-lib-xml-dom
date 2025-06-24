@@ -119,7 +119,7 @@ mod tests {
         let element = doc.create_element_with_namespace("test".to_string(), namespace.clone());
 
         assert_eq!(element.name(), "test");
-        assert_eq!(element.namespace(), Some(&namespace));
+        assert_eq!(element.namespace(), Some(namespace));
         assert_eq!(element.qualified_name(), "ex:test");
     }
 

@@ -27,7 +27,7 @@ pub fn parse_string(xml: &str) -> XmlResult<Document> {
 /// Parse XML from a generic reader
 pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
     let mut xml_reader = Reader::from_reader(reader);
-    xml_reader.trim_text(true);
+    xml_reader.trim_text(false);
 
     let doc = Document::new();
     let mut stack: Vec<Element> = Vec::new();

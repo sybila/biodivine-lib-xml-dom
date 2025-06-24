@@ -38,7 +38,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
             Ok(Event::Start(ref e)) => {
                 let element = parse_start_element(&doc, e)?;
                 if let Some(parent) = stack.last() {
-                    parent.add_child_element(element.clone()).unwrap();
+                    parent.add_child_element(element.clone())?;
                 } else {
                     doc.set_root(element.clone())?;
                 }
@@ -73,7 +73,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
             Ok(Event::Empty(ref e)) => {
                 let element = parse_empty_element(&doc, e)?;
                 if let Some(parent) = stack.last() {
-                    parent.add_child_element(element.clone()).unwrap();
+                    parent.add_child_element(element.clone())?;
                 } else {
                     doc.set_root(element.clone())?;
                 }

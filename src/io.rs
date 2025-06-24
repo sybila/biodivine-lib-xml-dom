@@ -85,69 +85,19 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
 
 /// Parse a start element and its attributes
 fn parse_start_element(doc: &Document, e: &BytesStart) -> XmlResult<Element> {
+    let element = create_and_setup_element(doc, e)?;
     let name = std::str::from_utf8(e.name().into_inner())
         .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e)))?;
-
-    let (local_name, default_namespace) = parse_element_name(name);
-    let namespace_declarations = extract_namespace_declarations(e)?;
-    let attributes = extract_regular_attributes(e)?;
-
-    // Create the initial element
-    let element = if let Some(ns) = default_namespace {
-        doc.create_element_with_namespace(local_name.clone(), ns)
-    } else {
-        doc.create_element(local_name.clone())
-    };
-
-    // Declare namespaces on the element
-    for (prefix, uri) in namespace_declarations {
-        if prefix.is_empty() {
-            element.declare_default_namespace(uri);
-        } else {
-            element.declare_namespace(prefix, uri);
-        }
-    }
-
-    // Add regular attributes
-    for attr in attributes {
-        element.add_attribute(attr);
-    }
-
-    // Resolve the element's namespace if it has a qualified name
+    let (local_name, _) = parse_element_name(name);
     resolve_element_namespace(doc, element, name, local_name)
 }
 
 /// Parse an empty (self-closing) element and its attributes
 fn parse_empty_element(doc: &Document, e: &BytesStart) -> XmlResult<Element> {
+    let element = create_and_setup_element(doc, e)?;
     let name = std::str::from_utf8(e.name().into_inner())
         .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e)))?;
-
-    let (local_name, default_namespace) = parse_element_name(name);
-    let namespace_declarations = extract_namespace_declarations(e)?;
-    let attributes = extract_regular_attributes(e)?;
-
-    // Create the initial element
-    let element = if let Some(ns) = default_namespace {
-        doc.create_element_with_namespace(local_name.clone(), ns)
-    } else {
-        doc.create_element(local_name.clone())
-    };
-
-    // Declare namespaces on the element
-    for (prefix, uri) in namespace_declarations {
-        if prefix.is_empty() {
-            element.declare_default_namespace(uri);
-        } else {
-            element.declare_namespace(prefix, uri);
-        }
-    }
-
-    // Add regular attributes
-    for attr in attributes {
-        element.add_attribute(attr);
-    }
-
-    // Resolve the element's namespace if it has a qualified name
+    let (local_name, _) = parse_element_name(name);
     resolve_element_namespace(doc, element, name, local_name)
 }
 
@@ -297,6 +247,30 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
     let end = BytesEnd::new(element.name());
     writer.write_event(Event::End(end))?;
     Ok(())
+}
+
+fn create_and_setup_element(doc: &Document, e: &BytesStart) -> XmlResult<Element> {
+    let name = std::str::from_utf8(e.name().into_inner())
+        .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e)))?;
+    let (local_name, default_namespace) = parse_element_name(name);
+    let namespace_declarations = extract_namespace_declarations(e)?;
+    let attributes = extract_regular_attributes(e)?;
+    let element = if let Some(ns) = default_namespace {
+        doc.create_element_with_namespace(local_name, ns)
+    } else {
+        doc.create_element(local_name)
+    };
+    for (prefix, uri) in namespace_declarations {
+        if prefix.is_empty() {
+            element.declare_default_namespace(uri);
+        } else {
+            element.declare_namespace(prefix, uri);
+        }
+    }
+    for attr in attributes {
+        element.add_attribute(attr);
+    }
+    Ok(element)
 }
 
 #[cfg(test)]

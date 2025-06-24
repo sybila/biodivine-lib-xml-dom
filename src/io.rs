@@ -4,7 +4,6 @@ use quick_xml::Writer;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
-use std::sync::Arc;
 
 use crate::document::Document;
 use crate::element::Element;

@@ -121,13 +121,11 @@ impl Element {
                     prefix
                 )))
             }
+        } else if let Some(uri) = self.get_namespace_uri("") {
+            let namespace = Namespace::default(uri);
+            Ok((qualified_name.to_string(), Some(namespace)))
         } else {
-            if let Some(uri) = self.get_namespace_uri("") {
-                let namespace = Namespace::default(uri);
-                Ok((qualified_name.to_string(), Some(namespace)))
-            } else {
-                Ok((qualified_name.to_string(), None))
-            }
+            Ok((qualified_name.to_string(), None))
         }
     }
 

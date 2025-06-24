@@ -445,4 +445,30 @@ mod tests {
             "Mixed content structure should be preserved"
         );
     }
+
+    #[test]
+    fn test_namespaced_attributes() {
+        let xml = r#"<root xmlns:ex="http://example.com" ex:attr="value" attr2="other" />"#;
+        let doc = parse_string(xml).unwrap();
+        let root = doc.root().unwrap();
+        let attrs = root.attributes();
+        // Find the namespaced attribute
+        let ns_attr = attrs.iter().find(|a| a.name == "attr" && a.namespace.is_some()).expect("Missing namespaced attribute");
+        assert_eq!(ns_attr.value, "value");
+        assert_eq!(ns_attr.namespace.as_ref().unwrap().uri, "http://example.com");
+        assert_eq!(ns_attr.namespace.as_ref().unwrap().prefix.as_deref(), Some("ex"));
+        // Find the non-namespaced attribute
+        let attr2 = attrs.iter().find(|a| a.name == "attr2").expect("Missing attr2");
+        assert_eq!(attr2.value, "other");
+        assert!(attr2.namespace.is_none());
+        // Round-trip
+        let output = write_string(&doc).unwrap();
+        let doc2 = parse_string(&output).unwrap();
+        let root2 = doc2.root().unwrap();
+        let attrs2 = root2.attributes();
+        let ns_attr2 = attrs2.iter().find(|a| a.name == "attr" && a.namespace.is_some()).expect("Missing namespaced attribute after round-trip");
+        assert_eq!(ns_attr2.value, "value");
+        assert_eq!(ns_attr2.namespace.as_ref().unwrap().uri, "http://example.com");
+        assert_eq!(ns_attr2.namespace.as_ref().unwrap().prefix.as_deref(), Some("ex"));
+    }
 }

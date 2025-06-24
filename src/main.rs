@@ -56,15 +56,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 2: Parse XML from string
     println!("\n2. Parsing XML from string:");
-    let xml_input = r#"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+    let xml_input = r#"<?xml version="1.0" encoding="UTF-8"?>
 <bookstore>
-    <book category=\"fiction\">
+    <book category="fiction">
         <title>Harry Potter</title>
         <author>J.K. Rowling</author>
         <year>1997</year>
         <price>29.99</price>
     </book>
-    <book category=\"non-fiction\">
+    <book category="non-fiction">
         <title>Learning Rust</title>
         <author>Steve Klabnik</author>
         <year>2018</year>

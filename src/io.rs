@@ -133,6 +133,7 @@ fn extract_namespace_declarations(e: &BytesStart) -> XmlResult<Vec<(String, Stri
 /// Extract regular (non-namespace) attributes
 fn extract_regular_attributes(e: &BytesStart) -> XmlResult<Vec<Attribute>> {
     let mut attributes = Vec::new();
+    let mut namespace_map = std::collections::HashMap::new();
     for attr in e.attributes() {
         let attr = attr.map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
         let key = std::str::from_utf8(attr.key.into_inner())
@@ -140,7 +141,32 @@ fn extract_regular_attributes(e: &BytesStart) -> XmlResult<Vec<Attribute>> {
         let value = attr
             .unescape_value()
             .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute value: {}", e)))?;
-        if !key.starts_with("xmlns") {
+        if let Some(prefix) = key.strip_prefix("xmlns:") {
+            namespace_map.insert(prefix.to_string(), value.to_string());
+        } else if key == "xmlns" {
+            namespace_map.insert("".to_string(), value.to_string());
+        }
+    }
+    for attr in e.attributes() {
+        let attr = attr.map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
+        let key = std::str::from_utf8(attr.key.into_inner())
+            .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e)))?;
+        let value = attr
+            .unescape_value()
+            .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute value: {}", e)))?;
+        if key.starts_with("xmlns") {
+            continue;
+        }
+        if let Some(colon_pos) = key.find(':') {
+            let prefix = &key[..colon_pos];
+            let local_name = &key[colon_pos + 1..];
+            if let Some(uri) = namespace_map.get(prefix) {
+                let ns = Namespace::prefixed(uri.clone(), prefix.to_string());
+                attributes.push(Attribute::with_namespace(local_name.to_string(), value.to_string(), ns));
+            } else {
+                attributes.push(Attribute::new(key.to_string(), value.to_string()));
+            }
+        } else {
             attributes.push(Attribute::new(key.to_string(), value.to_string()));
         }
     }
@@ -222,7 +248,15 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
         }
     }
     for attr in element.attributes() {
-        attrs.push((attr.name.clone(), attr.value.clone()));
+        if let Some(ns) = &attr.namespace {
+            if let Some(prefix) = &ns.prefix {
+                attrs.push((format!("{}:{}", prefix, attr.name), attr.value.clone()));
+            } else {
+                attrs.push((attr.name.clone(), attr.value.clone()));
+            }
+        } else {
+            attrs.push((attr.name.clone(), attr.value.clone()));
+        }
     }
     let start = BytesStart::new(element.name()).with_attributes(
         attrs

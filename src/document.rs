@@ -22,8 +22,12 @@ impl InternalDocument {
         }
     }
 
+    pub(crate) fn belongs_to_document(&self, doc: &crate::document::Document) -> bool {
+        std::ptr::eq(self, &*doc.internal)
+    }
+
     pub(crate) fn set_root(&self, root: Element) -> XmlResult<()> {
-        if !root.belongs_to_document(self) {
+        if !self.belongs_to_document(&root.document()) {
             return Err(XmlError::InvalidOperation(
                 "Element belongs to a different document".to_string(),
             ));

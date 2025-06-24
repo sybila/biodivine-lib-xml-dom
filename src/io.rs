@@ -37,61 +37,49 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
         match xml_reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 let element = parse_start_element(&doc, e)?;
-                add_element_to_tree(&doc, &mut stack, element)?;
+                if let Some(parent) = stack.last() {
+                    parent.add_child_element(element.clone())?;
+                } else {
+                    doc.set_root(element.clone())?;
+                }
+                stack.push(element);
             }
-
             Ok(Event::End(_)) => {
                 stack.pop();
             }
-
             Ok(Event::Text(e)) => {
                 if let Some(current) = stack.last() {
                     let text = e.unescape().map_err(|e| {
                         XmlError::InvalidXml(format!("Invalid text content: {}", e))
                     })?;
-                    current.set_text_content(text.to_string());
+                    current.add_text(text.to_string());
                 }
             }
-
             Ok(Event::Eof) => break,
-
-            Ok(Event::Comment(_)) => {
-                // Ignore comments for now
-            }
-
-            Ok(Event::Decl(_)) => {
-                // Ignore XML declaration for now
-            }
-
-            Ok(Event::PI(_)) => {
-                // Ignore processing instructions for now
-            }
-
+            Ok(Event::Comment(_)) => {}
+            Ok(Event::Decl(_)) => {}
+            Ok(Event::PI(_)) => {}
             Ok(Event::CData(e)) => {
-                // Treat CDATA as text for now
                 if let Some(current) = stack.last() {
                     let text = std::str::from_utf8(&e).map_err(|e| {
                         XmlError::InvalidXml(format!("Invalid CDATA content: {}", e))
                     })?;
-                    current.set_text_content(text.to_string());
+                    current.add_text(text.to_string());
                 }
             }
-
-            Ok(Event::DocType(_)) => {
-                // Ignore DOCTYPE declarations for now
-            }
-
+            Ok(Event::DocType(_)) => {}
             Ok(Event::Empty(ref e)) => {
                 let element = parse_empty_element(&doc, e)?;
-                add_element_to_tree(&doc, &mut stack, element)?;
+                if let Some(parent) = stack.last() {
+                    parent.add_child_element(element);
+                } else {
+                    doc.set_root(element)?;
+                }
             }
-
             Err(e) => return Err(XmlError::InvalidXml(format!("XML parsing error: {}", e))),
         }
-
         buf.clear();
     }
-
     Ok(doc)
 }
 
@@ -252,21 +240,6 @@ fn resolve_element_namespace(
     }
 }
 
-/// Add element to the document tree
-fn add_element_to_tree(
-    doc: &Document,
-    stack: &mut Vec<Element>,
-    element: Element,
-) -> XmlResult<()> {
-    if let Some(parent) = stack.last() {
-        parent.add_child(element.clone())?;
-    } else {
-        doc.set_root(element.clone())?;
-    }
-    stack.push(element);
-    Ok(())
-}
-
 /// Write XML document to a file
 pub fn write_file<P: AsRef<Path>>(doc: &Document, path: P) -> XmlResult<()> {
     let file = File::create(path)
@@ -297,49 +270,35 @@ pub fn write_writer<W: Write>(doc: &Document, writer: W) -> XmlResult<()> {
 /// Write a single element and its children
 fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResult<()> {
     let mut attrs = Vec::new();
-
-    // Add namespace declarations first
     for (prefix, uri) in element.namespace_declarations() {
         if prefix.is_empty() {
-            // Default namespace
             attrs.push(("xmlns".to_string(), uri));
         } else {
-            // Prefixed namespace
             attrs.push((format!("xmlns:{}", prefix), uri));
         }
     }
-
-    // Add element attributes
     for attr in element.attributes() {
         attrs.push((attr.name.clone(), attr.value.clone()));
     }
-
-    // Create start tag
     let start = BytesStart::new(element.name()).with_attributes(
-        attrs
-            .iter()
-            .map(|(k, v)| (k.as_bytes(), v.as_bytes()))
-            .collect::<Vec<_>>(),
+        attrs.iter().map(|(k, v)| (k.as_bytes(), v.as_bytes())).collect::<Vec<_>>(),
     );
     writer.write_event(Event::Start(start))?;
-
-    // Write text content or children
-    if let Some(text) = element.text_content() {
-        if !text.is_empty() {
-            let text_event = BytesText::new(&text);
-            writer.write_event(Event::Text(text_event))?;
-        }
-    } else {
-        // Write children
-        for child in element.children() {
-            write_element(writer, &child)?;
+    for node in element.children() {
+        match node {
+            crate::element::XmlNode::Element(ref child) => {
+                write_element(writer, child)?;
+            }
+            crate::element::XmlNode::Text(ref text) => {
+                if !text.is_empty() {
+                    let text_event = BytesText::new(text);
+                    writer.write_event(Event::Text(text_event))?;
+                }
+            }
         }
     }
-
-    // Write end tag
     let end = BytesEnd::new(element.name());
     writer.write_event(Event::End(end))?;
-
     Ok(())
 }
 
@@ -350,10 +309,10 @@ mod tests {
 
     #[test]
     fn test_parse_and_write_simple_xml() {
-        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        let xml = r#"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <root>
-    <child id="1">Hello, World!</child>
-    <child id="2">Another child</child>
+    <child id=\"1\">Hello, World!</child>
+    <child id=\"2\">Another child</child>
 </root>"#;
 
         let doc = parse_string(xml).unwrap();
@@ -366,8 +325,8 @@ mod tests {
 
     #[test]
     fn test_parse_with_namespaces() {
-        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
-<html:html xmlns:html="http://www.w3.org/1999/xhtml">
+        let xml = r#"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<html:html xmlns:html=\"http://www.w3.org/1999/xhtml\">
     <html:head>
         <html:title>Test Page</html:title>
     </html:head>
@@ -381,10 +340,7 @@ mod tests {
 
         assert_eq!(root.name(), "html");
         assert!(root.namespace().is_some());
-        assert_eq!(
-            root.namespace().unwrap().uri,
-            "http://www.w3.org/1999/xhtml"
-        );
+        assert_eq!(root.namespace().unwrap().uri, "http://www.w3.org/1999/xhtml");
         assert_eq!(root.qualified_name(), "html:html");
     }
 
@@ -405,9 +361,9 @@ mod tests {
 
         let head = doc.create_element("head".to_string());
         let title = doc.create_element("title".to_string());
-        title.set_text_content("Test Page".to_string());
-        head.add_child(title).unwrap();
-        root.add_child(head).unwrap();
+        title.add_text("Test Page".to_string());
+        head.add_child_element(title).unwrap();
+        root.add_child_element(head).unwrap();
 
         let output = write_string(&doc).unwrap();
         assert!(output.contains("<html"));
@@ -418,13 +374,13 @@ mod tests {
     #[test]
     fn test_scoped_namespaces() {
         // Test that namespaces are properly scoped to elements
-        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
-<root xmlns:default="http://default.com">
-    <child xmlns:ex="http://example.com">
+        let xml = r#"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<root xmlns:default=\"http://default.com\">
+    <child xmlns:ex=\"http://example.com\">
         <ex:element>Hello, <ex:s>World!</ex:s></ex:element>
-        <nested xmlns:ex="http://example-another.com">
+        <nested xmlns:ex=\"http://example-another.com\">
             <ex:element>Different namespace <ex:s>here!</ex:s></ex:element>
-            <deep xmlns:ex="http://example-third.com">
+            <deep xmlns:ex=\"http://example-third.com\">
                 <ex:element>Third namespace <ex:s>here!</ex:s></ex:element>
             </deep>
         </nested>
@@ -432,9 +388,9 @@ mod tests {
             <ex:element>Back to first namespace <ex:s>here!</ex:s></ex:element>
         </back_to_original>
     </child>
-    <child xmlns:ex="http://example-another.com">
+    <child xmlns:ex=\"http://example-another.com\">
         <ex:element>Hello, <ex:s>World!</ex:s></ex:element>
-        <nested xmlns:ex="http://example-fourth.com">
+        <nested xmlns:ex=\"http://example-fourth.com\">
             <ex:element>Fourth namespace <ex:s>here!</ex:s></ex:element>
         </nested>
     </child>
@@ -444,56 +400,53 @@ mod tests {
         let doc = parse_string(xml).unwrap();
         let root = doc.root().unwrap();
 
-        // Check that the root has the default namespace declaration
-        assert_eq!(
-            root.get_namespace_uri("default"),
-            Some("http://default.com".to_string())
-        );
+        assert_eq!(root.name(), "root");
+        assert_eq!(root.namespace_declarations().get("default"), Some(&"http://default.com".to_string()));
 
-        // Check that the first child has the first ex namespace
-        let first_child = root.children()[0].clone();
-        assert_eq!(
-            first_child.get_namespace_uri("ex"),
-            Some("http://example.com".to_string())
-        );
+        let first_child = root.element_children()[0].clone();
+        assert_eq!(first_child.get_namespace_uri("ex"), Some("http://example.com".to_string()));
 
-        // Check that the nested element has a different ex namespace
-        let nested = first_child.children()[1].clone(); // nested element
-        assert_eq!(
-            nested.get_namespace_uri("ex"),
-            Some("http://example-another.com".to_string())
-        );
+        let nested = first_child.element_children()[1].clone();
+        assert_eq!(nested.get_namespace_uri("ex"), Some("http://example-another.com".to_string()));
 
-        // Check that the deep element has yet another ex namespace
-        let deep = nested.children()[1].clone(); // deep element
-        assert_eq!(
-            deep.get_namespace_uri("ex"),
-            Some("http://example-third.com".to_string())
-        );
+        let deep = nested.element_children()[1].clone();
+        assert_eq!(deep.get_namespace_uri("ex"), Some("http://example-third.com".to_string()));
 
-        // Check that going back to original scope works
-        let back_to_original = first_child.children()[2].clone(); // back_to_original element
-        assert_eq!(
-            back_to_original.get_namespace_uri("ex"),
-            Some("http://example.com".to_string())
-        );
+        let back_to_original = first_child.element_children()[2].clone();
+        assert_eq!(back_to_original.get_namespace_uri("ex"), Some("http://example.com".to_string()));
 
-        // Check that the second child has a different ex namespace
-        let second_child = root.children()[1].clone();
-        assert_eq!(
-            second_child.get_namespace_uri("ex"),
-            Some("http://example-another.com".to_string())
-        );
+        let second_child = root.element_children()[1].clone();
+        assert_eq!(second_child.get_namespace_uri("ex"), Some("http://example-another.com".to_string()));
 
-        // Test round-trip
         let output = write_string(&doc).unwrap();
         let doc2 = parse_string(&output).unwrap();
-
-        // Verify that the namespace scoping is preserved
         let root2 = doc2.root().unwrap();
-        assert_eq!(
-            root2.get_namespace_uri("default"),
-            Some("http://default.com".to_string())
-        );
+        assert_eq!(root2.get_namespace_uri("default"), Some("http://default.com".to_string()));
+    }
+
+    #[test]
+    fn test_mixed_content() {
+        let xml = r#"<a> some text <b> other text </b> more text <c> other text </c> </a>"#;
+        let doc = parse_string(xml).unwrap();
+        let root = doc.root().unwrap();
+        assert_eq!(root.name(), "a");
+        let children = root.children();
+        let mut actual: Vec<String> = vec![];
+        for node in children {
+            match node {
+                crate::element::XmlNode::Text(t) => actual.push(format!("text:{:?}", t)),
+                crate::element::XmlNode::Element(e) => actual.push(format!("element:{}", e.name())),
+            }
+        }
+        let expected = vec![
+            "text:\" some text \"",
+            "element:b",
+            "text:\" more text \"",
+            "element:c",
+            "text:\" \"",
+        ];
+        assert_eq!(actual, expected, "Mixed content structure should be preserved");
     }
 }
+
+

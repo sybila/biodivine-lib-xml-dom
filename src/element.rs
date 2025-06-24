@@ -6,6 +6,12 @@ use crate::document::InternalDocument;
 use crate::error::{XmlError, XmlResult};
 use crate::namespace::{Attribute, Namespace};
 
+#[derive(Debug, Clone)]
+pub enum XmlNode {
+    Element(Element),
+    Text(String),
+}
+
 /// Internal representation of an XML element node
 #[derive(Debug)]
 pub(crate) struct InternalElement {
@@ -18,9 +24,7 @@ pub(crate) struct InternalElement {
     /// Element attributes
     pub attributes: Vec<Attribute>,
     /// Child elements
-    pub children: Vec<Element>,
-    /// Text content (if this element contains only text)
-    pub text_content: Option<String>,
+    pub children: Vec<XmlNode>,
     /// Parent element (None if root or detached)
     pub parent: Option<Element>,
     /// Namespace declarations on this element (prefix -> URI)
@@ -39,7 +43,6 @@ impl Element {
             namespace: None,
             attributes: Vec::new(),
             children: Vec::new(),
-            text_content: None,
             parent: None,
             namespace_declarations: HashMap::new(),
         })))
@@ -57,7 +60,6 @@ impl Element {
             namespace: Some(namespace),
             attributes: Vec::new(),
             children: Vec::new(),
-            text_content: None,
             parent: None,
             namespace_declarations: HashMap::new(),
         })))
@@ -159,40 +161,30 @@ impl Element {
         }).cloned()
     }
 
-    pub fn add_child(&self, child: Element) -> XmlResult<()> {
+    pub fn add_child_element(&self, child: Element) -> XmlResult<()> {
         child.0.write().parent = Some(self.clone());
-        self.0.write().children.push(child);
+        self.0.write().children.push(XmlNode::Element(child));
         Ok(())
     }
 
-    pub fn remove_child(&self, child: &Element) -> XmlResult<()> {
-        let mut inner = self.0.write();
-        if let Some(pos) = inner.children.iter().position(|c| Arc::ptr_eq(&c.0, &child.0)) {
-            let mut child_inner = child.0.write();
-            child_inner.parent = None;
-            inner.children.remove(pos);
-            Ok(())
-        } else {
-            Err(XmlError::ElementNotFound)
-        }
+    pub fn add_text(&self, text: String) {
+        self.0.write().children.push(XmlNode::Text(text));
     }
 
-    pub fn children(&self) -> Vec<Element> {
+    pub fn children(&self) -> Vec<XmlNode> {
         self.0.read().children.clone()
     }
 
-    pub fn get_children_by_name(&self, name: &str) -> Vec<Element> {
-        self.0.read().children.iter().filter(|child| child.name() == name).cloned().collect()
+    pub fn element_children(&self) -> Vec<Element> {
+        self.0.read().children.iter().filter_map(|n| {
+            if let XmlNode::Element(e) = n { Some(e.clone()) } else { None }
+        }).collect()
     }
 
-    pub fn set_text_content(&self, text: String) {
-        let mut inner = self.0.write();
-        inner.text_content = Some(text);
-        inner.children.clear();
-    }
-
-    pub fn text_content(&self) -> Option<String> {
-        self.0.read().text_content.clone()
+    pub fn text_children(&self) -> Vec<String> {
+        self.0.read().children.iter().filter_map(|n| {
+            if let XmlNode::Text(t) = n { Some(t.clone()) } else { None }
+        }).collect()
     }
 
     pub fn parent(&self) -> Option<Element> {

@@ -143,11 +143,14 @@ mod tests {
         let parent = doc.create_element("parent".to_string());
         let child = doc.create_element("child".to_string());
 
-        parent.add_child(child.clone()).unwrap();
+        parent.add_child_element(child.clone()).unwrap();
 
         let children = parent.children();
         assert_eq!(children.len(), 1);
-        assert_eq!(children[0].name(), "child");
+        match &children[0] {
+            crate::element::XmlNode::Element(e) => assert_eq!(e.name(), "child"),
+            _ => panic!("Expected element child"),
+        }
         assert!(child.is_attached());
     }
 

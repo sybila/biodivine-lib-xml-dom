@@ -101,3 +101,11 @@ impl Document {
         self.internal.generate_prefix()
     }
 }
+
+impl PartialEq for Document {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.internal, &other.internal)
+    }
+}
+
+impl Eq for Document {}

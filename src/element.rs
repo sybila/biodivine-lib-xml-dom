@@ -199,10 +199,6 @@ impl Element {
         self.0.read().parent.is_some()
     }
 
-    pub(crate) fn belongs_to_document(&self, doc: &crate::document::Document) -> bool {
-        Arc::ptr_eq(&self.document().internal, &doc.internal)
-    }
-
     pub fn document(&self) -> crate::document::Document {
         self.0.read().document.clone()
     }

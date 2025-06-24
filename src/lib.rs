@@ -32,8 +32,8 @@
 //! // Add attributes and content
 //! let body = doc.create_element("body".to_string());
 //! body.add_attribute(Attribute::new("class".to_string(), "main".to_string()));
-//! body.set_text_content("Hello, World!".to_string());
-//! root.add_child(body).unwrap();
+//! body.add_text("Hello, World!".to_string());
+//! root.add_child_element(body).unwrap();
 //! ```
 //!
 //! ## Parsing XML

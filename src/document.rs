@@ -8,8 +8,6 @@ use crate::namespace::Namespace;
 /// Internal document structure that handles Arc complexity
 #[derive(Debug)]
 pub(crate) struct InternalDocument {
-    /// Unique identifier for this document
-    id: u64,
     /// Root element of the document
     root: RwLock<Option<Element>>,
     /// Next available prefix for auto-generated prefixes
@@ -18,18 +16,10 @@ pub(crate) struct InternalDocument {
 
 impl InternalDocument {
     pub(crate) fn new() -> Self {
-        use std::sync::atomic::{AtomicU64, Ordering};
-        static NEXT_ID: AtomicU64 = AtomicU64::new(1);
-
         Self {
-            id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
             root: RwLock::new(None),
             next_prefix_id: RwLock::new(0),
         }
-    }
-
-    pub(crate) fn id(&self) -> u64 {
-        self.id
     }
 
     pub(crate) fn set_root(&self, root: Element) -> XmlResult<()> {
@@ -56,7 +46,6 @@ impl InternalDocument {
 impl Clone for InternalDocument {
     fn clone(&self) -> Self {
         Self {
-            id: self.id(),
             root: RwLock::new(self.root.read().clone()),
             next_prefix_id: RwLock::new(*self.next_prefix_id.read()),
         }

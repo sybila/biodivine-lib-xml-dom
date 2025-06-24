@@ -18,23 +18,17 @@
 //! ```rust
 //! use biodivine_lib_xml_dom::{create_document, Attribute, Namespace};
 //!
-//! // Create a new document
+//! // Create a new document and elements in a single block
 //! let doc = create_document();
-//!
-//! // Create elements
 //! let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml".to_string(), "html".to_string());
 //! let root = doc.create_element_with_namespace("html".to_string(), html_ns);
-//!
-//! // Declare namespaces on elements
 //! root.declare_namespace("html".to_string(), "http://www.w3.org/1999/xhtml".to_string());
 //! doc.set_root(root.clone()).unwrap();
-//!
-//! // Add attributes and content
 //! let body = doc.create_element("body".to_string());
 //! body.add_attribute(Attribute::new("class".to_string(), "main".to_string()));
 //! body.add_text("Hello, World!".to_string());
-//! root.add_child_element(body);
-//! ```
+//! root.add_child_element(body).unwrap();
+//! }
 //!
 //! ## Parsing XML
 //!
@@ -143,7 +137,7 @@ mod tests {
         let parent = doc.create_element("parent".to_string());
         let child = doc.create_element("child".to_string());
 
-        parent.add_child_element(child.clone());
+        parent.add_child_element(child.clone()).unwrap();
 
         let children = parent.children();
         assert_eq!(children.len(), 1);

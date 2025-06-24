@@ -38,7 +38,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
             Ok(Event::Start(ref e)) => {
                 let element = parse_start_element(&doc, e)?;
                 if let Some(parent) = stack.last() {
-                    parent.add_child_element(element.clone());
+                    parent.add_child_element(element.clone()).unwrap();
                 } else {
                     doc.set_root(element.clone())?;
                 }
@@ -71,7 +71,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
             Ok(Event::Empty(ref e)) => {
                 let element = parse_empty_element(&doc, e)?;
                 if let Some(parent) = stack.last() {
-                    parent.add_child_element(element);
+                    parent.add_child_element(element).unwrap();
                 } else {
                     doc.set_root(element)?;
                 }
@@ -362,8 +362,8 @@ mod tests {
         let head = doc.create_element("head".to_string());
         let title = doc.create_element("title".to_string());
         title.add_text("Test Page".to_string());
-        head.add_child_element(title);
-        root.add_child_element(head);
+        head.add_child_element(title).unwrap();
+        root.add_child_element(head).unwrap();
 
         let output = write_string(&doc).unwrap();
         assert!(output.contains("<html"));

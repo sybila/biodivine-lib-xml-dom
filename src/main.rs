@@ -26,29 +26,29 @@ fn main() {
     let head = doc.create_element("head".to_string());
     let title = doc.create_element("title".to_string());
     title.add_text("My XML Document".to_string());
-    head.add_child_element(title);
-    root.add_child_element(head.clone());
+    head.add_child_element(title).unwrap();
+    root.add_child_element(head.clone()).unwrap();
 
     let body = doc.create_element("body".to_string());
     let p = doc.create_element("p".to_string());
     p.add_attribute(Attribute::new("class".to_string(), "example".to_string()));
     p.add_attribute(Attribute::new("id".to_string(), "intro".to_string()));
     p.add_text("This is an example XML document created with our DOM library.".to_string());
-    body.add_child_element(p);
-    root.add_child_element(body.clone());
+    body.add_child_element(p).unwrap();
+    root.add_child_element(body.clone()).unwrap();
 
     let svg_ns = Namespace::prefixed("http://www.w3.org/2000/svg".to_string(), "svg".to_string());
     let svg = doc.create_element_with_namespace("svg".to_string(), svg_ns);
     svg.add_attribute(Attribute::new("width".to_string(), "100".to_string()));
     svg.add_attribute(Attribute::new("height".to_string(), "100".to_string()));
-    body.add_child_element(svg.clone());
+    body.add_child_element(svg.clone()).unwrap();
 
     let circle = doc.create_element("circle".to_string());
     circle.add_attribute(Attribute::new("cx".to_string(), "50".to_string()));
     circle.add_attribute(Attribute::new("cy".to_string(), "50".to_string()));
     circle.add_attribute(Attribute::new("r".to_string(), "40".to_string()));
     circle.add_attribute(Attribute::new("fill".to_string(), "blue".to_string()));
-    svg.add_child_element(circle);
+    svg.add_child_element(circle).unwrap();
 
     let xml_output = write_string(&doc).unwrap();
     println!("Generated XML:");

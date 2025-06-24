@@ -2,7 +2,6 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::document::InternalDocument;
 use crate::error::{XmlError, XmlResult};
 use crate::namespace::{Attribute, Namespace};
 
@@ -17,7 +16,6 @@ pub enum XmlNode {
 pub(crate) struct InternalElement {
     /// The ID of the internal document this element belongs to
     pub document: crate::document::Document,
-    pub document_id: u64,
     /// Element name (local name)
     pub name: String,
     /// Element namespace
@@ -38,10 +36,8 @@ pub struct Element(Arc<RwLock<InternalElement>>);
 impl Element {
     /// Create a new element in the given document
     pub(crate) fn new(document: crate::document::Document, name: String) -> Self {
-        let document_id = document.internal.id();
         Self(Arc::new(RwLock::new(InternalElement {
             document,
-            document_id,
             name,
             namespace: None,
             attributes: Vec::new(),
@@ -57,10 +53,8 @@ impl Element {
         name: String,
         namespace: Namespace,
     ) -> Self {
-        let document_id = document.internal.id();
         Self(Arc::new(RwLock::new(InternalElement {
             document,
-            document_id,
             name,
             namespace: Some(namespace),
             attributes: Vec::new(),
@@ -166,9 +160,15 @@ impl Element {
         }).cloned()
     }
 
-    pub fn add_child_element(&self, child: Element) {
+    pub fn add_child_element(&self, child: Element) -> crate::error::XmlResult<()> {
+        if !Arc::ptr_eq(&self.document().internal, &child.document().internal) {
+            return Err(crate::error::XmlError::InvalidOperation(
+                "Element belongs to a different document".to_string(),
+            ));
+        }
         child.0.write().parent = Some(self.clone());
         self.0.write().children.push(XmlNode::Element(child));
+        Ok(())
     }
 
     pub fn add_text(&self, text: String) {
@@ -199,8 +199,8 @@ impl Element {
         self.0.read().parent.is_some()
     }
 
-    pub(crate) fn belongs_to_document(&self, doc: &InternalDocument) -> bool {
-        self.0.read().document_id == doc.id()
+    pub(crate) fn belongs_to_document(&self, doc: &crate::document::InternalDocument) -> bool {
+        Arc::ptr_eq(&self.document().internal, &Arc::new(doc.clone()))
     }
 
     pub fn document(&self) -> crate::document::Document {

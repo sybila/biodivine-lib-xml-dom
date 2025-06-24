@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::error::{XmlError, XmlResult};
 use crate::namespace::{Attribute, Namespace};
+use crate::document::Document;
 
 #[derive(Debug, Clone)]
 pub enum XmlNode {
@@ -15,7 +16,7 @@ pub enum XmlNode {
 #[derive(Debug)]
 pub(crate) struct InternalElement {
     /// The ID of the internal document this element belongs to
-    pub document: crate::document::Document,
+    pub document: Document,
     /// Element name (local name)
     pub name: String,
     /// Element namespace
@@ -35,7 +36,7 @@ pub struct Element(Arc<RwLock<InternalElement>>);
 
 impl Element {
     /// Create a new element in the given document
-    pub(crate) fn new(document: crate::document::Document, name: String) -> Self {
+    pub(crate) fn new(document: Document, name: String) -> Self {
         Self(Arc::new(RwLock::new(InternalElement {
             document,
             name,
@@ -49,7 +50,7 @@ impl Element {
 
     /// Create a new namespaced element
     pub(crate) fn with_namespace(
-        document: crate::document::Document,
+        document: Document,
         name: String,
         namespace: Namespace,
     ) -> Self {
@@ -199,7 +200,7 @@ impl Element {
         self.0.read().parent.is_some()
     }
 
-    pub fn document(&self) -> crate::document::Document {
+    pub fn document(&self) -> Document {
         self.0.read().document.clone()
     }
 }

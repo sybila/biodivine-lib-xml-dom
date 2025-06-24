@@ -73,7 +73,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 </bookstore>"#;
 
     let parsed_doc = parse_string(xml_input)?;
-    let root = parsed_doc.root().ok_or("Parsed document has no root element")?;
+    let root = parsed_doc
+        .root()
+        .ok_or("Parsed document has no root element")?;
     println!("Parsed document root: {}", root.name());
     let books: Vec<_> = root.element_children();
     println!("Number of books: {}", books.len());
@@ -82,7 +84,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!(
             "Book {}: {}",
             i + 1,
-            book.get_attribute("category").ok_or("Book element missing 'category' attribute")?.value
+            book.get_attribute("category")
+                .ok_or("Book element missing 'category' attribute")?
+                .value
         );
         let titles: Vec<_> = book
             .element_children()
@@ -101,7 +105,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let round_trip_doc = parse_string(&round_trip_xml)?;
     println!(
         "Round-trip successful: {}",
-        round_trip_doc.root().ok_or("Round-trip document has no root element")?.name() == "bookstore"
+        round_trip_doc
+            .root()
+            .ok_or("Round-trip document has no root element")?
+            .name()
+            == "bookstore"
     );
 
     println!("\nLibrary is ready for use!");

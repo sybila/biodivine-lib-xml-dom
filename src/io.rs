@@ -293,7 +293,11 @@ fn resolve_attribute_namespaces(element: &Element) {
             let prefix = &attr.name[..colon_pos];
             let local_name = &attr.name[colon_pos + 1..];
             if let Some(uri) = element.get_namespace_uri(prefix) {
-                updated_attrs.push(Attribute::with_namespace(local_name.to_string(), attr.value.clone(), Namespace::prefixed(uri, prefix.to_string())));
+                updated_attrs.push(Attribute::with_namespace(
+                    local_name.to_string(),
+                    attr.value.clone(),
+                    Namespace::prefixed(uri, prefix.to_string()),
+                ));
             } else {
                 updated_attrs.push(attr.clone());
             }
@@ -484,12 +488,24 @@ mod tests {
         let root = doc.root().unwrap();
         let attrs = root.attributes();
         // Find the namespaced attribute
-        let ns_attr = attrs.iter().find(|a| a.name == "attr" && a.namespace.is_some()).expect("Missing namespaced attribute");
+        let ns_attr = attrs
+            .iter()
+            .find(|a| a.name == "attr" && a.namespace.is_some())
+            .expect("Missing namespaced attribute");
         assert_eq!(ns_attr.value, "value");
-        assert_eq!(ns_attr.namespace.as_ref().unwrap().uri, "http://example.com");
-        assert_eq!(ns_attr.namespace.as_ref().unwrap().prefix.as_deref(), Some("ex"));
+        assert_eq!(
+            ns_attr.namespace.as_ref().unwrap().uri,
+            "http://example.com"
+        );
+        assert_eq!(
+            ns_attr.namespace.as_ref().unwrap().prefix.as_deref(),
+            Some("ex")
+        );
         // Find the non-namespaced attribute
-        let attr2 = attrs.iter().find(|a| a.name == "attr2").expect("Missing attr2");
+        let attr2 = attrs
+            .iter()
+            .find(|a| a.name == "attr2")
+            .expect("Missing attr2");
         assert_eq!(attr2.value, "other");
         assert!(attr2.namespace.is_none());
         // Round-trip
@@ -497,26 +513,48 @@ mod tests {
         let doc2 = parse_string(&output).unwrap();
         let root2 = doc2.root().unwrap();
         let attrs2 = root2.attributes();
-        let ns_attr2 = attrs2.iter().find(|a| a.name == "attr" && a.namespace.is_some()).expect("Missing namespaced attribute after round-trip");
+        let ns_attr2 = attrs2
+            .iter()
+            .find(|a| a.name == "attr" && a.namespace.is_some())
+            .expect("Missing namespaced attribute after round-trip");
         assert_eq!(ns_attr2.value, "value");
-        assert_eq!(ns_attr2.namespace.as_ref().unwrap().uri, "http://example.com");
-        assert_eq!(ns_attr2.namespace.as_ref().unwrap().prefix.as_deref(), Some("ex"));
+        assert_eq!(
+            ns_attr2.namespace.as_ref().unwrap().uri,
+            "http://example.com"
+        );
+        assert_eq!(
+            ns_attr2.namespace.as_ref().unwrap().prefix.as_deref(),
+            Some("ex")
+        );
     }
 
     #[test]
     fn test_namespaced_attributes_on_parent() {
-        let xml = r#"<root xmlns:ex="http://example.com"><child ex:attr="value" attr2="other" /></root>"#;
+        let xml =
+            r#"<root xmlns:ex="http://example.com"><child ex:attr="value" attr2="other" /></root>"#;
         let doc = parse_string(xml).unwrap();
         let root = doc.root().unwrap();
         let child = root.element_children()[0].clone();
         let attrs = child.attributes();
         // Find the namespaced attribute
-        let ns_attr = attrs.iter().find(|a| a.name == "attr" && a.namespace.is_some()).expect("Missing namespaced attribute");
+        let ns_attr = attrs
+            .iter()
+            .find(|a| a.name == "attr" && a.namespace.is_some())
+            .expect("Missing namespaced attribute");
         assert_eq!(ns_attr.value, "value");
-        assert_eq!(ns_attr.namespace.as_ref().unwrap().uri, "http://example.com");
-        assert_eq!(ns_attr.namespace.as_ref().unwrap().prefix.as_deref(), Some("ex"));
+        assert_eq!(
+            ns_attr.namespace.as_ref().unwrap().uri,
+            "http://example.com"
+        );
+        assert_eq!(
+            ns_attr.namespace.as_ref().unwrap().prefix.as_deref(),
+            Some("ex")
+        );
         // Find the non-namespaced attribute
-        let attr2 = attrs.iter().find(|a| a.name == "attr2").expect("Missing attr2");
+        let attr2 = attrs
+            .iter()
+            .find(|a| a.name == "attr2")
+            .expect("Missing attr2");
         assert_eq!(attr2.value, "other");
         assert!(attr2.namespace.is_none());
         // Round-trip
@@ -525,9 +563,18 @@ mod tests {
         let root2 = doc2.root().unwrap();
         let child2 = root2.element_children()[0].clone();
         let attrs2 = child2.attributes();
-        let ns_attr2 = attrs2.iter().find(|a| a.name == "attr" && a.namespace.is_some()).expect("Missing namespaced attribute after round-trip");
+        let ns_attr2 = attrs2
+            .iter()
+            .find(|a| a.name == "attr" && a.namespace.is_some())
+            .expect("Missing namespaced attribute after round-trip");
         assert_eq!(ns_attr2.value, "value");
-        assert_eq!(ns_attr2.namespace.as_ref().unwrap().uri, "http://example.com");
-        assert_eq!(ns_attr2.namespace.as_ref().unwrap().prefix.as_deref(), Some("ex"));
+        assert_eq!(
+            ns_attr2.namespace.as_ref().unwrap().uri,
+            "http://example.com"
+        );
+        assert_eq!(
+            ns_attr2.namespace.as_ref().unwrap().prefix.as_deref(),
+            Some("ex")
+        );
     }
 }

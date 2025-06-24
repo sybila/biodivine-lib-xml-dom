@@ -92,7 +92,7 @@ fn parse_start_element(doc: &Document, e: &BytesStart) -> XmlResult<Element> {
     let element = create_and_setup_element(doc, e)?;
     let name = std::str::from_utf8(e.name().into_inner())
         .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e)))?;
-    let (local_name, _) = parse_element_name(name);
+    let local_name = parse_element_name(name);
     resolve_element_namespace(doc, element, name, local_name)
 }
 
@@ -101,17 +101,17 @@ fn parse_empty_element(doc: &Document, e: &BytesStart) -> XmlResult<Element> {
     let element = create_and_setup_element(doc, e)?;
     let name = std::str::from_utf8(e.name().into_inner())
         .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e)))?;
-    let (local_name, _) = parse_element_name(name);
+    let local_name = parse_element_name(name);
     resolve_element_namespace(doc, element, name, local_name)
 }
 
 /// Parse element name and extract local name and default namespace
-fn parse_element_name(name: &str) -> (String, Option<Namespace>) {
+fn parse_element_name(name: &str) -> String {
     if let Some(colon_pos) = name.find(':') {
         let local_name = &name[colon_pos + 1..];
-        (local_name.to_string(), None)
+        local_name.to_string()
     } else {
-        (name.to_string(), None)
+        name.to_string()
     }
 }
 
@@ -265,14 +265,10 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
 fn create_and_setup_element(doc: &Document, e: &BytesStart) -> XmlResult<Element> {
     let name = std::str::from_utf8(e.name().into_inner())
         .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e)))?;
-    let (local_name, default_namespace) = parse_element_name(name);
+    let local_name = parse_element_name(name);
     let namespace_declarations = extract_namespace_declarations(e)?;
     let attributes = extract_regular_attributes(e)?;
-    let element = if let Some(ns) = default_namespace {
-        doc.create_element_with_namespace(local_name, ns)
-    } else {
-        doc.create_element(local_name)
-    };
+    let element = doc.create_element(local_name);
     for (prefix, uri) in namespace_declarations {
         if prefix.is_empty() {
             element.declare_default_namespace(uri);

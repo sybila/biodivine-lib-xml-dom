@@ -16,6 +16,7 @@ pub enum XmlNode {
 #[derive(Debug)]
 pub(crate) struct InternalElement {
     /// The ID of the internal document this element belongs to
+    pub document: crate::document::Document,
     pub document_id: u64,
     /// Element name (local name)
     pub name: String,
@@ -36,9 +37,11 @@ pub struct Element(Arc<RwLock<InternalElement>>);
 
 impl Element {
     /// Create a new element in the given document
-    pub(crate) fn new(document: Arc<InternalDocument>, name: String) -> Self {
+    pub(crate) fn new(document: crate::document::Document, name: String) -> Self {
+        let document_id = document.internal.id();
         Self(Arc::new(RwLock::new(InternalElement {
-            document_id: document.id(),
+            document,
+            document_id,
             name,
             namespace: None,
             attributes: Vec::new(),
@@ -50,12 +53,14 @@ impl Element {
 
     /// Create a new namespaced element
     pub(crate) fn with_namespace(
-        document: Arc<InternalDocument>,
+        document: crate::document::Document,
         name: String,
         namespace: Namespace,
     ) -> Self {
+        let document_id = document.internal.id();
         Self(Arc::new(RwLock::new(InternalElement {
-            document_id: document.id(),
+            document,
+            document_id,
             name,
             namespace: Some(namespace),
             attributes: Vec::new(),
@@ -196,5 +201,9 @@ impl Element {
 
     pub(crate) fn belongs_to_document(&self, doc: &InternalDocument) -> bool {
         self.0.read().document_id == doc.id()
+    }
+
+    pub fn document(&self) -> crate::document::Document {
+        self.0.read().document.clone()
     }
 }

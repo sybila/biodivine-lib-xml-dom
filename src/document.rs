@@ -66,7 +66,7 @@ impl Clone for InternalDocument {
 /// Public document structure that wraps the internal document
 #[derive(Debug, Clone)]
 pub struct Document {
-    internal: Arc<InternalDocument>,
+    pub(crate) internal: Arc<InternalDocument>,
 }
 
 impl Default for Document {
@@ -95,12 +95,12 @@ impl Document {
 
     /// Create a new element in this document
     pub fn create_element(&self, name: String) -> Element {
-        Element::new(self.internal.clone(), name)
+        Element::new(self.clone(), name)
     }
 
     /// Create a new namespaced element in this document
     pub fn create_element_with_namespace(&self, name: String, namespace: Namespace) -> Element {
-        Element::with_namespace(self.internal.clone(), name, namespace)
+        Element::with_namespace(self.clone(), name, namespace)
     }
 
     /// Generate a unique prefix for a namespace

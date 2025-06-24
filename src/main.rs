@@ -84,7 +84,11 @@ fn main() {
             i + 1,
             book.get_attribute("category").unwrap().value
         );
-        let titles: Vec<_> = book.element_children().into_iter().filter(|e| e.name() == "title").collect();
+        let titles: Vec<_> = book
+            .element_children()
+            .into_iter()
+            .filter(|e| e.name() == "title")
+            .collect();
         if let Some(title) = titles.first() {
             let text = title.text_children().join("");
             println!("  Title: {}", text);

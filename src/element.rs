@@ -2,9 +2,9 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::document::Document;
 use crate::error::{XmlError, XmlResult};
 use crate::namespace::{Attribute, Namespace};
-use crate::document::Document;
 
 #[derive(Debug, Clone)]
 pub enum XmlNode {
@@ -49,11 +49,7 @@ impl Element {
     }
 
     /// Create a new namespaced element
-    pub(crate) fn with_namespace(
-        document: Document,
-        name: String,
-        namespace: Namespace,
-    ) -> Self {
+    pub(crate) fn with_namespace(document: Document, name: String, namespace: Namespace) -> Self {
         Self(Arc::new(RwLock::new(InternalElement {
             document,
             name,
@@ -91,7 +87,10 @@ impl Element {
     }
 
     pub fn declare_default_namespace(&self, uri: String) {
-        self.0.write().namespace_declarations.insert("".to_string(), uri);
+        self.0
+            .write()
+            .namespace_declarations
+            .insert("".to_string(), uri);
     }
 
     pub fn get_namespace_uri(&self, prefix: &str) -> Option<String> {
@@ -144,21 +143,31 @@ impl Element {
     }
 
     pub fn get_attribute(&self, name: &str) -> Option<Attribute> {
-        self.0.read().attributes.iter().find(|attr| attr.name == name).cloned()
+        self.0
+            .read()
+            .attributes
+            .iter()
+            .find(|attr| attr.name == name)
+            .cloned()
     }
 
     pub fn get_attribute_by_qualified_name(&self, qualified_name: &str) -> Option<Attribute> {
-        self.0.read().attributes.iter().find(|attr| {
-            if let Some(ref ns) = attr.namespace {
-                if let Some(ref prefix) = ns.prefix {
-                    format!("{}:{}", prefix, attr.name) == qualified_name
+        self.0
+            .read()
+            .attributes
+            .iter()
+            .find(|attr| {
+                if let Some(ref ns) = attr.namespace {
+                    if let Some(ref prefix) = ns.prefix {
+                        format!("{}:{}", prefix, attr.name) == qualified_name
+                    } else {
+                        attr.name == qualified_name
+                    }
                 } else {
                     attr.name == qualified_name
                 }
-            } else {
-                attr.name == qualified_name
-            }
-        }).cloned()
+            })
+            .cloned()
     }
 
     pub fn add_child_element(&self, child: Element) -> crate::error::XmlResult<()> {
@@ -181,15 +190,33 @@ impl Element {
     }
 
     pub fn element_children(&self) -> Vec<Element> {
-        self.0.read().children.iter().filter_map(|n| {
-            if let XmlNode::Element(e) = n { Some(e.clone()) } else { None }
-        }).collect()
+        self.0
+            .read()
+            .children
+            .iter()
+            .filter_map(|n| {
+                if let XmlNode::Element(e) = n {
+                    Some(e.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     pub fn text_children(&self) -> Vec<String> {
-        self.0.read().children.iter().filter_map(|n| {
-            if let XmlNode::Text(t) = n { Some(t.clone()) } else { None }
-        }).collect()
+        self.0
+            .read()
+            .children
+            .iter()
+            .filter_map(|n| {
+                if let XmlNode::Text(t) = n {
+                    Some(t.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     pub fn parent(&self) -> Option<Element> {

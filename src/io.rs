@@ -85,9 +85,8 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
 
 /// Parse a start element and its attributes
 fn parse_start_element(doc: &Document, e: &BytesStart) -> XmlResult<Element> {
-    let name = std::str::from_utf8(e.name().into_inner()).map_err(|e| {
-        XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e))
-    })?;
+    let name = std::str::from_utf8(e.name().into_inner())
+        .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e)))?;
 
     let (local_name, default_namespace) = parse_element_name(name);
     let namespace_declarations = extract_namespace_declarations(e)?;
@@ -120,9 +119,8 @@ fn parse_start_element(doc: &Document, e: &BytesStart) -> XmlResult<Element> {
 
 /// Parse an empty (self-closing) element and its attributes
 fn parse_empty_element(doc: &Document, e: &BytesStart) -> XmlResult<Element> {
-    let name = std::str::from_utf8(e.name().into_inner()).map_err(|e| {
-        XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e))
-    })?;
+    let name = std::str::from_utf8(e.name().into_inner())
+        .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e)))?;
 
     let (local_name, default_namespace) = parse_element_name(name);
     let namespace_declarations = extract_namespace_declarations(e)?;
@@ -167,14 +165,12 @@ fn parse_element_name(name: &str) -> (String, Option<Namespace>) {
 fn extract_namespace_declarations(e: &BytesStart) -> XmlResult<Vec<(String, String)>> {
     let mut namespace_declarations = Vec::new();
     for attr in e.attributes() {
-        let attr = attr
-            .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
-        let key = std::str::from_utf8(attr.key.into_inner()).map_err(|e| {
-            XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e))
-        })?;
-        let value = attr.unescape_value().map_err(|e| {
-            XmlError::InvalidXml(format!("Invalid attribute value: {}", e))
-        })?;
+        let attr = attr.map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
+        let key = std::str::from_utf8(attr.key.into_inner())
+            .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e)))?;
+        let value = attr
+            .unescape_value()
+            .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute value: {}", e)))?;
         if let Some(prefix) = key.strip_prefix("xmlns:") {
             namespace_declarations.push((prefix.to_string(), value.to_string()));
         } else if key == "xmlns" {
@@ -188,14 +184,12 @@ fn extract_namespace_declarations(e: &BytesStart) -> XmlResult<Vec<(String, Stri
 fn extract_regular_attributes(e: &BytesStart) -> XmlResult<Vec<Attribute>> {
     let mut attributes = Vec::new();
     for attr in e.attributes() {
-        let attr = attr
-            .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
-        let key = std::str::from_utf8(attr.key.into_inner()).map_err(|e| {
-            XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e))
-        })?;
-        let value = attr.unescape_value().map_err(|e| {
-            XmlError::InvalidXml(format!("Invalid attribute value: {}", e))
-        })?;
+        let attr = attr.map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
+        let key = std::str::from_utf8(attr.key.into_inner())
+            .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e)))?;
+        let value = attr
+            .unescape_value()
+            .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute value: {}", e)))?;
         if !key.starts_with("xmlns") {
             attributes.push(Attribute::new(key.to_string(), value.to_string()));
         }
@@ -281,7 +275,10 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
         attrs.push((attr.name.clone(), attr.value.clone()));
     }
     let start = BytesStart::new(element.name()).with_attributes(
-        attrs.iter().map(|(k, v)| (k.as_bytes(), v.as_bytes())).collect::<Vec<_>>(),
+        attrs
+            .iter()
+            .map(|(k, v)| (k.as_bytes(), v.as_bytes()))
+            .collect::<Vec<_>>(),
     );
     writer.write_event(Event::Start(start))?;
     for node in element.children() {
@@ -340,7 +337,10 @@ mod tests {
 
         assert_eq!(root.name(), "html");
         assert!(root.namespace().is_some());
-        assert_eq!(root.namespace().unwrap().uri, "http://www.w3.org/1999/xhtml");
+        assert_eq!(
+            root.namespace().unwrap().uri,
+            "http://www.w3.org/1999/xhtml"
+        );
         assert_eq!(root.qualified_name(), "html:html");
     }
 
@@ -401,27 +401,48 @@ mod tests {
         let root = doc.root().unwrap();
 
         assert_eq!(root.name(), "root");
-        assert_eq!(root.namespace_declarations().get("default"), Some(&"http://default.com".to_string()));
+        assert_eq!(
+            root.namespace_declarations().get("default"),
+            Some(&"http://default.com".to_string())
+        );
 
         let first_child = root.element_children()[0].clone();
-        assert_eq!(first_child.get_namespace_uri("ex"), Some("http://example.com".to_string()));
+        assert_eq!(
+            first_child.get_namespace_uri("ex"),
+            Some("http://example.com".to_string())
+        );
 
         let nested = first_child.element_children()[1].clone();
-        assert_eq!(nested.get_namespace_uri("ex"), Some("http://example-another.com".to_string()));
+        assert_eq!(
+            nested.get_namespace_uri("ex"),
+            Some("http://example-another.com".to_string())
+        );
 
         let deep = nested.element_children()[1].clone();
-        assert_eq!(deep.get_namespace_uri("ex"), Some("http://example-third.com".to_string()));
+        assert_eq!(
+            deep.get_namespace_uri("ex"),
+            Some("http://example-third.com".to_string())
+        );
 
         let back_to_original = first_child.element_children()[2].clone();
-        assert_eq!(back_to_original.get_namespace_uri("ex"), Some("http://example.com".to_string()));
+        assert_eq!(
+            back_to_original.get_namespace_uri("ex"),
+            Some("http://example.com".to_string())
+        );
 
         let second_child = root.element_children()[1].clone();
-        assert_eq!(second_child.get_namespace_uri("ex"), Some("http://example-another.com".to_string()));
+        assert_eq!(
+            second_child.get_namespace_uri("ex"),
+            Some("http://example-another.com".to_string())
+        );
 
         let output = write_string(&doc).unwrap();
         let doc2 = parse_string(&output).unwrap();
         let root2 = doc2.root().unwrap();
-        assert_eq!(root2.get_namespace_uri("default"), Some("http://default.com".to_string()));
+        assert_eq!(
+            root2.get_namespace_uri("default"),
+            Some("http://default.com".to_string())
+        );
     }
 
     #[test]
@@ -445,8 +466,9 @@ mod tests {
             "element:c",
             "text:\" \"",
         ];
-        assert_eq!(actual, expected, "Mixed content structure should be preserved");
+        assert_eq!(
+            actual, expected,
+            "Mixed content structure should be preserved"
+        );
     }
 }
-
-

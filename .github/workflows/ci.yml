@@ -6,19 +6,15 @@ on:
   pull_request:
     branches: [ "main", "feat/**" ]
 
-env:
-  RUST_VERSION: 1.87.0
-
 jobs:
   fmt:
     name: Check formatting
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@1.87.0
         with:
-          toolchain: ${{ env.RUST_VERSION }}
-          override: true
+          components: rustfmt
       - name: Run cargo fmt
         run: cargo fmt --all -- --check
 
@@ -27,10 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
-          override: true
+      - uses: dtolnay/rust-toolchain@1.87.0
       - name: Run cargo check
         run: cargo check --all --all-targets
 
@@ -39,10 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
-          override: true
+      - uses: dtolnay/rust-toolchain@1.87.0
       - name: Run tests
         run: cargo test --all --all-targets --locked
 
@@ -51,9 +41,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@1.87.0
         with:
-          toolchain: ${{ env.RUST_VERSION }}
-          override: true
+          components: clippy
       - name: Run clippy
         run: cargo clippy --all --all-targets -- -D warnings 

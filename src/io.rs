@@ -42,6 +42,8 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                 } else {
                     doc.set_root(element.clone())?;
                 }
+                // Now that the element is attached, resolve attribute namespaces
+                resolve_attribute_namespaces(&element);
                 stack.push(element);
             }
             Ok(Event::End(_)) => {
@@ -71,10 +73,12 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
             Ok(Event::Empty(ref e)) => {
                 let element = parse_empty_element(&doc, e)?;
                 if let Some(parent) = stack.last() {
-                    parent.add_child_element(element).unwrap();
+                    parent.add_child_element(element.clone()).unwrap();
                 } else {
-                    doc.set_root(element)?;
+                    doc.set_root(element.clone())?;
                 }
+                // Now that the element is attached, resolve attribute namespaces
+                resolve_attribute_namespaces(&element);
             }
             Err(e) => return Err(XmlError::InvalidXml(format!("XML parsing error: {}", e))),
         }
@@ -133,20 +137,6 @@ fn extract_namespace_declarations(e: &BytesStart) -> XmlResult<Vec<(String, Stri
 /// Extract regular (non-namespace) attributes
 fn extract_regular_attributes(e: &BytesStart) -> XmlResult<Vec<Attribute>> {
     let mut attributes = Vec::new();
-    let mut namespace_map = std::collections::HashMap::new();
-    for attr in e.attributes() {
-        let attr = attr.map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
-        let key = std::str::from_utf8(attr.key.into_inner())
-            .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e)))?;
-        let value = attr
-            .unescape_value()
-            .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute value: {}", e)))?;
-        if let Some(prefix) = key.strip_prefix("xmlns:") {
-            namespace_map.insert(prefix.to_string(), value.to_string());
-        } else if key == "xmlns" {
-            namespace_map.insert("".to_string(), value.to_string());
-        }
-    }
     for attr in e.attributes() {
         let attr = attr.map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
         let key = std::str::from_utf8(attr.key.into_inner())
@@ -157,18 +147,7 @@ fn extract_regular_attributes(e: &BytesStart) -> XmlResult<Vec<Attribute>> {
         if key.starts_with("xmlns") {
             continue;
         }
-        if let Some(colon_pos) = key.find(':') {
-            let prefix = &key[..colon_pos];
-            let local_name = &key[colon_pos + 1..];
-            if let Some(uri) = namespace_map.get(prefix) {
-                let ns = Namespace::prefixed(uri.clone(), prefix.to_string());
-                attributes.push(Attribute::with_namespace(local_name.to_string(), value.to_string(), ns));
-            } else {
-                attributes.push(Attribute::new(key.to_string(), value.to_string()));
-            }
-        } else {
-            attributes.push(Attribute::new(key.to_string(), value.to_string()));
-        }
+        attributes.push(Attribute::new(key.to_string(), value.to_string()));
     }
     Ok(attributes)
 }
@@ -305,6 +284,24 @@ fn create_and_setup_element(doc: &Document, e: &BytesStart) -> XmlResult<Element
         element.add_attribute(attr);
     }
     Ok(element)
+}
+
+fn resolve_attribute_namespaces(element: &Element) {
+    let mut updated_attrs = Vec::new();
+    for attr in element.attributes() {
+        if let Some(colon_pos) = attr.name.find(':') {
+            let prefix = &attr.name[..colon_pos];
+            let local_name = &attr.name[colon_pos + 1..];
+            if let Some(uri) = element.get_namespace_uri(prefix) {
+                updated_attrs.push(Attribute::with_namespace(local_name.to_string(), attr.value.clone(), Namespace::prefixed(uri, prefix.to_string())));
+            } else {
+                updated_attrs.push(attr.clone());
+            }
+        } else {
+            updated_attrs.push(attr.clone());
+        }
+    }
+    element.set_attributes(updated_attrs);
 }
 
 #[cfg(test)]
@@ -500,6 +497,34 @@ mod tests {
         let doc2 = parse_string(&output).unwrap();
         let root2 = doc2.root().unwrap();
         let attrs2 = root2.attributes();
+        let ns_attr2 = attrs2.iter().find(|a| a.name == "attr" && a.namespace.is_some()).expect("Missing namespaced attribute after round-trip");
+        assert_eq!(ns_attr2.value, "value");
+        assert_eq!(ns_attr2.namespace.as_ref().unwrap().uri, "http://example.com");
+        assert_eq!(ns_attr2.namespace.as_ref().unwrap().prefix.as_deref(), Some("ex"));
+    }
+
+    #[test]
+    fn test_namespaced_attributes_on_parent() {
+        let xml = r#"<root xmlns:ex="http://example.com"><child ex:attr="value" attr2="other" /></root>"#;
+        let doc = parse_string(xml).unwrap();
+        let root = doc.root().unwrap();
+        let child = root.element_children()[0].clone();
+        let attrs = child.attributes();
+        // Find the namespaced attribute
+        let ns_attr = attrs.iter().find(|a| a.name == "attr" && a.namespace.is_some()).expect("Missing namespaced attribute");
+        assert_eq!(ns_attr.value, "value");
+        assert_eq!(ns_attr.namespace.as_ref().unwrap().uri, "http://example.com");
+        assert_eq!(ns_attr.namespace.as_ref().unwrap().prefix.as_deref(), Some("ex"));
+        // Find the non-namespaced attribute
+        let attr2 = attrs.iter().find(|a| a.name == "attr2").expect("Missing attr2");
+        assert_eq!(attr2.value, "other");
+        assert!(attr2.namespace.is_none());
+        // Round-trip
+        let output = write_string(&doc).unwrap();
+        let doc2 = parse_string(&output).unwrap();
+        let root2 = doc2.root().unwrap();
+        let child2 = root2.element_children()[0].clone();
+        let attrs2 = child2.attributes();
         let ns_attr2 = attrs2.iter().find(|a| a.name == "attr" && a.namespace.is_some()).expect("Missing namespaced attribute after round-trip");
         assert_eq!(ns_attr2.value, "value");
         assert_eq!(ns_attr2.namespace.as_ref().unwrap().uri, "http://example.com");

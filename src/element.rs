@@ -138,6 +138,10 @@ impl Element {
         self.0.write().attributes.push(attribute);
     }
 
+    pub(crate) fn set_attributes(&self, attrs: Vec<Attribute>) {
+        self.0.write().attributes = attrs;
+    }
+
     pub fn attributes(&self) -> Vec<Attribute> {
         self.0.read().attributes.clone()
     }

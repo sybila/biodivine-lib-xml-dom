@@ -10,7 +10,8 @@ use std::sync::Arc;
 ///
 /// # Equality
 /// Two [`Namespace`] objects are considered equal if they have the same URI **and** the same prefix.
-/// If you want to compare only the namespace URIs, use [`Namespace::is_equal_ns`].
+/// If you want to compare only the namespace URIs, use [`Namespace::is_equal_ns`]. This is what
+/// the XML specification considers as "equal" namespaces in the context of namespace declarations.
 ///
 /// # Conditions for a valid namespace:
 /// - The URI must not be empty.
@@ -153,7 +154,9 @@ impl Namespace {
         Ok(())
     }
 
-    /// Compare two namespaces for equality based only on their URI.
+    /// Compare two namespaces for equality based only on their URI. This is what
+    /// the XML specification considers as "equal" namespaces in the context
+    /// of namespace declarations.
     ///
     /// # Examples
     /// ```rust

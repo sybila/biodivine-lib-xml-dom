@@ -112,7 +112,7 @@ fn parse_element(
     // 3. Resolve the qualified name of the tag
     let name = std::str::from_utf8(e.name().into_inner())
         .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e)))?;
-    let qname = match QualifiedName::resolve_with_map(name, ns_map) {
+    let qname = match QualifiedName::resolve_with_namespace_map(name, ns_map) {
         Ok(q) => q,
         Err(e) => {
             eprintln!(
@@ -145,7 +145,7 @@ fn parse_element(
         if key.starts_with("xmlns") {
             continue;
         }
-        let qattr = match QualifiedName::resolve_with_map(key, ns_map) {
+        let qattr = match QualifiedName::resolve_with_namespace_map(key, ns_map) {
             Ok(q) => q,
             Err(e) => {
                 eprintln!(
@@ -218,14 +218,14 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
         }
     }
     for (qname, value) in element.attributes().iter() {
-        if let Some(ns) = &qname.namespace {
+        if let Some(ns) = qname.namespace() {
             if let Some(prefix) = ns.prefix() {
-                attrs.push((format!("{}:{}", prefix, qname.name), value.clone()));
+                attrs.push((format!("{}:{}", prefix, qname.name()), value.clone()));
             } else {
-                attrs.push((qname.name.clone(), value.clone()));
+                attrs.push((qname.name().to_string(), value.clone()));
             }
         } else {
-            attrs.push((qname.name.clone(), value.clone()));
+            attrs.push((qname.name().to_string(), value.clone()));
         }
     }
     let start = BytesStart::new(element.name()).with_attributes(
@@ -304,16 +304,15 @@ mod tests {
         let doc = create_document();
 
         let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
-        let root =
-            doc.create_element(QualifiedName::new("html".to_string(), Some(html_ns)).unwrap());
+        let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns));
         root.declare_namespace(
             "html".to_string(),
             "http://www.w3.org/1999/xhtml".to_string(),
         );
         doc.set_root(root.clone()).unwrap();
 
-        let head = doc.create_element(QualifiedName::new("head".to_string(), None).unwrap());
-        let title = doc.create_element(QualifiedName::new("title".to_string(), None).unwrap());
+        let head = doc.create_element(QualifiedName::without_namespace("head"));
+        let title = doc.create_element(QualifiedName::without_namespace("title"));
         title.add_text("Test Page".to_string());
         head.add_child_element(title).unwrap();
         root.add_child_element(head).unwrap();
@@ -434,21 +433,21 @@ mod tests {
         // Find the namespaced attribute
         let ns_attr = attrs
             .iter()
-            .find(|(q, _)| q.name == "attr" && q.namespace.is_some())
+            .find(|(q, _)| q.name() == "attr" && q.namespace().is_some())
             .expect("Missing namespaced attribute");
         assert_eq!(ns_attr.1, "value");
         assert_eq!(
-            ns_attr.0.namespace.as_ref().unwrap().uri(),
+            ns_attr.0.namespace().as_ref().unwrap().uri(),
             "http://example.com"
         );
-        assert_eq!(ns_attr.0.namespace.as_ref().unwrap().prefix(), Some("ex"));
+        assert_eq!(ns_attr.0.namespace().as_ref().unwrap().prefix(), Some("ex"));
         // Find the non-namespaced attribute
         let attr2 = attrs
             .iter()
-            .find(|(q, _)| q.name == "attr2")
+            .find(|(q, _)| q.name() == "attr2")
             .expect("Missing attr2");
         assert_eq!(attr2.1, "other");
-        assert!(attr2.0.namespace.is_none());
+        assert!(attr2.0.namespace().is_none());
         // Round-trip
         let output = write_string(&doc).unwrap();
         let doc2 = parse_string(&output).unwrap();
@@ -456,14 +455,17 @@ mod tests {
         let attrs2 = root2.attributes();
         let ns_attr2 = attrs2
             .iter()
-            .find(|(q, _)| q.name == "attr" && q.namespace.is_some())
+            .find(|(q, _)| q.name() == "attr" && q.namespace().is_some())
             .expect("Missing namespaced attribute after round-trip");
         assert_eq!(ns_attr2.1, "value");
         assert_eq!(
-            ns_attr2.0.namespace.as_ref().unwrap().uri(),
+            ns_attr2.0.namespace().as_ref().unwrap().uri(),
             "http://example.com"
         );
-        assert_eq!(ns_attr2.0.namespace.as_ref().unwrap().prefix(), Some("ex"));
+        assert_eq!(
+            ns_attr2.0.namespace().as_ref().unwrap().prefix(),
+            Some("ex")
+        );
     }
 
     #[test]
@@ -477,21 +479,21 @@ mod tests {
         // Find the namespaced attribute
         let ns_attr = attrs
             .iter()
-            .find(|(q, _)| q.name == "attr" && q.namespace.is_some())
+            .find(|(q, _)| q.name() == "attr" && q.namespace().is_some())
             .expect("Missing namespaced attribute");
         assert_eq!(ns_attr.1, "value");
         assert_eq!(
-            ns_attr.0.namespace.as_ref().unwrap().uri(),
+            ns_attr.0.namespace().as_ref().unwrap().uri(),
             "http://example.com"
         );
-        assert_eq!(ns_attr.0.namespace.as_ref().unwrap().prefix(), Some("ex"));
+        assert_eq!(ns_attr.0.namespace().as_ref().unwrap().prefix(), Some("ex"));
         // Find the non-namespaced attribute
         let attr2 = attrs
             .iter()
-            .find(|(q, _)| q.name == "attr2")
+            .find(|(q, _)| q.name() == "attr2")
             .expect("Missing attr2");
         assert_eq!(attr2.1, "other");
-        assert!(attr2.0.namespace.is_none());
+        assert!(attr2.0.namespace().is_none());
         // Round-trip
         let output = write_string(&doc).unwrap();
         let doc2 = parse_string(&output).unwrap();
@@ -500,13 +502,16 @@ mod tests {
         let attrs2 = child2.attributes();
         let ns_attr2 = attrs2
             .iter()
-            .find(|(q, _)| q.name == "attr" && q.namespace.is_some())
+            .find(|(q, _)| q.name() == "attr" && q.namespace().is_some())
             .expect("Missing namespaced attribute after round-trip");
         assert_eq!(ns_attr2.1, "value");
         assert_eq!(
-            ns_attr2.0.namespace.as_ref().unwrap().uri(),
+            ns_attr2.0.namespace().as_ref().unwrap().uri(),
             "http://example.com"
         );
-        assert_eq!(ns_attr2.0.namespace.as_ref().unwrap().prefix(), Some("ex"));
+        assert_eq!(
+            ns_attr2.0.namespace().as_ref().unwrap().prefix(),
+            Some("ex")
+        );
     }
 }

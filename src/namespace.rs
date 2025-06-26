@@ -182,9 +182,7 @@ mod tests {
     fn test_namespace_support() {
         let doc = Document::new();
         let namespace = Namespace::prefixed("http://example.com", "ex").unwrap();
-        let element = doc.create_element(
-            QualifiedName::new("test".to_string(), Some(namespace.clone())).unwrap(),
-        );
+        let element = doc.create_element(QualifiedName::with_namespace("test", &namespace));
 
         assert_eq!(element.name(), "test");
         assert_eq!(element.namespace(), Some(namespace));

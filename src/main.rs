@@ -1,5 +1,6 @@
-use biodivine_lib_xml_dom::qualified_name::QualifiedName;
-use biodivine_lib_xml_dom::{create_document, parse_string, write_string, Namespace};
+use biodivine_lib_xml_dom::{
+    create_document, parse_string, write_string, Namespace, QualifiedName,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("XML DOM Library Example");
@@ -10,7 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let doc = create_document();
 
     let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
-    let root = doc.create_element(QualifiedName::new("html".to_string(), Some(html_ns)).unwrap());
+    let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns));
 
     // Declare namespaces on the root element
     root.declare_namespace(
@@ -21,55 +22,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     doc.set_root(root.clone())?;
 
-    let head = doc.create_element(QualifiedName::new("head".to_string(), None).unwrap());
-    let title = doc.create_element(QualifiedName::new("title".to_string(), None).unwrap());
+    let head = doc.create_element(QualifiedName::without_namespace("head"));
+    let title = doc.create_element(QualifiedName::without_namespace("title"));
     title.add_text("My XML Document".to_string());
     head.add_child_element(title)?;
     root.add_child_element(head.clone())?;
 
-    let body = doc.create_element(QualifiedName::new("body".to_string(), None).unwrap());
-    let p = doc.create_element(QualifiedName::new("p".to_string(), None).unwrap());
+    let body = doc.create_element(QualifiedName::without_namespace("body"));
+    let p = doc.create_element(QualifiedName::without_namespace("p"));
     p.add_attribute(
-        QualifiedName::new("class".to_string(), None).unwrap(),
+        QualifiedName::without_namespace("class"),
         "example".to_string(),
     );
-    p.add_attribute(
-        QualifiedName::new("id".to_string(), None).unwrap(),
-        "intro".to_string(),
-    );
+    p.add_attribute(QualifiedName::without_namespace("id"), "intro".to_string());
     p.add_text("This is an example XML document created with our DOM library.".to_string());
     body.add_child_element(p)?;
     root.add_child_element(body.clone())?;
 
     let svg_ns = Namespace::prefixed("http://www.w3.org/2000/svg", "svg").unwrap();
-    let svg = doc.create_element(QualifiedName::new("svg".to_string(), Some(svg_ns)).unwrap());
+    let svg = doc.create_element(QualifiedName::with_namespace("svg", &svg_ns));
+    svg.add_attribute(QualifiedName::without_namespace("width"), "100".to_string());
     svg.add_attribute(
-        QualifiedName::new("width".to_string(), None).unwrap(),
-        "100".to_string(),
-    );
-    svg.add_attribute(
-        QualifiedName::new("height".to_string(), None).unwrap(),
+        QualifiedName::without_namespace("height"),
         "100".to_string(),
     );
     body.add_child_element(svg.clone())?;
 
-    let circle = doc.create_element(QualifiedName::new("circle".to_string(), None).unwrap());
-    circle.add_attribute(
-        QualifiedName::new("cx".to_string(), None).unwrap(),
-        "50".to_string(),
-    );
-    circle.add_attribute(
-        QualifiedName::new("cy".to_string(), None).unwrap(),
-        "50".to_string(),
-    );
-    circle.add_attribute(
-        QualifiedName::new("r".to_string(), None).unwrap(),
-        "40".to_string(),
-    );
-    circle.add_attribute(
-        QualifiedName::new("fill".to_string(), None).unwrap(),
-        "blue".to_string(),
-    );
+    let circle = doc.create_element(QualifiedName::without_namespace("circle"));
+    circle.add_attribute(QualifiedName::without_namespace("cx"), "50".to_string());
+    circle.add_attribute(QualifiedName::without_namespace("cy"), "50".to_string());
+    circle.add_attribute(QualifiedName::without_namespace("r"), "40".to_string());
+    circle.add_attribute(QualifiedName::without_namespace("fill"), "blue".to_string());
     svg.add_child_element(circle)?;
 
     let xml_output = write_string(&doc)?;
@@ -104,7 +87,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for (i, book) in books.iter().enumerate() {
         let category = book
-            .get_attribute(&QualifiedName::new("category".to_string(), None).unwrap())
+            .get_attribute(&QualifiedName::without_namespace("category"))
             .ok_or("Book element missing 'category' attribute")?;
         println!("Book {}: {}", i + 1, category);
         let titles: Vec<_> = book

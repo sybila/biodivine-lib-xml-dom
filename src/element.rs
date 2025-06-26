@@ -47,23 +47,23 @@ impl Element {
     }
 
     pub fn name(&self) -> String {
-        self.0.read().qualified_name.name.clone()
+        self.0.read().qualified_name.name().to_string()
     }
 
     pub fn namespace(&self) -> Option<Namespace> {
-        self.0.read().qualified_name.namespace.clone()
+        self.0.read().qualified_name.namespace().cloned()
     }
 
     pub fn qualified_name(&self) -> String {
         let inner = self.0.read();
-        if let Some(ref ns) = inner.qualified_name.namespace {
+        if let Some(ref ns) = inner.qualified_name.namespace() {
             if let Some(prefix) = ns.prefix() {
-                format!("{}:{}", prefix, inner.qualified_name.name)
+                format!("{}:{}", prefix, inner.qualified_name.name())
             } else {
-                inner.qualified_name.name.clone()
+                inner.qualified_name.name().to_string()
             }
         } else {
-            inner.qualified_name.name.clone()
+            inner.qualified_name.name().to_string()
         }
     }
 
@@ -141,15 +141,15 @@ impl Element {
     ) -> Option<(QualifiedName, String)> {
         let inner = self.0.read();
         for (qname, value) in &inner.attributes {
-            if let Some(ns) = &qname.namespace {
+            if let Some(ns) = qname.namespace() {
                 if let Some(prefix) = ns.prefix() {
-                    if format!("{}:{}", prefix, qname.name) == qualified_name {
+                    if format!("{}:{}", prefix, qname.name()) == qualified_name {
                         return Some((qname.clone(), value.clone()));
                     }
-                } else if qname.name == qualified_name {
+                } else if qname.name() == qualified_name {
                     return Some((qname.clone(), value.clone()));
                 }
-            } else if qname.name == qualified_name {
+            } else if qname.name() == qualified_name {
                 return Some((qname.clone(), value.clone()));
             }
         }

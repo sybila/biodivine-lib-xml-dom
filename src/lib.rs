@@ -60,13 +60,15 @@ mod element;
 mod error;
 mod io;
 mod namespace;
+mod attribute;
 
 // Re-export public API
 pub use document::Document;
 pub use element::Element;
 pub use error::{XmlError, XmlResult};
 pub use io::{parse_file, parse_reader, parse_string, write_file, write_string, write_writer};
-pub use namespace::{Attribute, Namespace};
+pub use namespace::Namespace;
+pub use attribute::Attribute;
 
 /// Main entry point for the library
 ///

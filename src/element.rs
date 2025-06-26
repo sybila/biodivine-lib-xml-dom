@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use crate::document::Document;
 use crate::error::{XmlError, XmlResult};
-use crate::namespace::{Attribute, Namespace};
+use crate::attribute::Attribute;
+use crate::namespace::Namespace;
 
 #[derive(Debug, Clone)]
 pub enum XmlNode {

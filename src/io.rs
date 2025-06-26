@@ -8,7 +8,8 @@ use std::path::Path;
 use crate::document::Document;
 use crate::element::Element;
 use crate::error::{XmlError, XmlResult};
-use crate::namespace::{Attribute, Namespace};
+use crate::attribute::Attribute;
+use crate::namespace::Namespace;
 
 /// Parse XML from a file
 pub fn parse_file<P: AsRef<Path>>(path: P) -> XmlResult<Document> {

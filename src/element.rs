@@ -1,11 +1,11 @@
 use parking_lot::RwLock;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use crate::attribute::Attribute;
 use crate::document::Document;
 use crate::error::{XmlError, XmlResult};
 use crate::namespace::Namespace;
+use crate::QualifiedName;
 
 #[derive(Debug, Clone)]
 pub enum XmlNode {
@@ -23,7 +23,7 @@ pub(crate) struct InternalElement {
     /// Element namespace
     pub namespace: Option<Namespace>,
     /// Element attributes
-    pub attributes: Vec<Attribute>,
+    pub attributes: BTreeMap<QualifiedName, String>,
     /// Child elements
     pub children: Vec<XmlNode>,
     /// Parent element (None if root or detached)
@@ -42,7 +42,7 @@ impl Element {
             document,
             name,
             namespace: None,
-            attributes: Vec::new(),
+            attributes: BTreeMap::new(),
             children: Vec::new(),
             parent: None,
             namespace_declarations: HashMap::new(),
@@ -55,7 +55,7 @@ impl Element {
             document,
             name,
             namespace: Some(namespace),
-            attributes: Vec::new(),
+            attributes: BTreeMap::new(),
             children: Vec::new(),
             parent: None,
             namespace_declarations: HashMap::new(),
@@ -135,44 +135,41 @@ impl Element {
         self.0.read().namespace_declarations.clone()
     }
 
-    pub fn add_attribute(&self, attribute: Attribute) {
-        self.0.write().attributes.push(attribute);
+    pub fn add_attribute(&self, name: QualifiedName, value: String) {
+        self.0.write().attributes.insert(name, value);
     }
 
-    pub(crate) fn set_attributes(&self, attrs: Vec<Attribute>) {
+    pub(crate) fn set_attributes(&self, attrs: BTreeMap<QualifiedName, String>) {
         self.0.write().attributes = attrs;
     }
 
-    pub fn attributes(&self) -> Vec<Attribute> {
+    pub fn attributes(&self) -> BTreeMap<QualifiedName, String> {
         self.0.read().attributes.clone()
     }
 
-    pub fn get_attribute(&self, name: &str) -> Option<Attribute> {
-        self.0
-            .read()
-            .attributes
-            .iter()
-            .find(|attr| attr.name == name)
-            .cloned()
+    pub fn get_attribute(&self, name: &QualifiedName) -> Option<String> {
+        self.0.read().attributes.get(name).cloned()
     }
 
-    pub fn get_attribute_by_qualified_name(&self, qualified_name: &str) -> Option<Attribute> {
-        self.0
-            .read()
-            .attributes
-            .iter()
-            .find(|attr| {
-                if let Some(ref ns) = attr.namespace {
-                    if let Some(prefix) = ns.prefix() {
-                        format!("{}:{}", prefix, attr.name) == qualified_name
-                    } else {
-                        attr.name == qualified_name
+    pub fn get_attribute_by_qualified_name(
+        &self,
+        qualified_name: &str,
+    ) -> Option<(QualifiedName, String)> {
+        let inner = self.0.read();
+        for (qname, value) in &inner.attributes {
+            if let Some(ns) = &qname.namespace {
+                if let Some(prefix) = ns.prefix() {
+                    if format!("{}:{}", prefix, qname.name) == qualified_name {
+                        return Some((qname.clone(), value.clone()));
                     }
-                } else {
-                    attr.name == qualified_name
+                } else if qname.name == qualified_name {
+                    return Some((qname.clone(), value.clone()));
                 }
-            })
-            .cloned()
+            } else if qname.name == qualified_name {
+                return Some((qname.clone(), value.clone()));
+            }
+        }
+        None
     }
 
     pub fn add_child_element(&self, child: Element) -> crate::error::XmlResult<()> {

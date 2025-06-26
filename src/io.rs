@@ -1,15 +1,15 @@
 use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Reader;
 use quick_xml::Writer;
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 
-use crate::attribute::Attribute;
 use crate::document::Document;
 use crate::element::Element;
 use crate::error::{XmlError, XmlResult};
-use crate::namespace::Namespace;
+use crate::QualifiedName;
 
 /// Parse XML from a file
 pub fn parse_file<P: AsRef<Path>>(path: P) -> XmlResult<Document> {
@@ -32,23 +32,32 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
 
     let doc = Document::new();
     let mut stack: Vec<Element> = Vec::new();
+    let mut ns_stack: Vec<std::collections::HashMap<String, String>> =
+        vec![std::collections::HashMap::new()];
     let mut buf = Vec::new();
 
     loop {
         match xml_reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
-                let element = parse_start_element(&doc, e)?;
-                if let Some(parent) = stack.last() {
+                // Clone the current namespace map and update with new declarations
+                let mut ns_map = ns_stack.last().unwrap().clone();
+                let namespace_declarations = extract_namespace_declarations(e)?;
+                for (prefix, uri) in &namespace_declarations {
+                    ns_map.insert(prefix.clone(), uri.clone());
+                }
+                ns_stack.push(ns_map.clone());
+                let parent = stack.last();
+                let element = parse_element(&doc, e, &ns_map)?;
+                if let Some(parent) = parent {
                     parent.add_child_element(element.clone())?;
                 } else {
                     doc.set_root(element.clone())?;
                 }
-                // Now that the element is attached, resolve attribute namespaces
-                resolve_attribute_namespaces(&element);
                 stack.push(element);
             }
             Ok(Event::End(_)) => {
                 stack.pop();
+                ns_stack.pop();
             }
             Ok(Event::Text(e)) => {
                 if let Some(current) = stack.last() {
@@ -72,14 +81,19 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
             }
             Ok(Event::DocType(_)) => {}
             Ok(Event::Empty(ref e)) => {
-                let element = parse_empty_element(&doc, e)?;
-                if let Some(parent) = stack.last() {
+                // Clone the current namespace map and update with new declarations
+                let mut ns_map = ns_stack.last().unwrap().clone();
+                let namespace_declarations = extract_namespace_declarations(e)?;
+                for (prefix, uri) in &namespace_declarations {
+                    ns_map.insert(prefix.clone(), uri.clone());
+                }
+                let parent = stack.last();
+                let element = parse_element(&doc, e, &ns_map)?;
+                if let Some(parent) = parent {
                     parent.add_child_element(element.clone())?;
                 } else {
                     doc.set_root(element.clone())?;
                 }
-                // Now that the element is attached, resolve attribute namespaces
-                resolve_attribute_namespaces(&element);
             }
             Err(e) => return Err(XmlError::InvalidXml(format!("XML parsing error: {}", e))),
         }
@@ -88,32 +102,67 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
     Ok(doc)
 }
 
-/// Parse a start element and its attributes
-fn parse_start_element(doc: &Document, e: &BytesStart) -> XmlResult<Element> {
-    let element = create_and_setup_element(doc, e)?;
+fn parse_element(
+    doc: &Document,
+    e: &BytesStart,
+    ns_map: &std::collections::HashMap<String, String>,
+) -> XmlResult<Element> {
+    // 1. Extract namespace declarations (already done in caller)
+    // 2. Use the provided ns_map for resolution
+    // 3. Resolve the qualified name of the tag
     let name = std::str::from_utf8(e.name().into_inner())
         .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e)))?;
-    let local_name = parse_element_name(name);
-    resolve_element_namespace(doc, element, name, local_name)
-}
-
-/// Parse an empty (self-closing) element and its attributes
-fn parse_empty_element(doc: &Document, e: &BytesStart) -> XmlResult<Element> {
-    let element = create_and_setup_element(doc, e)?;
-    let name = std::str::from_utf8(e.name().into_inner())
-        .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e)))?;
-    let local_name = parse_element_name(name);
-    resolve_element_namespace(doc, element, name, local_name)
-}
-
-/// Parse element name and extract local name and default namespace
-fn parse_element_name(name: &str) -> String {
-    if let Some(colon_pos) = name.find(':') {
-        let local_name = &name[colon_pos + 1..];
-        local_name.to_string()
+    let qname = match QualifiedName::resolve_with_map(name, ns_map) {
+        Ok(q) => q,
+        Err(e) => {
+            eprintln!(
+                "[DEBUG] Failed to resolve element name '{}'. Namespace map: {:?}",
+                name, ns_map
+            );
+            return Err(e);
+        }
+    };
+    // 4. Create the element with the correct qualified name
+    let element = if let Some(ns) = &qname.namespace {
+        doc.create_element_with_namespace(qname.name.clone(), ns.clone())
     } else {
-        name.to_string()
+        doc.create_element(qname.name.clone())
+    };
+    // 5. Apply namespace declarations to the element
+    let namespace_declarations = extract_namespace_declarations(e)?;
+    for (prefix, uri) in namespace_declarations {
+        if prefix.is_empty() {
+            element.declare_default_namespace(uri);
+        } else {
+            element.declare_namespace(prefix, uri);
+        }
     }
+    // 6. Add all attributes, resolving their qualified names using the provided ns_map
+    let mut attributes = BTreeMap::new();
+    for attr in e.attributes() {
+        let attr = attr.map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
+        let key = std::str::from_utf8(attr.key.into_inner())
+            .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e)))?;
+        let value = attr
+            .unescape_value()
+            .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute value: {}", e)))?;
+        if key.starts_with("xmlns") {
+            continue;
+        }
+        let qattr = match QualifiedName::resolve_with_map(key, ns_map) {
+            Ok(q) => q,
+            Err(e) => {
+                eprintln!(
+                    "[DEBUG] Failed to resolve attribute name '{}'. Namespace map: {:?}",
+                    key, ns_map
+                );
+                return Err(e);
+            }
+        };
+        attributes.insert(qattr, value.to_string());
+    }
+    element.set_attributes(attributes);
+    Ok(element)
 }
 
 /// Extract namespace declarations from attributes
@@ -133,61 +182,6 @@ fn extract_namespace_declarations(e: &BytesStart) -> XmlResult<Vec<(String, Stri
         }
     }
     Ok(namespace_declarations)
-}
-
-/// Extract regular (non-namespace) attributes
-fn extract_regular_attributes(e: &BytesStart) -> XmlResult<Vec<Attribute>> {
-    let mut attributes = Vec::new();
-    for attr in e.attributes() {
-        let attr = attr.map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
-        let key = std::str::from_utf8(attr.key.into_inner())
-            .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e)))?;
-        let value = attr
-            .unescape_value()
-            .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute value: {}", e)))?;
-        if key.starts_with("xmlns") {
-            continue;
-        }
-        attributes.push(Attribute::new(key.to_string(), value.to_string()));
-    }
-    Ok(attributes)
-}
-
-/// Resolve element namespace if it has a qualified name
-fn resolve_element_namespace(
-    doc: &Document,
-    element: Element,
-    original_name: &str,
-    local_name: String,
-) -> XmlResult<Element> {
-    if let Some(colon_pos) = original_name.find(':') {
-        let prefix = &original_name[..colon_pos];
-        if let Some(uri) = element.get_namespace_uri(prefix) {
-            // Create a new element with the resolved namespace
-            let namespaced_element = doc.create_element_with_namespace(
-                local_name,
-                Namespace::prefixed(uri, prefix).unwrap(),
-            );
-
-            // Copy namespace declarations and attributes
-            for (ns_prefix, ns_uri) in element.namespace_declarations() {
-                if ns_prefix.is_empty() {
-                    namespaced_element.declare_default_namespace(ns_uri);
-                } else {
-                    namespaced_element.declare_namespace(ns_prefix, ns_uri);
-                }
-            }
-            for attr in element.attributes() {
-                namespaced_element.add_attribute(attr);
-            }
-
-            Ok(namespaced_element)
-        } else {
-            Ok(element)
-        }
-    } else {
-        Ok(element)
-    }
 }
 
 /// Write XML document to a file
@@ -227,15 +221,15 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
             attrs.push((format!("xmlns:{}", prefix), uri));
         }
     }
-    for attr in element.attributes() {
-        if let Some(ns) = &attr.namespace {
+    for (qname, value) in element.attributes().iter() {
+        if let Some(ns) = &qname.namespace {
             if let Some(prefix) = ns.prefix() {
-                attrs.push((format!("{}:{}", prefix, attr.name), attr.value.clone()));
+                attrs.push((format!("{}:{}", prefix, qname.name), value.clone()));
             } else {
-                attrs.push((attr.name.clone(), attr.value.clone()));
+                attrs.push((qname.name.clone(), value.clone()));
             }
         } else {
-            attrs.push((attr.name.clone(), attr.value.clone()));
+            attrs.push((qname.name.clone(), value.clone()));
         }
     }
     let start = BytesStart::new(element.name()).with_attributes(
@@ -263,52 +257,11 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
     Ok(())
 }
 
-fn create_and_setup_element(doc: &Document, e: &BytesStart) -> XmlResult<Element> {
-    let name = std::str::from_utf8(e.name().into_inner())
-        .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e)))?;
-    let local_name = parse_element_name(name);
-    let namespace_declarations = extract_namespace_declarations(e)?;
-    let attributes = extract_regular_attributes(e)?;
-    let element = doc.create_element(local_name);
-    for (prefix, uri) in namespace_declarations {
-        if prefix.is_empty() {
-            element.declare_default_namespace(uri);
-        } else {
-            element.declare_namespace(prefix, uri);
-        }
-    }
-    for attr in attributes {
-        element.add_attribute(attr);
-    }
-    Ok(element)
-}
-
-fn resolve_attribute_namespaces(element: &Element) {
-    let mut updated_attrs = Vec::new();
-    for attr in element.attributes() {
-        if let Some(colon_pos) = attr.name.find(':') {
-            let prefix = &attr.name[..colon_pos];
-            let local_name = &attr.name[colon_pos + 1..];
-            if let Some(uri) = element.get_namespace_uri(prefix) {
-                updated_attrs.push(Attribute::with_namespace(
-                    local_name.to_string(),
-                    attr.value.clone(),
-                    Namespace::prefixed(uri, prefix).unwrap(),
-                ));
-            } else {
-                updated_attrs.push(attr.clone());
-            }
-        } else {
-            updated_attrs.push(attr.clone());
-        }
-    }
-    element.set_attributes(updated_attrs);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::create_document;
+    use crate::Namespace;
 
     #[test]
     fn test_parse_and_write_simple_xml() {
@@ -484,21 +437,21 @@ mod tests {
         // Find the namespaced attribute
         let ns_attr = attrs
             .iter()
-            .find(|a| a.name == "attr" && a.namespace.is_some())
+            .find(|(q, _)| q.name == "attr" && q.namespace.is_some())
             .expect("Missing namespaced attribute");
-        assert_eq!(ns_attr.value, "value");
+        assert_eq!(ns_attr.1, "value");
         assert_eq!(
-            ns_attr.namespace.as_ref().unwrap().uri(),
+            ns_attr.0.namespace.as_ref().unwrap().uri(),
             "http://example.com"
         );
-        assert_eq!(ns_attr.namespace.as_ref().unwrap().prefix(), Some("ex"));
+        assert_eq!(ns_attr.0.namespace.as_ref().unwrap().prefix(), Some("ex"));
         // Find the non-namespaced attribute
         let attr2 = attrs
             .iter()
-            .find(|a| a.name == "attr2")
+            .find(|(q, _)| q.name == "attr2")
             .expect("Missing attr2");
-        assert_eq!(attr2.value, "other");
-        assert!(attr2.namespace.is_none());
+        assert_eq!(attr2.1, "other");
+        assert!(attr2.0.namespace.is_none());
         // Round-trip
         let output = write_string(&doc).unwrap();
         let doc2 = parse_string(&output).unwrap();
@@ -506,14 +459,14 @@ mod tests {
         let attrs2 = root2.attributes();
         let ns_attr2 = attrs2
             .iter()
-            .find(|a| a.name == "attr" && a.namespace.is_some())
+            .find(|(q, _)| q.name == "attr" && q.namespace.is_some())
             .expect("Missing namespaced attribute after round-trip");
-        assert_eq!(ns_attr2.value, "value");
+        assert_eq!(ns_attr2.1, "value");
         assert_eq!(
-            ns_attr2.namespace.as_ref().unwrap().uri(),
+            ns_attr2.0.namespace.as_ref().unwrap().uri(),
             "http://example.com"
         );
-        assert_eq!(ns_attr2.namespace.as_ref().unwrap().prefix(), Some("ex"));
+        assert_eq!(ns_attr2.0.namespace.as_ref().unwrap().prefix(), Some("ex"));
     }
 
     #[test]
@@ -527,21 +480,21 @@ mod tests {
         // Find the namespaced attribute
         let ns_attr = attrs
             .iter()
-            .find(|a| a.name == "attr" && a.namespace.is_some())
+            .find(|(q, _)| q.name == "attr" && q.namespace.is_some())
             .expect("Missing namespaced attribute");
-        assert_eq!(ns_attr.value, "value");
+        assert_eq!(ns_attr.1, "value");
         assert_eq!(
-            ns_attr.namespace.as_ref().unwrap().uri(),
+            ns_attr.0.namespace.as_ref().unwrap().uri(),
             "http://example.com"
         );
-        assert_eq!(ns_attr.namespace.as_ref().unwrap().prefix(), Some("ex"));
+        assert_eq!(ns_attr.0.namespace.as_ref().unwrap().prefix(), Some("ex"));
         // Find the non-namespaced attribute
         let attr2 = attrs
             .iter()
-            .find(|a| a.name == "attr2")
+            .find(|(q, _)| q.name == "attr2")
             .expect("Missing attr2");
-        assert_eq!(attr2.value, "other");
-        assert!(attr2.namespace.is_none());
+        assert_eq!(attr2.1, "other");
+        assert!(attr2.0.namespace.is_none());
         // Round-trip
         let output = write_string(&doc).unwrap();
         let doc2 = parse_string(&output).unwrap();
@@ -550,13 +503,13 @@ mod tests {
         let attrs2 = child2.attributes();
         let ns_attr2 = attrs2
             .iter()
-            .find(|a| a.name == "attr" && a.namespace.is_some())
+            .find(|(q, _)| q.name == "attr" && q.namespace.is_some())
             .expect("Missing namespaced attribute after round-trip");
-        assert_eq!(ns_attr2.value, "value");
+        assert_eq!(ns_attr2.1, "value");
         assert_eq!(
-            ns_attr2.namespace.as_ref().unwrap().uri(),
+            ns_attr2.0.namespace.as_ref().unwrap().uri(),
             "http://example.com"
         );
-        assert_eq!(ns_attr2.namespace.as_ref().unwrap().prefix(), Some("ex"));
+        assert_eq!(ns_attr2.0.namespace.as_ref().unwrap().prefix(), Some("ex"));
     }
 }

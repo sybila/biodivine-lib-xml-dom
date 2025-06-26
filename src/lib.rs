@@ -16,7 +16,8 @@
 //! ## Creating and manipulating XML
 //!
 //! ```rust
-//! use biodivine_lib_xml_dom::{create_document, Attribute, Namespace};
+//! use biodivine_lib_xml_dom::{create_document, Namespace};
+//! use biodivine_lib_xml_dom::qualified_name::QualifiedName;
 //!
 //! // Create a new document and elements in a single block
 //! let doc = create_document();
@@ -25,7 +26,7 @@
 //! root.declare_namespace("html".to_string(), "http://www.w3.org/1999/xhtml".to_string());
 //! doc.set_root(root.clone()).unwrap();
 //! let body = doc.create_element("body".to_string());
-//! body.add_attribute(Attribute::new("class".to_string(), "main".to_string()));
+//! body.add_attribute(QualifiedName::new("class".to_string(), None).unwrap(), "main".to_string());
 //! body.add_text("Hello, World!".to_string());
 //! root.add_child_element(body).unwrap();
 //! ```
@@ -55,20 +56,20 @@
 //! ```
 
 // Module declarations
-mod attribute;
 mod document;
 mod element;
 mod error;
 mod io;
 mod namespace;
+pub mod qualified_name;
 
 // Re-export public API
-pub use attribute::Attribute;
 pub use document::Document;
 pub use element::Element;
 pub use error::{XmlError, XmlResult};
 pub use io::{parse_file, parse_reader, parse_string, write_file, write_string, write_writer};
 pub use namespace::Namespace;
+pub use qualified_name::QualifiedName;
 
 /// Main entry point for the library
 ///
@@ -106,20 +107,6 @@ mod tests {
         let element = doc.create_element("test".to_string());
         assert_eq!(element.name(), "test");
         assert!(element.namespace().is_none());
-    }
-
-    #[test]
-    fn test_add_attributes() {
-        let doc = create_document();
-        let element = doc.create_element("test".to_string());
-
-        let attr = Attribute::new("id".to_string(), "123".to_string());
-        element.add_attribute(attr);
-
-        let attributes = element.attributes();
-        assert_eq!(attributes.len(), 1);
-        assert_eq!(attributes[0].name, "id");
-        assert_eq!(attributes[0].value, "123");
     }
 
     #[test]

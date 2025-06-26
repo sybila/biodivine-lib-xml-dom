@@ -176,12 +176,15 @@ impl Namespace {
 mod tests {
     use super::*;
     use crate::document::Document;
+    use crate::qualified_name::QualifiedName;
 
     #[test]
     fn test_namespace_support() {
         let doc = Document::new();
         let namespace = Namespace::prefixed("http://example.com", "ex").unwrap();
-        let element = doc.create_element_with_namespace("test".to_string(), namespace.clone());
+        let element = doc.create_element(
+            QualifiedName::new("test".to_string(), Some(namespace.clone())).unwrap(),
+        );
 
         assert_eq!(element.name(), "test");
         assert_eq!(element.namespace(), Some(namespace));

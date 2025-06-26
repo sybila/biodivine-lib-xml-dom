@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::element::Element;
 use crate::error::{XmlError, XmlResult};
-use crate::namespace::Namespace;
+use crate::qualified_name::QualifiedName;
 
 /// Internal document structure that handles Arc complexity
 #[derive(Debug)]
@@ -87,13 +87,8 @@ impl Document {
     }
 
     /// Create a new element in this document
-    pub fn create_element(&self, name: String) -> Element {
-        Element::new(self.clone(), name)
-    }
-
-    /// Create a new namespaced element in this document
-    pub fn create_element_with_namespace(&self, name: String, namespace: Namespace) -> Element {
-        Element::with_namespace(self.clone(), name, namespace)
+    pub fn create_element(&self, qualified_name: QualifiedName) -> Element {
+        Element::new(self.clone(), qualified_name)
     }
 
     /// Generate a unique prefix for a namespace

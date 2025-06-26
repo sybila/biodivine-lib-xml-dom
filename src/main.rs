@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let doc = create_document();
 
     let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
-    let root = doc.create_element_with_namespace("html".to_string(), html_ns);
+    let root = doc.create_element(QualifiedName::new("html".to_string(), Some(html_ns)).unwrap());
 
     // Declare namespaces on the root element
     root.declare_namespace(
@@ -21,14 +21,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     doc.set_root(root.clone())?;
 
-    let head = doc.create_element("head".to_string());
-    let title = doc.create_element("title".to_string());
+    let head = doc.create_element(QualifiedName::new("head".to_string(), None).unwrap());
+    let title = doc.create_element(QualifiedName::new("title".to_string(), None).unwrap());
     title.add_text("My XML Document".to_string());
     head.add_child_element(title)?;
     root.add_child_element(head.clone())?;
 
-    let body = doc.create_element("body".to_string());
-    let p = doc.create_element("p".to_string());
+    let body = doc.create_element(QualifiedName::new("body".to_string(), None).unwrap());
+    let p = doc.create_element(QualifiedName::new("p".to_string(), None).unwrap());
     p.add_attribute(
         QualifiedName::new("class".to_string(), None).unwrap(),
         "example".to_string(),
@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     root.add_child_element(body.clone())?;
 
     let svg_ns = Namespace::prefixed("http://www.w3.org/2000/svg", "svg").unwrap();
-    let svg = doc.create_element_with_namespace("svg".to_string(), svg_ns);
+    let svg = doc.create_element(QualifiedName::new("svg".to_string(), Some(svg_ns)).unwrap());
     svg.add_attribute(
         QualifiedName::new("width".to_string(), None).unwrap(),
         "100".to_string(),
@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     body.add_child_element(svg.clone())?;
 
-    let circle = doc.create_element("circle".to_string());
+    let circle = doc.create_element(QualifiedName::new("circle".to_string(), None).unwrap());
     circle.add_attribute(
         QualifiedName::new("cx".to_string(), None).unwrap(),
         "50".to_string(),

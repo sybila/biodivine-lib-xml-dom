@@ -22,10 +22,10 @@
 //! // Create a new document and elements in a single block
 //! let doc = create_document();
 //! let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
-//! let root = doc.create_element_with_namespace("html".to_string(), html_ns);
+//! let root = doc.create_element(QualifiedName::new("html".to_string(), Some(html_ns)).unwrap());
 //! root.declare_namespace("html".to_string(), "http://www.w3.org/1999/xhtml".to_string());
 //! doc.set_root(root.clone()).unwrap();
-//! let body = doc.create_element("body".to_string());
+//! let body = doc.create_element(QualifiedName::new("body".to_string(), None).unwrap());
 //! body.add_attribute(QualifiedName::new("class".to_string(), None).unwrap(), "main".to_string());
 //! body.add_text("Hello, World!".to_string());
 //! root.add_child_element(body).unwrap();
@@ -104,7 +104,7 @@ mod tests {
     #[test]
     fn test_create_element() {
         let doc = create_document();
-        let element = doc.create_element("test".to_string());
+        let element = doc.create_element(QualifiedName::new("test".to_string(), None).unwrap());
         assert_eq!(element.name(), "test");
         assert!(element.namespace().is_none());
     }
@@ -112,8 +112,8 @@ mod tests {
     #[test]
     fn test_add_children() {
         let doc = create_document();
-        let parent = doc.create_element("parent".to_string());
-        let child = doc.create_element("child".to_string());
+        let parent = doc.create_element(QualifiedName::new("parent".to_string(), None).unwrap());
+        let child = doc.create_element(QualifiedName::new("child".to_string(), None).unwrap());
 
         parent.add_child_element(child.clone()).unwrap();
 
@@ -129,7 +129,7 @@ mod tests {
     #[test]
     fn test_namespace_declaration() {
         let doc = create_document();
-        let root = doc.create_element("root".to_string());
+        let root = doc.create_element(QualifiedName::new("root".to_string(), None).unwrap());
         root.declare_namespace("ex".to_string(), "http://example.com".to_string());
 
         assert_eq!(
@@ -141,7 +141,7 @@ mod tests {
     #[test]
     fn test_qualified_name_resolution() {
         let doc = create_document();
-        let root = doc.create_element("root".to_string());
+        let root = doc.create_element(QualifiedName::new("root".to_string(), None).unwrap());
         root.declare_namespace("ex".to_string(), "http://example.com".to_string());
 
         let (local_name, namespace) = root.resolve_qualified_name("ex:test").unwrap();
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn test_document_reference() {
         let doc = create_document();
-        let element = doc.create_element("test".to_string());
+        let element = doc.create_element(QualifiedName::new("test".to_string(), None).unwrap());
 
         // Set as root should work
         doc.set_root(element).unwrap();

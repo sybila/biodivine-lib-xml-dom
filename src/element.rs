@@ -18,10 +18,8 @@ pub enum XmlNode {
 pub(crate) struct InternalElement {
     /// The ID of the internal document this element belongs to
     pub document: Document,
-    /// Element name (local name)
-    pub name: String,
-    /// Element namespace
-    pub namespace: Option<Namespace>,
+    /// Element qualified name (local name + namespace)
+    pub qualified_name: QualifiedName,
     /// Element attributes
     pub attributes: BTreeMap<QualifiedName, String>,
     /// Child elements
@@ -36,25 +34,11 @@ pub(crate) struct InternalElement {
 pub struct Element(Arc<RwLock<InternalElement>>);
 
 impl Element {
-    /// Create a new element in the given document
-    pub(crate) fn new(document: Document, name: String) -> Self {
+    /// Create a new element in the given document with a qualified name
+    pub(crate) fn new(document: Document, qualified_name: QualifiedName) -> Self {
         Self(Arc::new(RwLock::new(InternalElement {
             document,
-            name,
-            namespace: None,
-            attributes: BTreeMap::new(),
-            children: Vec::new(),
-            parent: None,
-            namespace_declarations: HashMap::new(),
-        })))
-    }
-
-    /// Create a new namespaced element
-    pub(crate) fn with_namespace(document: Document, name: String, namespace: Namespace) -> Self {
-        Self(Arc::new(RwLock::new(InternalElement {
-            document,
-            name,
-            namespace: Some(namespace),
+            qualified_name,
             attributes: BTreeMap::new(),
             children: Vec::new(),
             parent: None,
@@ -63,23 +47,23 @@ impl Element {
     }
 
     pub fn name(&self) -> String {
-        self.0.read().name.clone()
+        self.0.read().qualified_name.name.clone()
     }
 
     pub fn namespace(&self) -> Option<Namespace> {
-        self.0.read().namespace.clone()
+        self.0.read().qualified_name.namespace.clone()
     }
 
     pub fn qualified_name(&self) -> String {
         let inner = self.0.read();
-        if let Some(ref ns) = inner.namespace {
+        if let Some(ref ns) = inner.qualified_name.namespace {
             if let Some(prefix) = ns.prefix() {
-                format!("{}:{}", prefix, inner.name)
+                format!("{}:{}", prefix, inner.qualified_name.name)
             } else {
-                inner.name.clone()
+                inner.qualified_name.name.clone()
             }
         } else {
-            inner.name.clone()
+            inner.qualified_name.name.clone()
         }
     }
 

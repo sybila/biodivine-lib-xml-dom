@@ -123,11 +123,7 @@ fn parse_element(
         }
     };
     // 4. Create the element with the correct qualified name
-    let element = if let Some(ns) = &qname.namespace {
-        doc.create_element_with_namespace(qname.name.clone(), ns.clone())
-    } else {
-        doc.create_element(qname.name.clone())
-    };
+    let element = doc.create_element(qname.clone());
     // 5. Apply namespace declarations to the element
     let namespace_declarations = extract_namespace_declarations(e)?;
     for (prefix, uri) in namespace_declarations {
@@ -308,15 +304,16 @@ mod tests {
         let doc = create_document();
 
         let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
-        let root = doc.create_element_with_namespace("html".to_string(), html_ns);
+        let root =
+            doc.create_element(QualifiedName::new("html".to_string(), Some(html_ns)).unwrap());
         root.declare_namespace(
             "html".to_string(),
             "http://www.w3.org/1999/xhtml".to_string(),
         );
         doc.set_root(root.clone()).unwrap();
 
-        let head = doc.create_element("head".to_string());
-        let title = doc.create_element("title".to_string());
+        let head = doc.create_element(QualifiedName::new("head".to_string(), None).unwrap());
+        let title = doc.create_element(QualifiedName::new("title".to_string(), None).unwrap());
         title.add_text("Test Page".to_string());
         head.add_child_element(title).unwrap();
         root.add_child_element(head).unwrap();

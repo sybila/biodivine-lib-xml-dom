@@ -188,7 +188,7 @@ mod tests {
     #[test]
     fn test_resolve_no_prefix() {
         let doc = Document::new();
-        let el = doc.create_element("foo".to_string());
+        let el = doc.create_element(QualifiedName::new("foo".to_string(), None).unwrap());
         el.declare_default_namespace("http://default.com".to_string());
         let qn = QualifiedName::resolve(&el, "bar", None).unwrap();
         assert_eq!(qn.name, "bar");
@@ -198,7 +198,7 @@ mod tests {
     #[test]
     fn test_resolve_with_prefix() {
         let doc = Document::new();
-        let el = doc.create_element("foo".to_string());
+        let el = doc.create_element(QualifiedName::new("foo".to_string(), None).unwrap());
         el.declare_namespace("ex".to_string(), "http://example.com".to_string());
         let qn = QualifiedName::resolve(&el, "ex:bar", None).unwrap();
         assert_eq!(qn.name, "bar");
@@ -209,7 +209,7 @@ mod tests {
     #[test]
     fn test_resolve_with_extra_ns() {
         let doc = Document::new();
-        let el = doc.create_element("foo".to_string());
+        let el = doc.create_element(QualifiedName::new("foo".to_string(), None).unwrap());
         let mut extra = HashMap::new();
         extra.insert("ex".to_string(), "http://extra.com".to_string());
         let qn = QualifiedName::resolve(&el, "ex:bar", Some(&extra)).unwrap();
@@ -220,7 +220,7 @@ mod tests {
     #[test]
     fn test_resolve_undefined_prefix() {
         let doc = Document::new();
-        let el = doc.create_element("foo".to_string());
+        let el = doc.create_element(QualifiedName::new("foo".to_string(), None).unwrap());
         let err = QualifiedName::resolve(&el, "ex:bar", None).unwrap_err();
         match err {
             XmlError::NamespaceError(_) => {}

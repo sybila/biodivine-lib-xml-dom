@@ -26,4 +26,4 @@ impl Attribute {
             namespace: Some(namespace),
         }
     }
-} 
+}

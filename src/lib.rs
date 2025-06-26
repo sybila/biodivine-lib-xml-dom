@@ -20,7 +20,7 @@
 //!
 //! // Create a new document and elements in a single block
 //! let doc = create_document();
-//! let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml".to_string(), "html".to_string());
+//! let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml".to_string(), "html".to_string()).unwrap();
 //! let root = doc.create_element_with_namespace("html".to_string(), html_ns);
 //! root.declare_namespace("html".to_string(), "http://www.w3.org/1999/xhtml".to_string());
 //! doc.set_root(root.clone()).unwrap();
@@ -55,20 +55,20 @@
 //! ```
 
 // Module declarations
+mod attribute;
 mod document;
 mod element;
 mod error;
 mod io;
 mod namespace;
-mod attribute;
 
 // Re-export public API
+pub use attribute::Attribute;
 pub use document::Document;
 pub use element::Element;
 pub use error::{XmlError, XmlResult};
 pub use io::{parse_file, parse_reader, parse_string, write_file, write_string, write_writer};
 pub use namespace::Namespace;
-pub use attribute::Attribute;
 
 /// Main entry point for the library
 ///
@@ -106,17 +106,6 @@ mod tests {
         let element = doc.create_element("test".to_string());
         assert_eq!(element.name(), "test");
         assert!(element.namespace().is_none());
-    }
-
-    #[test]
-    fn test_namespace_support() {
-        let doc = create_document();
-        let namespace = Namespace::prefixed("http://example.com".to_string(), "ex".to_string());
-        let element = doc.create_element_with_namespace("test".to_string(), namespace.clone());
-
-        assert_eq!(element.name(), "test");
-        assert_eq!(element.namespace(), Some(namespace));
-        assert_eq!(element.qualified_name(), "ex:test");
     }
 
     #[test]

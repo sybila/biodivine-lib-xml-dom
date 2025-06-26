@@ -2,9 +2,9 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::attribute::Attribute;
 use crate::document::Document;
 use crate::error::{XmlError, XmlResult};
-use crate::attribute::Attribute;
 use crate::namespace::Namespace;
 
 #[derive(Debug, Clone)]
@@ -115,7 +115,7 @@ impl Element {
             let local_name = &qualified_name[colon_pos + 1..];
 
             if let Some(uri) = self.get_namespace_uri(prefix) {
-                let namespace = Namespace::prefixed(uri, prefix.to_string());
+                let namespace = Namespace::prefixed(uri, prefix.to_string()).unwrap();
                 Ok((local_name.to_string(), Some(namespace)))
             } else {
                 Err(XmlError::NamespaceError(format!(
@@ -124,7 +124,7 @@ impl Element {
                 )))
             }
         } else if let Some(uri) = self.get_namespace_uri("") {
-            let namespace = Namespace::default(uri);
+            let namespace = Namespace::default(uri).unwrap();
             Ok((qualified_name.to_string(), Some(namespace)))
         } else {
             Ok((qualified_name.to_string(), None))

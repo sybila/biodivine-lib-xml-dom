@@ -25,10 +25,10 @@ use std::collections::HashMap;
 /// ```rust
 /// use biodivine_lib_xml_dom::{Namespace, QualifiedName};
 /// let ns = Namespace::default("http://example.com").unwrap();
-/// let qn = QualifiedName::with_namespace("foo", &ns);
+/// let qn = QualifiedName::with_namespace("foo", &ns).unwrap();
 /// assert_eq!(qn.name(), "foo");
 /// assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
-/// let qn2 = QualifiedName::without_namespace("bar");
+/// let qn2 = QualifiedName::without_namespace("bar").unwrap();
 /// assert_eq!(qn2.name(), "bar");
 /// assert!(qn2.namespace().is_none());
 /// ```
@@ -58,29 +58,35 @@ impl QualifiedName {
 
     /// Create a qualified name without a namespace.
     ///
+    /// # Errors
+    /// Returns an error if the name contains a colon (`:`).
+    ///
     /// # Examples
     /// ```rust
     /// use biodivine_lib_xml_dom::QualifiedName;
-    /// let qn = QualifiedName::without_namespace("foo");
+    /// let qn = QualifiedName::without_namespace("foo").unwrap();
     /// assert_eq!(qn.name(), "foo");
     /// assert!(qn.namespace().is_none());
     /// ```
-    pub fn without_namespace<S: AsRef<str>>(name: S) -> Self {
-        Self::new(name, None).unwrap()
+    pub fn without_namespace<S: AsRef<str>>(name: S) -> XmlResult<Self> {
+        Self::new(name, None)
     }
 
     /// Create a qualified name with a namespace.
+    ///
+    /// # Errors
+    /// Returns an error if the name contains a colon (`:`).
     ///
     /// # Examples
     /// ```rust
     /// use biodivine_lib_xml_dom::{Namespace, QualifiedName};
     /// let ns = Namespace::default("http://example.com").unwrap();
-    /// let qn = QualifiedName::with_namespace("foo", &ns);
+    /// let qn = QualifiedName::with_namespace("foo", &ns).unwrap();
     /// assert_eq!(qn.name(), "foo");
     /// assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
     /// ```
-    pub fn with_namespace<S: AsRef<str>>(name: S, namespace: &Namespace) -> Self {
-        Self::new(name, Some(namespace.clone())).unwrap()
+    pub fn with_namespace<S: AsRef<str>>(name: S, namespace: &Namespace) -> XmlResult<Self> {
+        Self::new(name, Some(namespace.clone()))
     }
 
     /// Get the local name.
@@ -101,7 +107,7 @@ impl QualifiedName {
     /// ```rust
     /// use biodivine_lib_xml_dom::{Document, QualifiedName};
     /// let doc = Document::new();
-    /// let el = doc.create_element(QualifiedName::without_namespace("foo"));
+    /// let el = doc.create_element(QualifiedName::without_namespace("foo").unwrap());
     /// el.declare_default_namespace("http://default.com".to_string());
     /// let qn = QualifiedName::resolve(&el, "bar").unwrap();
     /// assert_eq!(qn.name(), "bar");
@@ -171,6 +177,29 @@ impl QualifiedName {
             QualifiedName::new(qualified_name, None)
         }
     }
+
+    /// Returns the qualified name as a string (e.g., "prefix:local_name" or just "local_name").
+    ///
+    /// # Examples
+    /// ```rust
+    /// use biodivine_lib_xml_dom::{Namespace, QualifiedName};
+    /// let ns = Namespace::prefixed("http://example.com", "ex").unwrap();
+    /// let qn = QualifiedName::with_namespace("foo", &ns).unwrap();
+    /// assert_eq!(qn.to_qualified_name_string(), "ex:foo");
+    /// let qn2 = QualifiedName::without_namespace("bar").unwrap();
+    /// assert_eq!(qn2.to_qualified_name_string(), "bar");
+    /// ```
+    pub fn to_qualified_name_string(&self) -> String {
+        if let Some(ns) = self.namespace() {
+            if let Some(prefix) = ns.prefix() {
+                format!("{}:{}", prefix, self.name())
+            } else {
+                self.name().to_string()
+            }
+        } else {
+            self.name().to_string()
+        }
+    }
 }
 
 impl PartialEq for QualifiedName {
@@ -220,24 +249,43 @@ mod tests {
     use std::collections::BTreeSet;
     use std::hash::{Hash, Hasher};
 
+    // Utility function for tests: create a namespace from a string and panic on error.
+    fn ns(uri: &str) -> Namespace {
+        Namespace::default(uri).unwrap()
+    }
+    // Utility function for tests: create a namespace with prefix and panic on error.
+    fn pns(uri: &str, prefix: &str) -> Namespace {
+        Namespace::prefixed(uri, prefix).unwrap()
+    }
+    // Utility function for tests: create a qualified name without namespace.
+    fn q_name(name: &str) -> XmlResult<QualifiedName> {
+        QualifiedName::without_namespace(name)
+    }
+    // Utility function for tests: create a qualified name with namespace.
+    fn q_ns_name(name: &str, ns: &Namespace) -> XmlResult<QualifiedName> {
+        QualifiedName::with_namespace(name, ns)
+    }
+
     #[test]
     fn test_creation_and_error() {
-        let ns = Namespace::default("http://example.com").unwrap();
-        let qn = QualifiedName::with_namespace("foo", &ns);
+        let ns = ns("http://example.com");
+        let qn = q_ns_name("foo", &ns).unwrap();
         assert_eq!(qn.name(), "foo");
         assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
         assert!(QualifiedName::new("foo:bar", None).is_err());
+        assert!(QualifiedName::with_namespace("foo:bar", &ns).is_err());
+        assert!(QualifiedName::without_namespace("foo:bar").is_err());
     }
 
     #[test]
     fn test_equality_and_ordering() {
-        let ns1 = Namespace::default("http://example.com").unwrap();
-        let ns2 = Namespace::default("http://other.com").unwrap();
-        let a = QualifiedName::with_namespace("foo", &ns1);
-        let b = QualifiedName::with_namespace("foo", &ns1);
-        let c = QualifiedName::with_namespace("foo", &ns2);
-        let d = QualifiedName::with_namespace("bar", &ns1);
-        let e = QualifiedName::without_namespace("foo");
+        let ns1 = ns("http://example.com");
+        let ns2 = ns("http://other.com");
+        let a = q_ns_name("foo", &ns1).unwrap();
+        let b = q_ns_name("foo", &ns1).unwrap();
+        let c = q_ns_name("foo", &ns2).unwrap();
+        let d = q_ns_name("bar", &ns1).unwrap();
+        let e = q_name("foo").unwrap();
         assert_eq!(a, b);
         assert_ne!(a, c);
         assert_ne!(a, d);
@@ -249,14 +297,17 @@ mod tests {
         set.insert(d.clone());
         set.insert(e.clone());
         assert_eq!(set.len(), 4);
+        assert!(d < a);
+        assert!(a < c);
+        assert!(e < a);
     }
 
     #[test]
     fn test_hashing_semantic_equality() {
-        let ns1 = Namespace::prefixed("http://example.com", "ex").unwrap();
-        let ns2 = Namespace::default("http://example.com").unwrap();
-        let a = QualifiedName::with_namespace("foo", &ns1);
-        let b = QualifiedName::with_namespace("foo", &ns2);
+        let ns1 = pns("http://example.com", "ex");
+        let ns2 = ns("http://example.com");
+        let a = q_ns_name("foo", &ns1).unwrap();
+        let b = q_ns_name("foo", &ns2).unwrap();
         let mut hasher_a = std::collections::hash_map::DefaultHasher::new();
         let mut hasher_b = std::collections::hash_map::DefaultHasher::new();
         a.hash(&mut hasher_a);
@@ -267,7 +318,7 @@ mod tests {
     #[test]
     fn test_resolve_no_prefix() {
         let doc = Document::new();
-        let el = doc.create_element(QualifiedName::without_namespace("foo"));
+        let el = doc.create_element(q_name("foo").unwrap());
         el.declare_default_namespace("http://default.com".to_string());
         let qn = QualifiedName::resolve(&el, "bar").unwrap();
         assert_eq!(qn.name(), "bar");
@@ -277,7 +328,7 @@ mod tests {
     #[test]
     fn test_resolve_with_prefix() {
         let doc = Document::new();
-        let el = doc.create_element(QualifiedName::without_namespace("foo"));
+        let el = doc.create_element(q_name("foo").unwrap());
         el.declare_namespace("ex".to_string(), "http://example.com".to_string());
         let qn = QualifiedName::resolve(&el, "ex:bar").unwrap();
         assert_eq!(qn.name(), "bar");
@@ -286,23 +337,25 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_with_extra_ns() {
+    fn test_resolve_with_parent_ns() {
+        // Test that a namespace declared on a parent element is used for resolution.
         let doc = Document::new();
-        let el = doc.create_element(QualifiedName::without_namespace("foo"));
-        el.declare_namespace("ex".to_string(), "http://extra.com".to_string());
-        let qn = QualifiedName::resolve(&el, "ex:bar").unwrap();
+        let parent = doc.create_element(q_name("parent").unwrap());
+        parent.declare_namespace("ex".to_string(), "http://parent.com".to_string());
+        let child = doc.create_element(q_name("child").unwrap());
+        // Attach child to parent
+        parent.add_child_element(child.clone()).unwrap();
+        // Now resolve a qualified name on the child, should use parent's namespace
+        let qn = QualifiedName::resolve(&child, "ex:bar").unwrap();
         assert_eq!(qn.name(), "bar");
-        assert_eq!(qn.namespace().as_ref().unwrap().uri(), "http://extra.com");
+        assert_eq!(qn.namespace().as_ref().unwrap().uri(), "http://parent.com");
     }
 
     #[test]
     fn test_resolve_undefined_prefix() {
         let doc = Document::new();
-        let el = doc.create_element(QualifiedName::without_namespace("foo"));
+        let el = doc.create_element(q_name("foo").unwrap());
         let err = QualifiedName::resolve(&el, "ex:bar").unwrap_err();
-        match err {
-            XmlError::NamespaceError(_) => {}
-            _ => panic!("Expected NamespaceError"),
-        }
+        assert!(matches!(err, XmlError::NamespaceError(_)));
     }
 }

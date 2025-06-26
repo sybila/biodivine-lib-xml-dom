@@ -304,15 +304,15 @@ mod tests {
         let doc = create_document();
 
         let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
-        let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns));
+        let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns).unwrap());
         root.declare_namespace(
             "html".to_string(),
             "http://www.w3.org/1999/xhtml".to_string(),
         );
         doc.set_root(root.clone()).unwrap();
 
-        let head = doc.create_element(QualifiedName::without_namespace("head"));
-        let title = doc.create_element(QualifiedName::without_namespace("title"));
+        let head = doc.create_element(QualifiedName::without_namespace("head").unwrap());
+        let title = doc.create_element(QualifiedName::without_namespace("title").unwrap());
         title.add_text("Test Page".to_string());
         head.add_child_element(title).unwrap();
         root.add_child_element(head).unwrap();

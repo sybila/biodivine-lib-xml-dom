@@ -21,11 +21,11 @@
 //! // Create a new document and elements in a single block
 //! let doc = create_document();
 //! let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
-//! let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns));
+//! let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns).unwrap());
 //! root.declare_namespace("html".to_string(), "http://www.w3.org/1999/xhtml".to_string());
 //! doc.set_root(root.clone()).unwrap();
-//! let body = doc.create_element(QualifiedName::without_namespace("body"));
-//! body.add_attribute(QualifiedName::without_namespace("class"), "main".to_string());
+//! let body = doc.create_element(QualifiedName::without_namespace("body").unwrap());
+//! body.add_attribute(QualifiedName::without_namespace("class").unwrap(), "main".to_string());
 //! body.add_text("Hello, World!".to_string());
 //! root.add_child_element(body).unwrap();
 //! ```
@@ -103,7 +103,7 @@ mod tests {
     #[test]
     fn test_create_element() {
         let doc = create_document();
-        let element = doc.create_element(QualifiedName::without_namespace("test"));
+        let element = doc.create_element(QualifiedName::without_namespace("test").unwrap());
         assert_eq!(element.name(), "test");
         assert!(element.namespace().is_none());
     }
@@ -111,8 +111,8 @@ mod tests {
     #[test]
     fn test_add_children() {
         let doc = create_document();
-        let parent = doc.create_element(QualifiedName::without_namespace("parent"));
-        let child = doc.create_element(QualifiedName::without_namespace("child"));
+        let parent = doc.create_element(QualifiedName::without_namespace("parent").unwrap());
+        let child = doc.create_element(QualifiedName::without_namespace("child").unwrap());
 
         parent.add_child_element(child.clone()).unwrap();
 
@@ -128,7 +128,7 @@ mod tests {
     #[test]
     fn test_namespace_declaration() {
         let doc = create_document();
-        let root = doc.create_element(QualifiedName::without_namespace("root"));
+        let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
         root.declare_namespace("ex".to_string(), "http://example.com".to_string());
 
         assert_eq!(
@@ -140,7 +140,7 @@ mod tests {
     #[test]
     fn test_qualified_name_resolution() {
         let doc = create_document();
-        let root = doc.create_element(QualifiedName::without_namespace("root"));
+        let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
         root.declare_namespace("ex".to_string(), "http://example.com".to_string());
 
         let (local_name, namespace) = root.resolve_qualified_name("ex:test").unwrap();
@@ -151,7 +151,7 @@ mod tests {
     #[test]
     fn test_document_reference() {
         let doc = create_document();
-        let element = doc.create_element(QualifiedName::without_namespace("test"));
+        let element = doc.create_element(QualifiedName::without_namespace("test").unwrap());
 
         // Set as root should work
         doc.set_root(element).unwrap();

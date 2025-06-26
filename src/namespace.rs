@@ -5,7 +5,7 @@ use crate::error::XmlError;
 /// # Conditions for a valid namespace:
 /// - The URI must not be empty.
 /// - The prefix, if present, must not be empty and must not contain a colon (`:`).
-/// - The URI and prefix must satisfy XML namespace rules (see `Namespace::validate`).
+/// - *Other validation rules may be added in the future (e.g., that URI is actually a valid URI).*
 ///
 /// Use the provided constructors and setter methods to ensure validity.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -58,7 +58,7 @@ impl Namespace {
     /// Create a prefixed namespace, validating XML rules.
     ///
     /// # Errors
-    /// Returns `XmlError` if the URI is empty, or if the prefix is empty or contains a colon.
+    /// Returns [`XmlError`] if the URI is empty, or if the prefix is empty or contains a colon.
     ///
     /// # Examples
     /// ```rust
@@ -107,7 +107,7 @@ impl Namespace {
     /// Set the namespace URI, validating XML rules.
     ///
     /// # Errors
-    /// Returns `XmlError` if the new URI is empty.
+    /// Returns [`XmlError`] if the new URI is empty.
     ///
     /// # Examples
     /// ```rust
@@ -127,7 +127,7 @@ impl Namespace {
     /// Set the namespace prefix, validating XML rules.
     ///
     /// # Errors
-    /// Returns `XmlError` if the new prefix is empty or contains a colon.
+    /// Returns [`XmlError`] if the new prefix is empty or contains a colon.
     ///
     /// # Examples
     /// ```rust
@@ -147,7 +147,7 @@ impl Namespace {
         Ok(())
     }
 
-    /// Remove the namespace prefix (set to None).
+    /// Remove the namespace prefix (set to `None`).
     ///
     /// # Examples
     /// ```rust

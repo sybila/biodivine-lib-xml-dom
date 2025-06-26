@@ -297,9 +297,9 @@ mod tests {
         set.insert(d.clone());
         set.insert(e.clone());
         assert_eq!(set.len(), 4);
-        assert!(d < a);
         assert!(a < c);
-        assert!(e < a);
+        assert!(d < a);
+        assert!(e < d);
     }
 
     #[test]

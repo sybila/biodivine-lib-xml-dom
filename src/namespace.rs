@@ -8,6 +8,10 @@ use std::sync::Arc;
 /// sure to prefer cloning existing namespaces instead of creating new ones to reduce memory
 /// usage as much as possible.
 ///
+/// # Equality
+/// Two [`Namespace`] objects are considered equal if they have the same URI **and** the same prefix.
+/// If you want to compare only the namespace URIs, use [`Namespace::is_equal_ns`].
+///
 /// # Conditions for a valid namespace:
 /// - The URI must not be empty.
 /// - The prefix, if present, must not be empty and must not contain a colon (`:`).
@@ -148,6 +152,21 @@ impl Namespace {
         // Additional XML namespace rules can be added here
         Ok(())
     }
+
+    /// Compare two namespaces for equality based only on their URI.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use biodivine_lib_xml_dom::Namespace;
+    /// let ns1 = Namespace::prefixed("http://example.com", "ex").unwrap();
+    /// let ns2 = Namespace::default("http://example.com").unwrap();
+    /// assert!(Namespace::is_equal_ns(&ns1, &ns2));
+    /// let ns3 = Namespace::default("http://different.com").unwrap();
+    /// assert!(!Namespace::is_equal_ns(&ns1, &ns3));
+    /// ```
+    pub fn is_equal_ns(a: &Namespace, b: &Namespace) -> bool {
+        a.uri() == b.uri()
+    }
 }
 
 #[cfg(test)]
@@ -227,5 +246,21 @@ mod tests {
             arc1, arc2,
             "New Namespace with same data should not share Arc pointer"
         );
+    }
+
+    #[test]
+    fn test_namespace_is_equal_ns() {
+        let ns1 = Namespace::prefixed("http://example.com", "ex").unwrap();
+        let ns2 = Namespace::default("http://example.com").unwrap();
+        let ns3 = Namespace::prefixed("http://example.com", "other").unwrap();
+        let ns4 = Namespace::default("http://different.com").unwrap();
+        // Same URI, different prefixes
+        assert!(Namespace::is_equal_ns(&ns1, &ns2));
+        assert!(Namespace::is_equal_ns(&ns1, &ns3));
+        // Different URIs
+        assert!(!Namespace::is_equal_ns(&ns1, &ns4));
+        assert!(!Namespace::is_equal_ns(&ns2, &ns4));
+        // Identical objects
+        assert!(Namespace::is_equal_ns(&ns1, &ns1));
     }
 }

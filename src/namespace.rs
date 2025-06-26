@@ -1,4 +1,5 @@
 use crate::error::XmlError;
+use std::sync::Arc;
 
 /// Represents an XML namespace with URI and optional prefix.
 ///
@@ -10,6 +11,11 @@ use crate::error::XmlError;
 /// Use the provided constructors and setter methods to ensure validity.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Namespace {
+    data: Arc<NamespaceData>,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct NamespaceData {
     uri: String,
     prefix: Option<String>,
 }
@@ -30,7 +36,9 @@ impl Namespace {
     /// ```
     pub fn new(uri: String, prefix: Option<String>) -> Result<Self, XmlError> {
         Self::validate(&uri, prefix.as_deref())?;
-        Ok(Self { uri, prefix })
+        Ok(Self {
+            data: Arc::new(NamespaceData { uri, prefix }),
+        })
     }
 
     /// Create a default namespace (no prefix), validating XML rules.
@@ -50,8 +58,10 @@ impl Namespace {
         let uri_str = uri.as_ref();
         Self::validate(uri_str, None)?;
         Ok(Self {
-            uri: uri_str.to_string(),
-            prefix: None,
+            data: Arc::new(NamespaceData {
+                uri: uri_str.to_string(),
+                prefix: None,
+            }),
         })
     }
 
@@ -73,8 +83,10 @@ impl Namespace {
         let prefix_str = prefix.as_ref();
         Self::validate(uri_str, Some(prefix_str))?;
         Ok(Self {
-            uri: uri_str.to_string(),
-            prefix: Some(prefix_str.to_string()),
+            data: Arc::new(NamespaceData {
+                uri: uri_str.to_string(),
+                prefix: Some(prefix_str.to_string()),
+            }),
         })
     }
 
@@ -87,7 +99,7 @@ impl Namespace {
     /// assert_eq!(ns.uri(), "http://example.com");
     /// ```
     pub fn uri(&self) -> &str {
-        &self.uri
+        &self.data.uri
     }
 
     /// Get a reference to the namespace prefix, if any.
@@ -101,63 +113,7 @@ impl Namespace {
     /// assert_eq!(ns.prefix(), None);
     /// ```
     pub fn prefix(&self) -> Option<&str> {
-        self.prefix.as_deref()
-    }
-
-    /// Set the namespace URI, validating XML rules.
-    ///
-    /// # Errors
-    /// Returns [`XmlError`] if the new URI is empty.
-    ///
-    /// # Examples
-    /// ```rust
-    /// use biodivine_lib_xml_dom::Namespace;
-    /// let mut ns = Namespace::default("http://example.com").unwrap();
-    /// assert!(ns.set_uri("http://new.com").is_ok());
-    /// assert_eq!(ns.uri(), "http://new.com");
-    /// assert!(ns.set_uri("").is_err());
-    /// ```
-    pub fn set_uri<U: AsRef<str>>(&mut self, uri: U) -> Result<(), XmlError> {
-        let uri_str = uri.as_ref();
-        Self::validate(uri_str, self.prefix.as_deref())?;
-        self.uri = uri_str.to_string();
-        Ok(())
-    }
-
-    /// Set the namespace prefix, validating XML rules.
-    ///
-    /// # Errors
-    /// Returns [`XmlError`] if the new prefix is empty or contains a colon.
-    ///
-    /// # Examples
-    /// ```rust
-    /// use biodivine_lib_xml_dom::Namespace;
-    /// let mut ns = Namespace::default("http://example.com").unwrap();
-    /// assert!(ns.set_prefix("ex").is_ok());
-    /// assert_eq!(ns.prefix(), Some("ex"));
-    /// assert!(ns.set_prefix("").is_err());
-    /// assert!(ns.set_prefix("ex:bad").is_err());
-    /// ns.unset_prefix();
-    /// assert_eq!(ns.prefix(), None);
-    /// ```
-    pub fn set_prefix<P: AsRef<str>>(&mut self, prefix: P) -> Result<(), XmlError> {
-        let prefix_str = prefix.as_ref();
-        Self::validate(&self.uri, Some(prefix_str))?;
-        self.prefix = Some(prefix_str.to_string());
-        Ok(())
-    }
-
-    /// Remove the namespace prefix (set to `None`).
-    ///
-    /// # Examples
-    /// ```rust
-    /// use biodivine_lib_xml_dom::Namespace;
-    /// let mut ns = Namespace::prefixed("http://example.com", "ex").unwrap();
-    /// ns.unset_prefix();
-    /// assert_eq!(ns.prefix(), None);
-    /// ```
-    pub fn unset_prefix(&mut self) {
-        self.prefix = None;
+        self.data.prefix.as_deref()
     }
 
     /// Validate the URI and prefix according to XML namespace rules.
@@ -227,6 +183,45 @@ mod tests {
         // New with Some invalid prefix
         assert!(
             Namespace::new("http://example.com".to_string(), Some("ex:bad".to_string())).is_err()
+        );
+    }
+
+    #[test]
+    fn test_namespace_equality() {
+        let ns1 = Namespace::prefixed("http://example.com", "ex").unwrap();
+        let ns2 = Namespace::prefixed("http://example.com", "ex").unwrap();
+        let ns3 = Namespace::prefixed("http://example.com", "other").unwrap();
+        let ns4 = Namespace::default("http://example.com").unwrap();
+        let ns5 = Namespace::default("http://different.com").unwrap();
+
+        // Same URI and prefix, but different Arc pointers
+        assert_eq!(ns1, ns2);
+        // Same URI, different prefix
+        assert_ne!(ns1, ns3);
+        // Same URI, one with prefix, one without
+        assert_ne!(ns1, ns4);
+        // Different URI
+        assert_ne!(ns1, ns5);
+        // Default namespace equality
+        let ns6 = Namespace::default("http://example.com").unwrap();
+        assert_eq!(ns4, ns6);
+
+        // Clone should produce an equal Namespace (same Arc pointer)
+        let ns1_clone = ns1.clone();
+        assert_eq!(ns1, ns1_clone);
+        // They should be equal, and their internal Arc pointers should be the same
+        let arc1: *const _ = &*ns1.data;
+        let arc1_clone: *const _ = &*ns1_clone.data;
+        assert_eq!(
+            arc1, arc1_clone,
+            "Cloned Namespace should share the same Arc pointer"
+        );
+
+        // But two independently created identical Namespaces should not share the same Arc pointer
+        let arc2: *const _ = &*ns2.data;
+        assert_ne!(
+            arc1, arc2,
+            "New Namespace with same data should not share Arc pointer"
         );
     }
 }

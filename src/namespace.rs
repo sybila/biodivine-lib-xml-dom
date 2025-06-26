@@ -51,6 +51,10 @@ impl Namespace {
             }
         }
         // URI must not be empty
+        // Note: Based on XML spec 1.0, empty URI is technically valid,
+        // but it has no meaning. In 1.1, a meaning was given to it (it
+        // "cancels" the previous namespace declaration), but the 1.1 spec
+        // is not widely adopted.
         if uri.is_empty() {
             return Err(XmlError::NamespaceError(
                 "Namespace URI must not be empty".to_string(),

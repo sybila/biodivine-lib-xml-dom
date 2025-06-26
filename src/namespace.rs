@@ -3,12 +3,16 @@ use std::sync::Arc;
 
 /// Represents an XML namespace with URI and optional prefix.
 ///
+/// [`Namespace`] is immutable and thread-safe by design. The namespace data is shared
+/// behind an `Arc` pointer, so copying namespaces should be relatively cheap. Just make
+/// sure to prefer cloning existing namespaces instead of creating new ones to reduce memory
+/// usage as much as possible.
+///
 /// # Conditions for a valid namespace:
 /// - The URI must not be empty.
 /// - The prefix, if present, must not be empty and must not contain a colon (`:`).
 /// - *Other validation rules may be added in the future (e.g., that URI is actually a valid URI).*
 ///
-/// Use the provided constructors and setter methods to ensure validity.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Namespace {
     data: Arc<NamespaceData>,

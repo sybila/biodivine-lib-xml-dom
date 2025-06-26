@@ -8,11 +8,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n1. Creating XML programmatically:");
     let doc = create_document();
 
-    let html_ns = Namespace::prefixed(
-        "http://www.w3.org/1999/xhtml".to_string(),
-        "html".to_string(),
-    )
-    .unwrap();
+    let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
     let root = doc.create_element_with_namespace("html".to_string(), html_ns);
 
     // Declare namespaces on the root element
@@ -38,8 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     body.add_child_element(p)?;
     root.add_child_element(body.clone())?;
 
-    let svg_ns =
-        Namespace::prefixed("http://www.w3.org/2000/svg".to_string(), "svg".to_string()).unwrap();
+    let svg_ns = Namespace::prefixed("http://www.w3.org/2000/svg", "svg").unwrap();
     let svg = doc.create_element_with_namespace("svg".to_string(), svg_ns);
     svg.add_attribute(Attribute::new("width".to_string(), "100".to_string()));
     svg.add_attribute(Attribute::new("height".to_string(), "100".to_string()));

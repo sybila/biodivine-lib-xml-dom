@@ -166,7 +166,7 @@ fn resolve_element_namespace(
             // Create a new element with the resolved namespace
             let namespaced_element = doc.create_element_with_namespace(
                 local_name,
-                Namespace::prefixed(uri, prefix.to_string()).unwrap(),
+                Namespace::prefixed(uri, prefix).unwrap(),
             );
 
             // Copy namespace declarations and attributes
@@ -293,7 +293,7 @@ fn resolve_attribute_namespaces(element: &Element) {
                 updated_attrs.push(Attribute::with_namespace(
                     local_name.to_string(),
                     attr.value.clone(),
-                    Namespace::prefixed(uri, prefix.to_string()).unwrap(),
+                    Namespace::prefixed(uri, prefix).unwrap(),
                 ));
             } else {
                 updated_attrs.push(attr.clone());
@@ -354,11 +354,7 @@ mod tests {
     fn test_write_created_document() {
         let doc = create_document();
 
-        let html_ns = Namespace::prefixed(
-            "http://www.w3.org/1999/xhtml".to_string(),
-            "html".to_string(),
-        )
-        .unwrap();
+        let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
         let root = doc.create_element_with_namespace("html".to_string(), html_ns);
         root.declare_namespace(
             "html".to_string(),

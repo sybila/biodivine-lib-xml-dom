@@ -15,17 +15,23 @@ impl Namespace {
     }
 
     /// Create a default namespace (no prefix), validating XML rules.
-    pub fn default(uri: String) -> Result<Self, XmlError> {
-        Self::validate(&uri, None)?;
-        Ok(Self { uri, prefix: None })
+    pub fn default<U: AsRef<str>>(uri: U) -> Result<Self, XmlError> {
+        let uri_str = uri.as_ref();
+        Self::validate(uri_str, None)?;
+        Ok(Self {
+            uri: uri_str.to_string(),
+            prefix: None,
+        })
     }
 
     /// Create a prefixed namespace, validating XML rules.
-    pub fn prefixed(uri: String, prefix: String) -> Result<Self, XmlError> {
-        Self::validate(&uri, Some(&prefix))?;
+    pub fn prefixed<U: AsRef<str>, P: AsRef<str>>(uri: U, prefix: P) -> Result<Self, XmlError> {
+        let uri_str = uri.as_ref();
+        let prefix_str = prefix.as_ref();
+        Self::validate(uri_str, Some(prefix_str))?;
         Ok(Self {
-            uri,
-            prefix: Some(prefix),
+            uri: uri_str.to_string(),
+            prefix: Some(prefix_str.to_string()),
         })
     }
 
@@ -63,8 +69,7 @@ mod tests {
     #[test]
     fn test_namespace_support() {
         let doc = Document::new();
-        let namespace =
-            Namespace::prefixed("http://example.com".to_string(), "ex".to_string()).unwrap();
+        let namespace = Namespace::prefixed("http://example.com", "ex").unwrap();
         let element = doc.create_element_with_namespace("test".to_string(), namespace.clone());
 
         assert_eq!(element.name(), "test");
@@ -75,19 +80,17 @@ mod tests {
     #[test]
     fn test_namespace_validation() {
         // Valid namespace
-        assert!(Namespace::prefixed("http://example.com".to_string(), "ex".to_string()).is_ok());
+        assert!(Namespace::prefixed("http://example.com", "ex").is_ok());
         // Prefix with colon
-        assert!(
-            Namespace::prefixed("http://example.com".to_string(), "ex:bad".to_string()).is_err()
-        );
+        assert!(Namespace::prefixed("http://example.com", "ex:bad").is_err());
         // Empty prefix
-        assert!(Namespace::prefixed("http://example.com".to_string(), "".to_string()).is_err());
+        assert!(Namespace::prefixed("http://example.com", "").is_err());
         // Empty URI
-        assert!(Namespace::prefixed("".to_string(), "ex".to_string()).is_err());
+        assert!(Namespace::prefixed("", "ex").is_err());
         // Default namespace with empty URI
-        assert!(Namespace::default("".to_string()).is_err());
+        assert!(Namespace::default("").is_err());
         // Default namespace with valid URI
-        assert!(Namespace::default("http://example.com".to_string()).is_ok());
+        assert!(Namespace::default("http://example.com").is_ok());
         // New with None prefix
         assert!(Namespace::new("http://example.com".to_string(), None).is_ok());
         // New with Some valid prefix

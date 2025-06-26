@@ -115,7 +115,7 @@ impl Element {
             let local_name = &qualified_name[colon_pos + 1..];
 
             if let Some(uri) = self.get_namespace_uri(prefix) {
-                let namespace = Namespace::prefixed(uri, prefix.to_string()).unwrap();
+                let namespace = Namespace::prefixed(uri, prefix).unwrap();
                 Ok((local_name.to_string(), Some(namespace)))
             } else {
                 Err(XmlError::NamespaceError(format!(

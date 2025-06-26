@@ -20,7 +20,7 @@
 //!
 //! // Create a new document and elements in a single block
 //! let doc = create_document();
-//! let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml".to_string(), "html".to_string()).unwrap();
+//! let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
 //! let root = doc.create_element_with_namespace("html".to_string(), html_ns);
 //! root.declare_namespace("html".to_string(), "http://www.w3.org/1999/xhtml".to_string());
 //! doc.set_root(root.clone()).unwrap();

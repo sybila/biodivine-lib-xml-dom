@@ -73,7 +73,7 @@ impl Element {
     pub fn qualified_name(&self) -> String {
         let inner = self.0.read();
         if let Some(ref ns) = inner.namespace {
-            if let Some(ref prefix) = ns.prefix {
+            if let Some(prefix) = ns.prefix() {
                 format!("{}:{}", prefix, inner.name)
             } else {
                 inner.name.clone()
@@ -163,7 +163,7 @@ impl Element {
             .iter()
             .find(|attr| {
                 if let Some(ref ns) = attr.namespace {
-                    if let Some(ref prefix) = ns.prefix {
+                    if let Some(prefix) = ns.prefix() {
                         format!("{}:{}", prefix, attr.name) == qualified_name
                     } else {
                         attr.name == qualified_name

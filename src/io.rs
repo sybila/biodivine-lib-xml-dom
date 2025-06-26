@@ -229,7 +229,7 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
     }
     for attr in element.attributes() {
         if let Some(ns) = &attr.namespace {
-            if let Some(prefix) = &ns.prefix {
+            if let Some(prefix) = ns.prefix() {
                 attrs.push((format!("{}:{}", prefix, attr.name), attr.value.clone()));
             } else {
                 attrs.push((attr.name.clone(), attr.value.clone()));
@@ -344,7 +344,7 @@ mod tests {
         assert_eq!(root.name(), "html");
         assert!(root.namespace().is_some());
         assert_eq!(
-            root.namespace().unwrap().uri,
+            root.namespace().unwrap().uri(),
             "http://www.w3.org/1999/xhtml"
         );
         assert_eq!(root.qualified_name(), "html:html");
@@ -488,13 +488,10 @@ mod tests {
             .expect("Missing namespaced attribute");
         assert_eq!(ns_attr.value, "value");
         assert_eq!(
-            ns_attr.namespace.as_ref().unwrap().uri,
+            ns_attr.namespace.as_ref().unwrap().uri(),
             "http://example.com"
         );
-        assert_eq!(
-            ns_attr.namespace.as_ref().unwrap().prefix.as_deref(),
-            Some("ex")
-        );
+        assert_eq!(ns_attr.namespace.as_ref().unwrap().prefix(), Some("ex"));
         // Find the non-namespaced attribute
         let attr2 = attrs
             .iter()
@@ -513,13 +510,10 @@ mod tests {
             .expect("Missing namespaced attribute after round-trip");
         assert_eq!(ns_attr2.value, "value");
         assert_eq!(
-            ns_attr2.namespace.as_ref().unwrap().uri,
+            ns_attr2.namespace.as_ref().unwrap().uri(),
             "http://example.com"
         );
-        assert_eq!(
-            ns_attr2.namespace.as_ref().unwrap().prefix.as_deref(),
-            Some("ex")
-        );
+        assert_eq!(ns_attr2.namespace.as_ref().unwrap().prefix(), Some("ex"));
     }
 
     #[test]
@@ -537,13 +531,10 @@ mod tests {
             .expect("Missing namespaced attribute");
         assert_eq!(ns_attr.value, "value");
         assert_eq!(
-            ns_attr.namespace.as_ref().unwrap().uri,
+            ns_attr.namespace.as_ref().unwrap().uri(),
             "http://example.com"
         );
-        assert_eq!(
-            ns_attr.namespace.as_ref().unwrap().prefix.as_deref(),
-            Some("ex")
-        );
+        assert_eq!(ns_attr.namespace.as_ref().unwrap().prefix(), Some("ex"));
         // Find the non-namespaced attribute
         let attr2 = attrs
             .iter()
@@ -563,12 +554,9 @@ mod tests {
             .expect("Missing namespaced attribute after round-trip");
         assert_eq!(ns_attr2.value, "value");
         assert_eq!(
-            ns_attr2.namespace.as_ref().unwrap().uri,
+            ns_attr2.namespace.as_ref().unwrap().uri(),
             "http://example.com"
         );
-        assert_eq!(
-            ns_attr2.namespace.as_ref().unwrap().prefix.as_deref(),
-            Some("ex")
-        );
+        assert_eq!(ns_attr2.namespace.as_ref().unwrap().prefix(), Some("ex"));
     }
 }

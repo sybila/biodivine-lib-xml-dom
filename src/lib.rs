@@ -159,7 +159,7 @@ mod tests {
 
         let (local_name, namespace) = root.resolve_qualified_name("ex:test").unwrap();
         assert_eq!(local_name, "test");
-        assert_eq!(namespace.unwrap().uri, "http://example.com");
+        assert_eq!(namespace.unwrap().uri(), "http://example.com");
     }
 
     #[test]

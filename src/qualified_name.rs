@@ -4,7 +4,7 @@ use crate::namespace::Namespace;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
-/// Represents a qualified XML name (local name + optional namespace).
+/// Represents a qualified XML name (local name plus optional namespace).
 ///
 /// Used for both element and attribute names. A qualified name consists of a local name
 /// and an optional namespace. The namespace, if present, is represented by a [`Namespace`].
@@ -178,7 +178,7 @@ impl QualifiedName {
         }
     }
 
-    /// Returns the qualified name as a string (e.g., "prefix:local_name" or just "local_name").
+    /// Returns the qualified name as a string (e.g., `prefix:local_name` or just `local_name`).
     ///
     /// # Examples
     /// ```rust

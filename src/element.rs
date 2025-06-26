@@ -56,7 +56,7 @@ impl Element {
 
     pub fn qualified_name(&self) -> String {
         let inner = self.0.read();
-        if let Some(ref ns) = inner.qualified_name.namespace() {
+        if let Some(ns) = inner.qualified_name.namespace() {
             if let Some(prefix) = ns.prefix() {
                 format!("{}:{}", prefix, inner.qualified_name.name())
             } else {

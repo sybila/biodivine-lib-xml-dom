@@ -15,7 +15,7 @@ pub enum XmlNode {
 
 /// Internal representation of an XML element node
 #[derive(Debug)]
-pub(crate) struct InternalElement {
+pub(crate) struct ElementData {
     /// The ID of the internal document this element belongs to
     pub document: Document,
     /// Element qualified name (local name + namespace)
@@ -31,12 +31,12 @@ pub(crate) struct InternalElement {
 }
 
 #[derive(Debug, Clone)]
-pub struct Element(Arc<RwLock<InternalElement>>);
+pub struct Element(Arc<RwLock<ElementData>>);
 
 impl Element {
     /// Create a new element in the given document with a qualified name
     pub(crate) fn new(document: Document, qualified_name: QualifiedName) -> Self {
-        Self(Arc::new(RwLock::new(InternalElement {
+        Self(Arc::new(RwLock::new(ElementData {
             document,
             qualified_name,
             attributes: BTreeMap::new(),

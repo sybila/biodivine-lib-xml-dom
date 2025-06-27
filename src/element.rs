@@ -56,15 +56,7 @@ impl Element {
 
     pub fn qualified_name(&self) -> String {
         let inner = self.0.read();
-        if let Some(ns) = inner.qualified_name.namespace() {
-            if let Some(prefix) = ns.prefix() {
-                format!("{}:{}", prefix, inner.qualified_name.name())
-            } else {
-                inner.qualified_name.name().to_string()
-            }
-        } else {
-            inner.qualified_name.name().to_string()
-        }
+        inner.qualified_name.to_qualified_name_string()
     }
 
     pub fn declare_namespace(&self, prefix: String, uri: String) {

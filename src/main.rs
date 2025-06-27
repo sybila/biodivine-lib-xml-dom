@@ -14,11 +14,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns).unwrap());
 
     // Declare namespaces on the root element
-    root.declare_namespace(
-        "html".to_string(),
-        "http://www.w3.org/1999/xhtml".to_string(),
-    );
-    root.declare_namespace("svg".to_string(), "http://www.w3.org/2000/svg".to_string());
+    root.declare_namespace("html".to_string(), html_ns.clone());
+    let svg_ns = Namespace::prefixed("http://www.w3.org/2000/svg", "svg").unwrap();
+    root.declare_namespace("svg".to_string(), svg_ns.clone());
 
     doc.set_root(root.clone())?;
 
@@ -42,7 +40,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     body.add_child_element(p)?;
     root.add_child_element(body.clone())?;
 
-    let svg_ns = Namespace::prefixed("http://www.w3.org/2000/svg", "svg").unwrap();
     let svg = doc.create_element(QualifiedName::with_namespace("svg", &svg_ns).unwrap());
     svg.add_attribute(
         QualifiedName::without_namespace("width").unwrap(),

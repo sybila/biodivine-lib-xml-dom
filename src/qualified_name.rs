@@ -105,10 +105,10 @@ impl QualifiedName {
     ///
     /// # Examples
     /// ```rust
-    /// use biodivine_lib_xml_dom::{Document, QualifiedName};
+    /// use biodivine_lib_xml_dom::{Document, QualifiedName, Namespace};
     /// let doc = Document::new();
     /// let el = doc.create_element(QualifiedName::without_namespace("foo").unwrap());
-    /// el.declare_default_namespace("http://default.com".to_string());
+    /// el.declare_default_namespace(Namespace::default("http://default.com").unwrap());
     /// let qn = QualifiedName::resolve(&el, "bar").unwrap();
     /// assert_eq!(qn.name(), "bar");
     /// assert_eq!(qn.namespace().unwrap().uri(), "http://default.com");
@@ -117,10 +117,8 @@ impl QualifiedName {
         if let Some(colon_pos) = qualified_name.find(':') {
             let prefix = &qualified_name[..colon_pos];
             let local_name = &qualified_name[colon_pos + 1..];
-            let uri = element.get_namespace_uri(prefix);
-            if let Some(uri) = uri {
-                let ns = Namespace::prefixed(uri, prefix)
-                    .map_err(|e| XmlError::NamespaceError(e.to_string()))?;
+            let ns = element.get_namespace(prefix);
+            if let Some(ns) = ns {
                 QualifiedName::new(local_name, Some(ns))
             } else {
                 Err(XmlError::NamespaceError(format!(
@@ -129,10 +127,8 @@ impl QualifiedName {
                 )))
             }
         } else {
-            let uri = element.get_namespace_uri("");
-            if let Some(uri) = uri {
-                let ns =
-                    Namespace::default(uri).map_err(|e| XmlError::NamespaceError(e.to_string()))?;
+            let ns = element.get_namespace("");
+            if let Some(ns) = ns {
                 QualifiedName::new(qualified_name, Some(ns))
             } else {
                 QualifiedName::new(qualified_name, None)
@@ -319,7 +315,7 @@ mod tests {
     fn test_resolve_no_prefix() {
         let doc = Document::new();
         let el = doc.create_element(q_name("foo").unwrap());
-        el.declare_default_namespace("http://default.com".to_string());
+        el.declare_default_namespace(Namespace::default("http://default.com").unwrap());
         let qn = QualifiedName::resolve(&el, "bar").unwrap();
         assert_eq!(qn.name(), "bar");
         assert_eq!(qn.namespace().unwrap().uri(), "http://default.com");
@@ -329,7 +325,10 @@ mod tests {
     fn test_resolve_with_prefix() {
         let doc = Document::new();
         let el = doc.create_element(q_name("foo").unwrap());
-        el.declare_namespace("ex".to_string(), "http://example.com".to_string());
+        el.declare_namespace(
+            "ex".to_string(),
+            Namespace::prefixed("http://example.com", "ex").unwrap(),
+        );
         let qn = QualifiedName::resolve(&el, "ex:bar").unwrap();
         assert_eq!(qn.name(), "bar");
         assert_eq!(qn.namespace().as_ref().unwrap().uri(), "http://example.com");
@@ -341,7 +340,10 @@ mod tests {
         // Test that a namespace declared on a parent element is used for resolution.
         let doc = Document::new();
         let parent = doc.create_element(q_name("parent").unwrap());
-        parent.declare_namespace("ex".to_string(), "http://parent.com".to_string());
+        parent.declare_namespace(
+            "ex".to_string(),
+            Namespace::prefixed("http://parent.com", "ex").unwrap(),
+        );
         let child = doc.create_element(q_name("child").unwrap());
         // Attach child to parent
         parent.add_child_element(child.clone()).unwrap();

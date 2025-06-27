@@ -9,6 +9,7 @@ use std::path::Path;
 use crate::document::Document;
 use crate::element::Element;
 use crate::error::{XmlError, XmlResult};
+use crate::Namespace;
 use crate::QualifiedName;
 
 /// Parse XML from a file
@@ -128,9 +129,9 @@ fn parse_element(
     let namespace_declarations = extract_namespace_declarations(e)?;
     for (prefix, uri) in namespace_declarations {
         if prefix.is_empty() {
-            element.declare_default_namespace(uri);
+            element.declare_default_namespace(Namespace::default(&uri).unwrap());
         } else {
-            element.declare_namespace(prefix, uri);
+            element.declare_namespace(prefix.clone(), Namespace::prefixed(&uri, &prefix).unwrap());
         }
     }
     // 6. Add all attributes, resolving their qualified names using the provided ns_map
@@ -210,11 +211,11 @@ pub fn write_writer<W: Write>(doc: &Document, writer: W) -> XmlResult<()> {
 /// Write a single element and its children
 fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResult<()> {
     let mut attrs = Vec::new();
-    for (prefix, uri) in element.namespace_declarations() {
+    for (prefix, ns) in element.namespace_declarations() {
         if prefix.is_empty() {
-            attrs.push(("xmlns".to_string(), uri));
+            attrs.push(("xmlns".to_string(), ns.uri().to_string()));
         } else {
-            attrs.push((format!("xmlns:{}", prefix), uri));
+            attrs.push((format!("xmlns:{}", prefix), ns.uri().to_string()));
         }
     }
     for (qname, value) in element.attributes().iter() {
@@ -305,10 +306,7 @@ mod tests {
 
         let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
         let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns).unwrap());
-        root.declare_namespace(
-            "html".to_string(),
-            "http://www.w3.org/1999/xhtml".to_string(),
-        );
+        root.declare_namespace("html".to_string(), html_ns.clone());
         doc.set_root(root.clone()).unwrap();
 
         let head = doc.create_element(QualifiedName::without_namespace("head").unwrap());
@@ -355,45 +353,45 @@ mod tests {
         assert_eq!(root.name(), "root");
         assert_eq!(
             root.namespace_declarations().get("default"),
-            Some(&"http://default.com".to_string())
+            Some(&Namespace::prefixed("http://default.com", "default").unwrap())
         );
 
         let first_child = root.element_children()[0].clone();
         assert_eq!(
-            first_child.get_namespace_uri("ex"),
-            Some("http://example.com".to_string())
+            first_child.get_namespace("ex"),
+            Some(Namespace::prefixed("http://example.com", "ex").unwrap())
         );
 
         let nested = first_child.element_children()[1].clone();
         assert_eq!(
-            nested.get_namespace_uri("ex"),
-            Some("http://example-another.com".to_string())
+            nested.get_namespace("ex"),
+            Some(Namespace::prefixed("http://example-another.com", "ex").unwrap())
         );
 
         let deep = nested.element_children()[1].clone();
         assert_eq!(
-            deep.get_namespace_uri("ex"),
-            Some("http://example-third.com".to_string())
+            deep.get_namespace("ex"),
+            Some(Namespace::prefixed("http://example-third.com", "ex").unwrap())
         );
 
         let back_to_original = first_child.element_children()[2].clone();
         assert_eq!(
-            back_to_original.get_namespace_uri("ex"),
-            Some("http://example.com".to_string())
+            back_to_original.get_namespace("ex"),
+            Some(Namespace::prefixed("http://example.com", "ex").unwrap())
         );
 
         let second_child = root.element_children()[1].clone();
         assert_eq!(
-            second_child.get_namespace_uri("ex"),
-            Some("http://example-another.com".to_string())
+            second_child.get_namespace("ex"),
+            Some(Namespace::prefixed("http://example-another.com", "ex").unwrap())
         );
 
         let output = write_string(&doc).unwrap();
         let doc2 = parse_string(&output).unwrap();
         let root2 = doc2.root().unwrap();
         assert_eq!(
-            root2.get_namespace_uri("default"),
-            Some("http://default.com".to_string())
+            root2.get_namespace("default"),
+            Some(Namespace::prefixed("http://default.com", "default").unwrap())
         );
     }
 

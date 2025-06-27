@@ -1,5 +1,5 @@
 use parking_lot::RwLock;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::document::Document;
@@ -26,8 +26,8 @@ pub(crate) struct ElementData {
     pub children: Vec<XmlNode>,
     /// Parent element (None if root or detached)
     pub parent: Option<Element>,
-    /// Namespace declarations on this element (prefix -> URI)
-    pub namespace_declarations: HashMap<String, String>,
+    /// Namespace declarations on this element (prefix -> Namespace)
+    pub namespace_declarations: BTreeMap<String, Namespace>,
 }
 
 #[derive(Debug, Clone)]
@@ -42,7 +42,7 @@ impl Element {
             attributes: BTreeMap::new(),
             children: Vec::new(),
             parent: None,
-            namespace_declarations: HashMap::new(),
+            namespace_declarations: BTreeMap::new(),
         })))
     }
 
@@ -59,24 +59,27 @@ impl Element {
         inner.qualified_name.to_qualified_name_string()
     }
 
-    pub fn declare_namespace(&self, prefix: String, uri: String) {
-        self.0.write().namespace_declarations.insert(prefix, uri);
-    }
-
-    pub fn declare_default_namespace(&self, uri: String) {
+    pub fn declare_namespace(&self, prefix: String, namespace: Namespace) {
         self.0
             .write()
             .namespace_declarations
-            .insert("".to_string(), uri);
+            .insert(prefix, namespace);
     }
 
-    pub fn get_namespace_uri(&self, prefix: &str) -> Option<String> {
+    pub fn declare_default_namespace(&self, namespace: Namespace) {
+        self.0
+            .write()
+            .namespace_declarations
+            .insert("".to_string(), namespace);
+    }
+
+    pub fn get_namespace(&self, prefix: &str) -> Option<Namespace> {
         let inner = self.0.read();
-        if let Some(uri) = inner.namespace_declarations.get(prefix) {
-            return Some(uri.clone());
+        if let Some(ns) = inner.namespace_declarations.get(prefix) {
+            return Some(ns.clone());
         }
         if let Some(parent) = &inner.parent {
-            parent.get_namespace_uri(prefix)
+            parent.get_namespace(prefix)
         } else {
             None
         }
@@ -92,7 +95,7 @@ impl Element {
         }
     }
 
-    pub fn namespace_declarations(&self) -> HashMap<String, String> {
+    pub fn namespace_declarations(&self) -> BTreeMap<String, Namespace> {
         self.0.read().namespace_declarations.clone()
     }
 

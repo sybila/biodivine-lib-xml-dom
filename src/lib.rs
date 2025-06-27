@@ -22,7 +22,7 @@
 //! let doc = create_document();
 //! let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
 //! let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns).unwrap());
-//! root.declare_namespace("html".to_string(), "http://www.w3.org/1999/xhtml".to_string());
+//! root.declare_namespace("html".to_string(), html_ns.clone());
 //! doc.set_root(root.clone()).unwrap();
 //! let body = doc.create_element(QualifiedName::without_namespace("body").unwrap());
 //! body.add_attribute(QualifiedName::without_namespace("class").unwrap(), "main".to_string());
@@ -129,11 +129,14 @@ mod tests {
     fn test_namespace_declaration() {
         let doc = create_document();
         let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
-        root.declare_namespace("ex".to_string(), "http://example.com".to_string());
+        root.declare_namespace(
+            "ex".to_string(),
+            Namespace::prefixed("http://example.com", "ex").unwrap(),
+        );
 
         assert_eq!(
-            root.get_namespace_uri("ex"),
-            Some("http://example.com".to_string())
+            root.get_namespace("ex"),
+            Some(Namespace::prefixed("http://example.com", "ex").unwrap())
         );
     }
 
@@ -141,7 +144,10 @@ mod tests {
     fn test_qualified_name_resolution() {
         let doc = create_document();
         let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
-        root.declare_namespace("ex".to_string(), "http://example.com".to_string());
+        root.declare_namespace(
+            "ex".to_string(),
+            Namespace::prefixed("http://example.com", "ex").unwrap(),
+        );
 
         let (local_name, namespace) = root.resolve_qualified_name("ex:test").unwrap();
         assert_eq!(local_name, "test");

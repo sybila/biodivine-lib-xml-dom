@@ -181,11 +181,11 @@ impl QualifiedName {
     /// use biodivine_lib_xml_dom::{Namespace, QualifiedName};
     /// let ns = Namespace::prefixed("http://example.com", "ex").unwrap();
     /// let qn = QualifiedName::with_namespace("foo", &ns).unwrap();
-    /// assert_eq!(qn.to_qualified_name_string(), "ex:foo");
+    /// assert_eq!(qn.qualified_name_string(), "ex:foo");
     /// let qn2 = QualifiedName::without_namespace("bar").unwrap();
-    /// assert_eq!(qn2.to_qualified_name_string(), "bar");
+    /// assert_eq!(qn2.qualified_name_string(), "bar");
     /// ```
-    pub fn to_qualified_name_string(&self) -> String {
+    pub fn qualified_name_string(&self) -> String {
         if let Some(ns) = self.namespace() {
             if let Some(prefix) = ns.prefix() {
                 format!("{}:{}", prefix, self.name())

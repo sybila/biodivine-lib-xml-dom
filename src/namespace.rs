@@ -187,7 +187,7 @@ mod tests {
 
         assert_eq!(element.name(), "test");
         assert_eq!(element.namespace(), Some(namespace));
-        assert_eq!(element.qualified_name(), "ex:test");
+        assert_eq!(element.qualified_name().qualified_name_string(), "ex:test");
     }
 
     #[test]

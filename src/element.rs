@@ -54,9 +54,8 @@ impl Element {
         self.0.read().qualified_name.namespace().cloned()
     }
 
-    pub fn qualified_name(&self) -> String {
-        let inner = self.0.read();
-        inner.qualified_name.to_qualified_name_string()
+    pub fn qualified_name(&self) -> QualifiedName {
+        self.0.read().qualified_name.clone()
     }
 
     pub fn declare_namespace(&self, prefix: String, namespace: Namespace) {

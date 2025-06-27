@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use crate::document::Document;
-use crate::error::{XmlError, XmlResult};
+use crate::error::XmlResult;
 use crate::namespace::Namespace;
 use crate::QualifiedName;
 
@@ -86,24 +86,9 @@ impl Element {
         &self,
         qualified_name: &str,
     ) -> XmlResult<(String, Option<Namespace>)> {
-        if let Some(colon_pos) = qualified_name.find(':') {
-            let prefix = &qualified_name[..colon_pos];
-            let local_name = &qualified_name[colon_pos + 1..];
-
-            if let Some(uri) = self.get_namespace_uri(prefix) {
-                let namespace = Namespace::prefixed(uri, prefix).unwrap();
-                Ok((local_name.to_string(), Some(namespace)))
-            } else {
-                Err(XmlError::NamespaceError(format!(
-                    "Undefined namespace prefix: {}",
-                    prefix
-                )))
-            }
-        } else if let Some(uri) = self.get_namespace_uri("") {
-            let namespace = Namespace::default(uri).unwrap();
-            Ok((qualified_name.to_string(), Some(namespace)))
-        } else {
-            Ok((qualified_name.to_string(), None))
+        match QualifiedName::resolve(self, qualified_name) {
+            Ok(qname) => Ok((qname.name().to_string(), qname.namespace().cloned())),
+            Err(e) => Err(e),
         }
     }
 

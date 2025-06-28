@@ -10,6 +10,7 @@
 //! - **Memory Management**: Reference counting for automatic cleanup
 //! - **Parsing & Writing**: Parse from files/strings and write back to XML
 //! - **Element Manipulation**: Create, modify, and traverse XML elements
+//! - **Comment Support**: Full support for XML comments in parsing and serialization
 //!
 //! # Examples
 //!
@@ -44,9 +45,30 @@
 //! assert_eq!(root.name(), "root");
 //! ```
 //!
-//! ## Writing XML
+//! ## Working with Comments
 //!
 //! ```rust
+//! use biodivine_lib_xml_dom::{create_document, write_string, QualifiedName, parse_string};
+//!
+//! let doc = create_document();
+//! let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
+//! doc.set_root(root.clone()).unwrap();
+//!
+//! // Add comments to elements
+//! root.add_comment(" This is a comment ".to_string());
+//! root.add_text("Some content".to_string());
+//!
+//! // Parse XML with comments
+//! let xml_with_comments = r#"<root><!-- Comment --><child>Content</child></root>"#;
+//! let parsed_doc = parse_string(xml_with_comments).unwrap();
+//! let parsed_root = parsed_doc.root().unwrap();
+//! let comments = parsed_root.comment_children();
+//! assert_eq!(comments.len(), 1);
+//! ```
+//!
+//! ## Writing XML
+//!
+//! ```
 //!
 //! use biodivine_lib_xml_dom::{create_document, write_string};
 //! let doc = create_document();
@@ -120,7 +142,8 @@ mod tests {
         assert_eq!(children.len(), 1);
         match &children[0] {
             crate::element::XmlNode::Element(e) => assert_eq!(e.name(), "child"),
-            _ => panic!("Expected element child"),
+            crate::element::XmlNode::Text(_) => panic!("Expected element child, got text"),
+            crate::element::XmlNode::Comment(_) => panic!("Expected element child, got comment"),
         }
         assert!(child.is_attached());
     }

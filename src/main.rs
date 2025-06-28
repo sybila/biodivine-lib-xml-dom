@@ -100,30 +100,76 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let books: Vec<_> = root.element_children();
     println!("Number of books: {}", books.len());
 
-    for (i, book) in books.iter().enumerate() {
-        let category = book
-            .get_attribute(&QualifiedName::without_namespace("category").unwrap())
-            .ok_or("Book element missing 'category' attribute")?;
-        println!("Book {}: {}", i + 1, category);
-        let titles: Vec<_> = book
-            .element_children()
-            .into_iter()
-            .filter(|e| e.name() == "title")
-            .collect();
-        if let Some(title) = titles.first() {
-            let text = title.text_children().join("");
-            println!("  Title: {}", text);
-        }
+    for book in books {
+        println!("  - Book: {}", book.name());
+        let children = book.element_children();
+        let title = children.iter().find(|e| e.name() == "title").unwrap();
+        println!("    Title: {}", title.text_children().join(""));
     }
 
-    // Example 3: Round-trip test
-    println!("\n3. Round-trip test (parse -> modify -> write):");
-    let round_trip_xml = write_string(&parsed_doc)?;
-    let round_trip_doc = parse_string(&round_trip_xml)?;
-    println!(
-        "Round-trip XML root: {}",
-        round_trip_doc.root().unwrap().name()
-    );
+    // Example 3: Working with comments
+    println!("\n3. Working with XML comments:");
+    let xml_with_comments = r#"<?xml version="1.0" encoding="UTF-8"?>
+<document>
+    <!-- This is a header comment -->
+    <header>
+        <title>My Document</title>
+        <!-- Author information -->
+        <author>John Doe</author>
+    </header>
+    <!-- Main content section -->
+    <content>
+        <p>This is the main content.</p>
+        <!-- TODO: Add more content here -->
+    </content>
+</document>"#;
+
+    let comment_doc = parse_string(xml_with_comments)?;
+    let comment_root = comment_doc.root().unwrap();
+
+    println!("Parsed document with comments:");
+    println!("Root element: {}", comment_root.name());
+
+    // Get all comments
+    let comments = comment_root.comment_children();
+    println!("Comments in root: {:?}", comments);
+
+    // Get comments from child elements
+    let header_children = comment_root.element_children();
+    let header = header_children
+        .iter()
+        .find(|e| e.name() == "header")
+        .unwrap();
+    let header_comments = header.comment_children();
+    println!("Comments in header: {:?}", header_comments);
+
+    let content_children = comment_root.element_children();
+    let content = content_children
+        .iter()
+        .find(|e| e.name() == "content")
+        .unwrap();
+    let content_comments = content.comment_children();
+    println!("Comments in content: {:?}", content_comments);
+
+    // Create a new document with comments
+    println!("\n4. Creating document with comments:");
+    let new_doc = create_document();
+    let new_root = new_doc.create_element(QualifiedName::without_namespace("root").unwrap());
+    new_doc.set_root(new_root.clone())?;
+
+    new_root.add_comment(" This is a programmatically added comment ".to_string());
+    new_root.add_text("Some text content".to_string());
+
+    let child = new_doc.create_element(QualifiedName::without_namespace("child").unwrap());
+    child.add_comment(" Comment inside child element ".to_string());
+    child.add_text("Child content".to_string());
+    new_root.add_child_element(child)?;
+
+    new_root.add_comment(" Final comment ".to_string());
+
+    let new_xml = write_string(&new_doc)?;
+    println!("Generated XML with comments:");
+    println!("{}", new_xml);
 
     Ok(())
 }

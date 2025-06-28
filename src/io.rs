@@ -69,7 +69,14 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                 }
             }
             Ok(Event::Eof) => break,
-            Ok(Event::Comment(_)) => {}
+            Ok(Event::Comment(e)) => {
+                if let Some(current) = stack.last() {
+                    let comment = std::str::from_utf8(&e).map_err(|e| {
+                        XmlError::InvalidXml(format!("Invalid UTF-8 in comment: {}", e))
+                    })?;
+                    current.add_comment(comment.to_string());
+                }
+            }
             Ok(Event::Decl(_)) => {}
             Ok(Event::PI(_)) => {}
             Ok(Event::CData(e)) => {
@@ -247,6 +254,10 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
                     writer.write_event(Event::Text(text_event))?;
                 }
             }
+            crate::element::XmlNode::Comment(ref comment) => {
+                let comment_event = BytesText::new(comment);
+                writer.write_event(Event::Comment(comment_event))?;
+            }
         }
     }
     let end = BytesEnd::new(element.name());
@@ -407,6 +418,7 @@ mod tests {
             match node {
                 crate::element::XmlNode::Text(t) => actual.push(format!("text:{:?}", t)),
                 crate::element::XmlNode::Element(e) => actual.push(format!("element:{}", e.name())),
+                crate::element::XmlNode::Comment(c) => actual.push(format!("comment:{:?}", c)),
             }
         }
         let expected = vec![
@@ -511,5 +523,64 @@ mod tests {
             ns_attr2.0.namespace().as_ref().unwrap().prefix(),
             Some("ex")
         );
+    }
+
+    #[test]
+    fn test_comment_parsing_and_serialization() {
+        let xml = r#"<root>
+            <!-- This is a comment -->
+            <child>Hello, World!</child>
+            <!-- Another comment -->
+            <child>Another child</child>
+            <!-- Final comment -->
+        </root>"#;
+
+        let doc = parse_string(xml).unwrap();
+        let root = doc.root().unwrap();
+
+        // Check that comments are parsed
+        let comments = root.comment_children();
+        assert_eq!(comments.len(), 3);
+        assert_eq!(comments[0], " This is a comment ");
+        assert_eq!(comments[1], " Another comment ");
+        assert_eq!(comments[2], " Final comment ");
+
+        // Check that elements are still parsed correctly
+        let elements = root.element_children();
+        assert_eq!(elements.len(), 2);
+        assert_eq!(elements[0].name(), "child");
+        assert_eq!(elements[1].name(), "child");
+
+        // Check round-trip serialization
+        let output = write_string(&doc).unwrap();
+        let doc2 = parse_string(&output).unwrap();
+        let root2 = doc2.root().unwrap();
+
+        let comments2 = root2.comment_children();
+        assert_eq!(comments2.len(), 3);
+        assert_eq!(comments2[0], " This is a comment ");
+        assert_eq!(comments2[1], " Another comment ");
+        assert_eq!(comments2[2], " Final comment ");
+    }
+
+    #[test]
+    fn test_comment_creation() {
+        let doc = create_document();
+        let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
+        doc.set_root(root.clone()).unwrap();
+
+        // Add comments programmatically
+        root.add_comment(" This is a test comment ".to_string());
+        root.add_comment(" Another test comment ".to_string());
+
+        let comments = root.comment_children();
+        assert_eq!(comments.len(), 2);
+        assert_eq!(comments[0], " This is a test comment ");
+        assert_eq!(comments[1], " Another test comment ");
+
+        // Test serialization
+        let output = write_string(&doc).unwrap();
+        assert!(output.contains("<!-- This is a test comment -->"));
+        assert!(output.contains("<!-- Another test comment -->"));
     }
 }

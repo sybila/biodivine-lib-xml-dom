@@ -11,12 +11,13 @@ use crate::QualifiedName;
 pub enum XmlNode {
     Element(Element),
     Text(String),
+    Comment(String),
 }
 
 /// Internal representation of an XML element node
 #[derive(Debug)]
 pub(crate) struct ElementData {
-    /// The ID of the internal document this element belongs to
+    /// Reference to the document this element belongs to
     pub document: Document,
     /// Element qualified name (local name + namespace)
     pub qualified_name: QualifiedName,
@@ -150,6 +151,10 @@ impl Element {
         self.0.write().children.push(XmlNode::Text(text));
     }
 
+    pub fn add_comment(&self, comment: String) {
+        self.0.write().children.push(XmlNode::Comment(comment));
+    }
+
     pub fn children(&self) -> Vec<XmlNode> {
         self.0.read().children.clone()
     }
@@ -177,6 +182,21 @@ impl Element {
             .filter_map(|n| {
                 if let XmlNode::Text(t) = n {
                     Some(t.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub fn comment_children(&self) -> Vec<String> {
+        self.0
+            .read()
+            .children
+            .iter()
+            .filter_map(|n| {
+                if let XmlNode::Comment(c) = n {
+                    Some(c.clone())
                 } else {
                     None
                 }

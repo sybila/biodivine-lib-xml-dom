@@ -1,0 +1,106 @@
+use parking_lot::RwLock;
+use std::sync::Arc;
+
+use crate::element::Element;
+use crate::error::{XmlError, XmlResult};
+use crate::qualified_name::QualifiedName;
+
+/// Internal document structure that handles Arc complexity
+#[derive(Debug)]
+pub(crate) struct InternalDocument {
+    /// Root element of the document
+    root: RwLock<Option<Element>>,
+    /// Next available prefix for auto-generated prefixes
+    next_prefix_id: RwLock<u32>,
+}
+
+impl InternalDocument {
+    pub(crate) fn new() -> Self {
+        Self {
+            root: RwLock::new(None),
+            next_prefix_id: RwLock::new(0),
+        }
+    }
+
+    pub(crate) fn belongs_to_document(&self, doc: &crate::document::Document) -> bool {
+        std::ptr::eq(self, &*doc.internal)
+    }
+
+    pub(crate) fn set_root(&self, root: Element) -> XmlResult<()> {
+        if !self.belongs_to_document(&root.document()) {
+            return Err(XmlError::InvalidOperation(
+                "Element belongs to a different document".to_string(),
+            ));
+        }
+        *self.root.write() = Some(root);
+        Ok(())
+    }
+
+    pub(crate) fn root(&self) -> Option<Element> {
+        self.root.read().clone()
+    }
+
+    pub(crate) fn generate_prefix(&self) -> String {
+        let mut id = self.next_prefix_id.write();
+        *id += 1;
+        format!("ns{}", id)
+    }
+}
+
+impl Clone for InternalDocument {
+    fn clone(&self) -> Self {
+        Self {
+            root: RwLock::new(self.root.read().clone()),
+            next_prefix_id: RwLock::new(*self.next_prefix_id.read()),
+        }
+    }
+}
+
+/// Public document structure that wraps the internal document
+#[derive(Debug, Clone)]
+pub struct Document {
+    pub(crate) internal: Arc<InternalDocument>,
+}
+
+impl Default for Document {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Document {
+    /// Create a new empty XML document
+    pub fn new() -> Self {
+        Self {
+            internal: Arc::new(InternalDocument::new()),
+        }
+    }
+
+    /// Set the root element
+    pub fn set_root(&self, root: Element) -> XmlResult<()> {
+        self.internal.set_root(root)
+    }
+
+    /// Get the root element
+    pub fn root(&self) -> Option<Element> {
+        self.internal.root()
+    }
+
+    /// Create a new element in this document
+    pub fn create_element(&self, qualified_name: QualifiedName) -> Element {
+        Element::new(self.clone(), qualified_name)
+    }
+
+    /// Generate a unique prefix for a namespace
+    pub fn generate_prefix(&self) -> String {
+        self.internal.generate_prefix()
+    }
+}
+
+impl PartialEq for Document {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.internal, &other.internal)
+    }
+}
+
+impl Eq for Document {}

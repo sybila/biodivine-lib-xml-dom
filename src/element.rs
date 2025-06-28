@@ -13,6 +13,7 @@ pub enum XmlNode {
     Text(String),
     Comment(String),
     CData(String),
+    ProcessingInstruction(String, String), // target, data
 }
 
 /// Internal representation of an XML element node
@@ -160,6 +161,13 @@ impl Element {
         self.0.write().children.push(XmlNode::CData(cdata));
     }
 
+    pub fn add_processing_instruction(&self, target: String, data: String) {
+        self.0
+            .write()
+            .children
+            .push(XmlNode::ProcessingInstruction(target, data));
+    }
+
     pub fn children(&self) -> Vec<XmlNode> {
         self.0.read().children.clone()
     }
@@ -217,6 +225,21 @@ impl Element {
             .filter_map(|n| {
                 if let XmlNode::CData(c) = n {
                     Some(c.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub fn processing_instruction_children(&self) -> Vec<(String, String)> {
+        self.0
+            .read()
+            .children
+            .iter()
+            .filter_map(|n| {
+                if let XmlNode::ProcessingInstruction(target, data) = n {
+                    Some((target.clone(), data.clone()))
                 } else {
                     None
                 }

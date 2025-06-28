@@ -1,6 +1,6 @@
 use quick_xml::Reader;
 use quick_xml::Writer;
-use quick_xml::events::{BytesCData, BytesEnd, BytesStart, BytesText, Event};
+use quick_xml::events::{BytesCData, BytesEnd, BytesPI, BytesStart, BytesText, Event};
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
@@ -77,7 +77,20 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                 }
             }
             Ok(Event::Decl(_)) => {}
-            Ok(Event::PI(_)) => {}
+            Ok(Event::PI(e)) => {
+                if let Some(current) = stack.last() {
+                    // In newer quick-xml, BytesPI provides target and content separately
+                    let target = std::str::from_utf8(e.target()).map_err(|e| {
+                        XmlError::InvalidXml(format!("Invalid UTF-8 in PI target: {}", e))
+                    })?;
+                    let content = std::str::from_utf8(e.content()).map_err(|e| {
+                        XmlError::InvalidXml(format!("Invalid UTF-8 in PI content: {}", e))
+                    })?;
+                    // Remove leading and trailing whitespace from content
+                    let data = content.trim();
+                    current.add_processing_instruction(target.to_string(), data.to_string());
+                }
+            }
             Ok(Event::CData(e)) => {
                 if let Some(current) = stack.last() {
                     let cdata = std::str::from_utf8(&e).map_err(|e| {
@@ -261,6 +274,15 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
                 let cdata_event = BytesCData::new(cdata);
                 writer.write_event(Event::CData(cdata_event))?;
             }
+            crate::element::XmlNode::ProcessingInstruction(ref target, ref data) => {
+                let pi_content = if data.is_empty() {
+                    target.to_string()
+                } else {
+                    format!("{} {}", target, data)
+                };
+                let pi_event = BytesPI::new(&pi_content);
+                writer.write_event(Event::PI(pi_event))?;
+            }
         }
     }
     let end = BytesEnd::new(element.name());
@@ -423,6 +445,9 @@ mod tests {
                 crate::element::XmlNode::Element(e) => actual.push(format!("element:{}", e.name())),
                 crate::element::XmlNode::Comment(c) => actual.push(format!("comment:{:?}", c)),
                 crate::element::XmlNode::CData(c) => actual.push(format!("cdata:{:?}", c)),
+                crate::element::XmlNode::ProcessingInstruction(target, data) => {
+                    actual.push(format!("pi:{:?}:{:?}", target, data))
+                }
             }
         }
         let expected = vec![
@@ -667,6 +692,9 @@ mod tests {
                 crate::element::XmlNode::Element(e) => actual.push(format!("element:{}", e.name())),
                 crate::element::XmlNode::Comment(c) => actual.push(format!("comment:{:?}", c)),
                 crate::element::XmlNode::CData(c) => actual.push(format!("cdata:{:?}", c)),
+                crate::element::XmlNode::ProcessingInstruction(target, data) => {
+                    actual.push(format!("pi:{:?}:{:?}", target, data))
+                }
             }
         }
 
@@ -680,6 +708,133 @@ mod tests {
         assert_eq!(
             actual, expected,
             "Mixed content with CDATA should be preserved"
+        );
+    }
+
+    #[test]
+    fn test_processing_instruction_parsing_and_serialization() {
+        let xml = r#"<root>
+            <?xml-stylesheet type="text/css" href="style.css"?>
+            <child>Hello, World!</child>
+            <?php echo "Hello, World!"; ?>
+            <child>Another child</child>
+            <?target data="value"?>
+        </root>"#;
+
+        let doc = parse_string(xml).unwrap();
+        let root = doc.root().unwrap();
+
+        // Check that PIs are parsed
+        let pis = root.processing_instruction_children();
+        assert_eq!(pis.len(), 3);
+        assert_eq!(
+            pis[0],
+            (
+                "xml-stylesheet".to_string(),
+                "type=\"text/css\" href=\"style.css\"".to_string()
+            )
+        );
+        assert_eq!(
+            pis[1],
+            ("php".to_string(), "echo \"Hello, World!\";".to_string())
+        );
+        assert_eq!(pis[2], ("target".to_string(), "data=\"value\"".to_string()));
+
+        // Check that elements are still parsed correctly
+        let elements = root.element_children();
+        assert_eq!(elements.len(), 2);
+        assert_eq!(elements[0].name(), "child");
+        assert_eq!(elements[1].name(), "child");
+
+        // Check round-trip serialization
+        let output = write_string(&doc).unwrap();
+        println!("{}", output);
+        let doc2 = parse_string(&output).unwrap();
+        let root2 = doc2.root().unwrap();
+
+        let pis2 = root2.processing_instruction_children();
+        assert_eq!(pis2.len(), 3);
+        assert_eq!(
+            pis2[0],
+            (
+                "xml-stylesheet".to_string(),
+                "type=\"text/css\" href=\"style.css\"".to_string()
+            )
+        );
+        assert_eq!(
+            pis2[1],
+            ("php".to_string(), "echo \"Hello, World!\";".to_string())
+        );
+        assert_eq!(
+            pis2[2],
+            ("target".to_string(), "data=\"value\"".to_string())
+        );
+    }
+
+    #[test]
+    fn test_processing_instruction_creation() {
+        let doc = create_document();
+        let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
+        doc.set_root(root.clone()).unwrap();
+
+        // Add PIs programmatically
+        root.add_processing_instruction(
+            "xml-stylesheet".to_string(),
+            "type=\"text/css\" href=\"style.css\"".to_string(),
+        );
+        root.add_processing_instruction("php".to_string(), "echo \"Hello, World!\";".to_string());
+
+        let pis = root.processing_instruction_children();
+        assert_eq!(pis.len(), 2);
+        assert_eq!(
+            pis[0],
+            (
+                "xml-stylesheet".to_string(),
+                "type=\"text/css\" href=\"style.css\"".to_string()
+            )
+        );
+        assert_eq!(
+            pis[1],
+            ("php".to_string(), "echo \"Hello, World!\";".to_string())
+        );
+
+        // Test serialization
+        let output = write_string(&doc).unwrap();
+        println!("Generated XML: {}", output);
+        assert!(output.contains("<?xml-stylesheet type=\"text/css\" href=\"style.css\"?>"));
+        assert!(output.contains("<?php echo \"Hello, World!\";?>"));
+    }
+
+    #[test]
+    fn test_mixed_content_with_processing_instructions() {
+        let xml = r#"<root>Text before <?target data?> text after <child>child content</child> more text</root>"#;
+        let doc = parse_string(xml).unwrap();
+        let root = doc.root().unwrap();
+
+        let children = root.children();
+        let mut actual: Vec<String> = vec![];
+        for node in children {
+            match node {
+                crate::element::XmlNode::Text(t) => actual.push(format!("text:{:?}", t)),
+                crate::element::XmlNode::Element(e) => actual.push(format!("element:{}", e.name())),
+                crate::element::XmlNode::Comment(c) => actual.push(format!("comment:{:?}", c)),
+                crate::element::XmlNode::CData(c) => actual.push(format!("cdata:{:?}", c)),
+                crate::element::XmlNode::ProcessingInstruction(target, data) => {
+                    actual.push(format!("pi:{:?}:{:?}", target, data))
+                }
+            }
+        }
+
+        let expected = vec![
+            "text:\"Text before \"",
+            "pi:\"target\":\"data\"",
+            "text:\" text after \"",
+            "element:child",
+            "text:\" more text\"",
+        ];
+        assert_eq!(
+            actual, expected,
+            "Mixed content with processing instructions should be preserved"
         );
     }
 }

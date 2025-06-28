@@ -144,6 +144,7 @@ mod tests {
             crate::element::XmlNode::Element(e) => assert_eq!(e.name(), "child"),
             crate::element::XmlNode::Text(_) => panic!("Expected element child, got text"),
             crate::element::XmlNode::Comment(_) => panic!("Expected element child, got comment"),
+            crate::element::XmlNode::CData(_) => panic!("Expected element child, got cdata"),
         }
         assert!(child.is_attached());
     }

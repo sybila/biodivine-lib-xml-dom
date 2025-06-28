@@ -12,6 +12,7 @@ pub enum XmlNode {
     Element(Element),
     Text(String),
     Comment(String),
+    CData(String),
 }
 
 /// Internal representation of an XML element node
@@ -155,6 +156,10 @@ impl Element {
         self.0.write().children.push(XmlNode::Comment(comment));
     }
 
+    pub fn add_cdata(&self, cdata: String) {
+        self.0.write().children.push(XmlNode::CData(cdata));
+    }
+
     pub fn children(&self) -> Vec<XmlNode> {
         self.0.read().children.clone()
     }
@@ -196,6 +201,21 @@ impl Element {
             .iter()
             .filter_map(|n| {
                 if let XmlNode::Comment(c) = n {
+                    Some(c.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub fn cdata_children(&self) -> Vec<String> {
+        self.0
+            .read()
+            .children
+            .iter()
+            .filter_map(|n| {
+                if let XmlNode::CData(c) = n {
                     Some(c.clone())
                 } else {
                     None

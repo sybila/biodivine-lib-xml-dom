@@ -1,4 +1,4 @@
-use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
+use quick_xml::events::{BytesCData, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Reader;
 use quick_xml::Writer;
 use std::collections::BTreeMap;
@@ -81,10 +81,10 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
             Ok(Event::PI(_)) => {}
             Ok(Event::CData(e)) => {
                 if let Some(current) = stack.last() {
-                    let text = std::str::from_utf8(&e).map_err(|e| {
+                    let cdata = std::str::from_utf8(&e).map_err(|e| {
                         XmlError::InvalidXml(format!("Invalid CDATA content: {}", e))
                     })?;
-                    current.add_text(text.to_string());
+                    current.add_cdata(cdata.to_string());
                 }
             }
             Ok(Event::DocType(_)) => {}
@@ -258,6 +258,10 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
                 let comment_event = BytesText::new(comment);
                 writer.write_event(Event::Comment(comment_event))?;
             }
+            crate::element::XmlNode::CData(ref cdata) => {
+                let cdata_event = BytesCData::new(cdata);
+                writer.write_event(Event::CData(cdata_event))?;
+            }
         }
     }
     let end = BytesEnd::new(element.name());
@@ -419,6 +423,7 @@ mod tests {
                 crate::element::XmlNode::Text(t) => actual.push(format!("text:{:?}", t)),
                 crate::element::XmlNode::Element(e) => actual.push(format!("element:{}", e.name())),
                 crate::element::XmlNode::Comment(c) => actual.push(format!("comment:{:?}", c)),
+                crate::element::XmlNode::CData(c) => actual.push(format!("cdata:{:?}", c)),
             }
         }
         let expected = vec![
@@ -582,5 +587,100 @@ mod tests {
         let output = write_string(&doc).unwrap();
         assert!(output.contains("<!-- This is a test comment -->"));
         assert!(output.contains("<!-- Another test comment -->"));
+    }
+
+    #[test]
+    fn test_cdata_parsing_and_serialization() {
+        let xml = r#"<root>
+            <![CDATA[This is CDATA content with <tags> and &entities;]]>
+            <child>Hello, World!</child>
+            <![CDATA[More CDATA with special chars: <>&"']]>
+            <child>Another child</child>
+        </root>"#;
+
+        let doc = parse_string(xml).unwrap();
+        let root = doc.root().unwrap();
+
+        // Check that CDATA is parsed
+        let cdata_sections = root.cdata_children();
+        assert_eq!(cdata_sections.len(), 2);
+        assert_eq!(
+            cdata_sections[0],
+            "This is CDATA content with <tags> and &entities;"
+        );
+        assert_eq!(cdata_sections[1], "More CDATA with special chars: <>&\"'");
+
+        // Check that elements are still parsed correctly
+        let elements = root.element_children();
+        assert_eq!(elements.len(), 2);
+        assert_eq!(elements[0].name(), "child");
+        assert_eq!(elements[1].name(), "child");
+
+        // Check round-trip serialization
+        let output = write_string(&doc).unwrap();
+        let doc2 = parse_string(&output).unwrap();
+        let root2 = doc2.root().unwrap();
+
+        let cdata_sections2 = root2.cdata_children();
+        assert_eq!(cdata_sections2.len(), 2);
+        assert_eq!(
+            cdata_sections2[0],
+            "This is CDATA content with <tags> and &entities;"
+        );
+        assert_eq!(cdata_sections2[1], "More CDATA with special chars: <>&\"'");
+    }
+
+    #[test]
+    fn test_cdata_creation() {
+        let doc = create_document();
+        let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
+        doc.set_root(root.clone()).unwrap();
+
+        // Add CDATA programmatically
+        root.add_cdata("This is CDATA content with <tags> and &entities;".to_string());
+        root.add_cdata("More CDATA with special chars: <>&\"'".to_string());
+
+        let cdata_sections = root.cdata_children();
+        assert_eq!(cdata_sections.len(), 2);
+        assert_eq!(
+            cdata_sections[0],
+            "This is CDATA content with <tags> and &entities;"
+        );
+        assert_eq!(cdata_sections[1], "More CDATA with special chars: <>&\"'");
+
+        // Test serialization
+        let output = write_string(&doc).unwrap();
+        assert!(output.contains("<![CDATA[This is CDATA content with <tags> and &entities;]]>"));
+        assert!(output.contains("<![CDATA[More CDATA with special chars: <>&\"']]>"));
+    }
+
+    #[test]
+    fn test_mixed_content_with_cdata() {
+        let xml = r#"<root>Text before <![CDATA[CDATA content]]> text after <child>child content</child> more text</root>"#;
+        let doc = parse_string(xml).unwrap();
+        let root = doc.root().unwrap();
+
+        let children = root.children();
+        let mut actual: Vec<String> = vec![];
+        for node in children {
+            match node {
+                crate::element::XmlNode::Text(t) => actual.push(format!("text:{:?}", t)),
+                crate::element::XmlNode::Element(e) => actual.push(format!("element:{}", e.name())),
+                crate::element::XmlNode::Comment(c) => actual.push(format!("comment:{:?}", c)),
+                crate::element::XmlNode::CData(c) => actual.push(format!("cdata:{:?}", c)),
+            }
+        }
+
+        let expected = vec![
+            "text:\"Text before \"",
+            "cdata:\"CDATA content\"",
+            "text:\" text after \"",
+            "element:child",
+            "text:\" more text\"",
+        ];
+        assert_eq!(
+            actual, expected,
+            "Mixed content with CDATA should be preserved"
+        );
     }
 }

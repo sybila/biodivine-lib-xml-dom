@@ -2,10 +2,10 @@ use parking_lot::RwLock;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use crate::QualifiedName;
 use crate::document::Document;
 use crate::error::XmlResult;
 use crate::namespace::Namespace;
-use crate::QualifiedName;
 
 #[derive(Debug, Clone)]
 pub enum XmlNode {

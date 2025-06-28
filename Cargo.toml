@@ -1,9 +1,9 @@
 [package]
 name = "biodivine-lib-xml-dom"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
-parking_lot = "0.12"
-quick-xml = "0.31"
-thiserror = "1.0"
+parking_lot = "0.12.4"
+quick-xml = "0.37.5"
+thiserror = "2.0.12"

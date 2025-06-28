@@ -1,16 +1,16 @@
-use quick_xml::events::{BytesCData, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Reader;
 use quick_xml::Writer;
+use quick_xml::events::{BytesCData, BytesEnd, BytesStart, BytesText, Event};
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 
+use crate::Namespace;
+use crate::QualifiedName;
 use crate::document::Document;
 use crate::element::Element;
 use crate::error::{XmlError, XmlResult};
-use crate::Namespace;
-use crate::QualifiedName;
 
 /// Parse XML from a file
 pub fn parse_file<P: AsRef<Path>>(path: P) -> XmlResult<Document> {
@@ -29,7 +29,6 @@ pub fn parse_string(xml: &str) -> XmlResult<Document> {
 /// Parse XML from a generic reader
 pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
     let mut xml_reader = Reader::from_reader(reader);
-    xml_reader.trim_text(false);
 
     let doc = Document::new();
     let mut stack: Vec<Element> = Vec::new();
@@ -272,8 +271,8 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::create_document;
     use crate::Namespace;
+    use crate::create_document;
 
     #[test]
     fn test_parse_and_write_simple_xml() {

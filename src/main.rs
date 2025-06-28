@@ -1,5 +1,5 @@
 use biodivine_lib_xml_dom::{
-    create_document, parse_string, write_string, Namespace, QualifiedName,
+    Namespace, QualifiedName, create_document, parse_string, write_string,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

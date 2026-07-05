@@ -10,15 +10,12 @@ use crate::qualified_name::QualifiedName;
 pub(crate) struct InternalDocument {
     /// Root element of the document
     root: RwLock<Option<Element>>,
-    /// Next available prefix for auto-generated prefixes
-    next_prefix_id: RwLock<u32>,
 }
 
 impl InternalDocument {
     pub(crate) fn new() -> Self {
         Self {
             root: RwLock::new(None),
-            next_prefix_id: RwLock::new(0),
         }
     }
 
@@ -39,19 +36,12 @@ impl InternalDocument {
     pub(crate) fn root(&self) -> Option<Element> {
         self.root.read().clone()
     }
-
-    pub(crate) fn generate_prefix(&self) -> String {
-        let mut id = self.next_prefix_id.write();
-        *id += 1;
-        format!("ns{}", id)
-    }
 }
 
 impl Clone for InternalDocument {
     fn clone(&self) -> Self {
         Self {
             root: RwLock::new(self.root.read().clone()),
-            next_prefix_id: RwLock::new(*self.next_prefix_id.read()),
         }
     }
 }
@@ -89,11 +79,6 @@ impl Document {
     /// Create a new element in this document
     pub fn create_element(&self, qualified_name: QualifiedName) -> Element {
         Element::new(self.clone(), qualified_name)
-    }
-
-    /// Generate a unique prefix for a namespace
-    pub fn generate_prefix(&self) -> String {
-        self.internal.generate_prefix()
     }
 }
 

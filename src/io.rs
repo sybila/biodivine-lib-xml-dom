@@ -138,10 +138,6 @@ fn parse_element(
     let qname = match QualifiedName::resolve_with_namespace_map(name, ns_map) {
         Ok(q) => q,
         Err(e) => {
-            eprintln!(
-                "[DEBUG] Failed to resolve element name '{}'. Namespace map: {:?}",
-                name, ns_map
-            );
             return Err(e);
         }
     };
@@ -171,10 +167,6 @@ fn parse_element(
         let qattr = match QualifiedName::resolve_with_namespace_map(key, ns_map) {
             Ok(q) => q,
             Err(e) => {
-                eprintln!(
-                    "[DEBUG] Failed to resolve attribute name '{}'. Namespace map: {:?}",
-                    key, ns_map
-                );
                 return Err(e);
             }
         };

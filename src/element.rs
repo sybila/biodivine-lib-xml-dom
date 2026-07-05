@@ -138,7 +138,7 @@ impl Element {
         None
     }
 
-    pub fn add_child_element(&self, child: Element) -> crate::error::XmlResult<()> {
+    pub fn add_child_element(&self, child: Element) -> XmlResult<()> {
         if !Arc::ptr_eq(&self.document().internal, &child.document().internal) {
             return Err(crate::error::XmlError::InvalidOperation(
                 "Element belongs to a different document".to_string(),

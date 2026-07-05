@@ -22,7 +22,7 @@ impl InternalDocument {
         }
     }
 
-    pub(crate) fn belongs_to_document(&self, doc: &crate::document::Document) -> bool {
+    pub(crate) fn belongs_to_document(&self, doc: &Document) -> bool {
         std::ptr::eq(self, &*doc.internal)
     }
 

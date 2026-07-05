@@ -141,11 +141,11 @@ mod tests {
         let children = parent.children();
         assert_eq!(children.len(), 1);
         match &children[0] {
-            crate::element::XmlNode::Element(e) => assert_eq!(e.name(), "child"),
-            crate::element::XmlNode::Text(_) => panic!("Expected element child, got text"),
-            crate::element::XmlNode::Comment(_) => panic!("Expected element child, got comment"),
-            crate::element::XmlNode::CData(_) => panic!("Expected element child, got cdata"),
-            crate::element::XmlNode::ProcessingInstruction(_, _) => {
+            element::XmlNode::Element(e) => assert_eq!(e.name(), "child"),
+            element::XmlNode::Text(_) => panic!("Expected element child, got text"),
+            element::XmlNode::Comment(_) => panic!("Expected element child, got comment"),
+            element::XmlNode::CData(_) => panic!("Expected element child, got cdata"),
+            element::XmlNode::ProcessingInstruction(_, _) => {
                 panic!("Expected element child, got processing instruction")
             }
         }

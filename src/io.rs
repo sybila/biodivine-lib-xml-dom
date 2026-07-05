@@ -1,6 +1,6 @@
-use quick_xml::Reader;
 use quick_xml::Writer;
 use quick_xml::events::{BytesCData, BytesEnd, BytesPI, BytesStart, BytesText, Event};
+use quick_xml::{Reader, XmlVersion};
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
@@ -61,7 +61,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
             }
             Ok(Event::Text(e)) => {
                 if let Some(current) = stack.last() {
-                    let text = e.unescape().map_err(|e| {
+                    let text = e.xml10_content().map_err(|e| {
                         XmlError::InvalidXml(format!("Invalid text content: {}", e))
                     })?;
                     current.add_text(text.to_string());
@@ -115,6 +115,9 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                     doc.set_root(element.clone())?;
                 }
             }
+            Ok(Event::GeneralRef(_)) => {
+                unimplemented!("Custom entities are currently not supported.")
+            }
             Err(e) => return Err(XmlError::InvalidXml(format!("XML parsing error: {}", e))),
         }
         buf.clear();
@@ -148,9 +151,9 @@ fn parse_element(
     let namespace_declarations = extract_namespace_declarations(e)?;
     for (prefix, uri) in namespace_declarations {
         if prefix.is_empty() {
-            element.declare_default_namespace(Namespace::default(&uri).unwrap());
+            element.declare_default_namespace(Namespace::default(&uri)?);
         } else {
-            element.declare_namespace(prefix.clone(), Namespace::prefixed(&uri, &prefix).unwrap());
+            element.declare_namespace(prefix.clone(), Namespace::prefixed(&uri, &prefix)?);
         }
     }
     // 6. Add all attributes, resolving their qualified names using the provided ns_map
@@ -160,7 +163,7 @@ fn parse_element(
         let key = std::str::from_utf8(attr.key.into_inner())
             .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e)))?;
         let value = attr
-            .unescape_value()
+            .normalized_value(XmlVersion::Explicit1_0)
             .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute value: {}", e)))?;
         if key.starts_with("xmlns") {
             continue;
@@ -189,7 +192,7 @@ fn extract_namespace_declarations(e: &BytesStart) -> XmlResult<Vec<(String, Stri
         let key = std::str::from_utf8(attr.key.into_inner())
             .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e)))?;
         let value = attr
-            .unescape_value()
+            .normalized_value(XmlVersion::Explicit1_0)
             .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute value: {}", e)))?;
         if let Some(prefix) = key.strip_prefix("xmlns:") {
             namespace_declarations.push((prefix.to_string(), value.to_string()));

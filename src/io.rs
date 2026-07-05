@@ -1,7 +1,7 @@
 use quick_xml::Writer;
 use quick_xml::events::{BytesCData, BytesEnd, BytesPI, BytesStart, BytesText, Event};
 use quick_xml::{Reader, XmlVersion};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
@@ -32,8 +32,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
 
     let doc = Document::empty();
     let mut stack: Vec<Element> = Vec::new();
-    let mut ns_stack: Vec<std::collections::HashMap<String, String>> =
-        vec![std::collections::HashMap::new()];
+    let mut ns_stack: Vec<HashMap<String, String>> = vec![HashMap::new()];
     let mut buf = Vec::new();
 
     loop {
@@ -128,7 +127,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
 fn parse_element(
     doc: &Document,
     e: &BytesStart,
-    ns_map: &std::collections::HashMap<String, String>,
+    ns_map: &HashMap<String, String>,
 ) -> XmlResult<Element> {
     // 1. Extract namespace declarations (already done in caller)
     // 2. Use the provided ns_map for resolution

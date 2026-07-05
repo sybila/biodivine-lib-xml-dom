@@ -287,8 +287,8 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Document;
     use crate::Namespace;
-    use crate::create_document;
 
     #[test]
     fn test_parse_and_write_simple_xml() {
@@ -332,7 +332,7 @@ mod tests {
 
     #[test]
     fn test_write_created_document() {
-        let doc = create_document();
+        let doc = Document::empty();
 
         let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
         let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns).unwrap());
@@ -588,7 +588,7 @@ mod tests {
 
     #[test]
     fn test_comment_creation() {
-        let doc = create_document();
+        let doc = Document::empty();
         let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
         doc.set_root(root.clone()).unwrap();
 
@@ -650,7 +650,7 @@ mod tests {
 
     #[test]
     fn test_cdata_creation() {
-        let doc = create_document();
+        let doc = Document::empty();
         let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
         doc.set_root(root.clone()).unwrap();
 
@@ -767,7 +767,7 @@ mod tests {
 
     #[test]
     fn test_processing_instruction_creation() {
-        let doc = create_document();
+        let doc = Document::empty();
         let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
         doc.set_root(root.clone()).unwrap();
 

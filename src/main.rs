@@ -1,6 +1,4 @@
-use biodivine_lib_xml_dom::{
-    Namespace, QualifiedName, create_document, parse_string, write_string,
-};
+use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName, parse_string, write_string};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("XML DOM Library Example");
@@ -8,7 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 1: Create XML programmatically
     println!("\n1. Creating XML programmatically:");
-    let doc = create_document();
+    let doc = Document::empty();
 
     let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html")?;
     let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns)?);
@@ -141,7 +139,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a new document with comments
     println!("\n4. Creating document with comments:");
-    let new_doc = create_document();
+    let new_doc = Document::empty();
     let new_root = new_doc.create_element(QualifiedName::without_namespace("root")?);
     new_doc.set_root(new_root.clone())?;
 

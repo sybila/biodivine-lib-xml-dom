@@ -17,10 +17,10 @@
 //! ## Creating and manipulating XML
 //!
 //! ```rust
-//! use biodivine_lib_xml_dom::{create_document, Namespace, QualifiedName};
+//! use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
 //!
 //! // Create a new document and elements in a single block
-//! let doc = create_document();
+//! let doc = Document::empty();
 //! let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
 //! let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns).unwrap());
 //! root.declare_namespace("html".to_string(), html_ns.clone());
@@ -48,9 +48,9 @@
 //! ## Working with Comments
 //!
 //! ```rust
-//! use biodivine_lib_xml_dom::{create_document, write_string, QualifiedName, parse_string};
+//! use biodivine_lib_xml_dom::{Document, write_string, QualifiedName, parse_string};
 //!
-//! let doc = create_document();
+//! let doc = Document::empty();
 //! let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
 //! doc.set_root(root.clone()).unwrap();
 //!
@@ -70,8 +70,8 @@
 //!
 //! ```
 //!
-//! use biodivine_lib_xml_dom::{create_document, write_string};
-//! let doc = create_document();
+//! use biodivine_lib_xml_dom::{Document, write_string};
+//! let doc = Document::empty();
 //! // ... build document ...
 //! let xml = write_string(&doc).unwrap();
 //! ```
@@ -92,39 +92,19 @@ pub use io::{parse_file, parse_reader, parse_string, write_file, write_string, w
 pub use namespace::Namespace;
 pub use qualified_name::QualifiedName;
 
-/// Main entry point for the library
-///
-/// Creates a new empty XML document with thread-safe operations.
-///
-/// # Returns
-///
-/// A new `Document` instance ready for use.
-///
-/// # Example
-///
-/// ```rust
-/// use biodivine_lib_xml_dom::create_document;
-///
-/// let doc = create_document();
-/// assert!(doc.root().is_none());
-/// ```
-pub fn create_document() -> Document {
-    Document::empty()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_create_document() {
-        let doc = create_document();
+        let doc = Document::empty();
         assert!(doc.root().is_none());
     }
 
     #[test]
     fn test_create_element() {
-        let doc = create_document();
+        let doc = Document::empty();
         let element = doc.create_element(QualifiedName::without_namespace("test").unwrap());
         assert_eq!(element.name(), "test");
         assert!(element.namespace().is_none());
@@ -132,7 +112,7 @@ mod tests {
 
     #[test]
     fn test_add_children() {
-        let doc = create_document();
+        let doc = Document::empty();
         let parent = doc.create_element(QualifiedName::without_namespace("parent").unwrap());
         let child = doc.create_element(QualifiedName::without_namespace("child").unwrap());
 
@@ -154,7 +134,7 @@ mod tests {
 
     #[test]
     fn test_namespace_declaration() {
-        let doc = create_document();
+        let doc = Document::empty();
         let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
         root.declare_namespace(
             "ex".to_string(),
@@ -169,7 +149,7 @@ mod tests {
 
     #[test]
     fn test_qualified_name_resolution() {
-        let doc = create_document();
+        let doc = Document::empty();
         let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
         root.declare_namespace(
             "ex".to_string(),
@@ -183,7 +163,7 @@ mod tests {
 
     #[test]
     fn test_document_reference() {
-        let doc = create_document();
+        let doc = Document::empty();
         let element = doc.create_element(QualifiedName::without_namespace("test").unwrap());
 
         // Set as root should work

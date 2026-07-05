@@ -1,7 +1,29 @@
-//! XML DOM Library
+//! # Biodivine XML DOM
 //!
-//! A thread-safe XML DOM library with full namespace support, reference counting,
-//! and read-write locks for memory management.
+//! A Rust library for building, parsing, and manipulating XML documents through a
+//! familiar Document Object Model (DOM) API.
+//!
+//! This library is designed for **document manipulation** rather than high-performance
+//! parsing. If you need to process large XML files at scale, consider a streaming parser
+//! instead. Biodivine XML DOM trades raw throughput for flexibility: you can freely create,
+//! modify, traverse, and serialize XML trees with full namespace awareness and thread-safe
+//! shared ownership via `Arc` and `RwLock`.
+//!
+//! ## Public API
+//!
+//! The library exposes a small, focused surface area:
+//!
+//! - **[`Document`]** — the root handle for an XML document. Create elements, set the root,
+//!   and coordinate the document tree.
+//! - **[`Element`]** — represents an XML node with children, attributes, text, and comments.
+//! - **[`Namespace`]** and **[`QualifiedName`]** — types for working with XML namespaces.
+//! - **I/O** — [`parse_string`], [`parse_file`], [`parse_reader`] for reading;
+//!   [`write_string`], [`write_file`], [`write_writer`] for serialization.
+//!
+//! ## Limitations
+//!
+//! This library targets **XML 1.0** with **UTF-8 encoding** only. Other XML versions,
+//! encodings, or DTD-based validation are not supported.
 //!
 //! # Features
 //!

@@ -30,7 +30,7 @@ pub fn parse_string(xml: &str) -> XmlResult<Document> {
 pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
     let mut xml_reader = Reader::from_reader(reader);
 
-    let doc = Document::new();
+    let doc = Document::empty();
     let mut stack: Vec<Element> = Vec::new();
     let mut ns_stack: Vec<std::collections::HashMap<String, String>> =
         vec![std::collections::HashMap::new()];

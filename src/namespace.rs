@@ -180,7 +180,7 @@ mod tests {
 
     #[test]
     fn test_namespace_support() {
-        let doc = Document::new();
+        let doc = Document::empty();
         let namespace = Namespace::prefixed("http://example.com", "ex").unwrap();
         let element =
             doc.create_element(QualifiedName::with_namespace("test", &namespace).unwrap());

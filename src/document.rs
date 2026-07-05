@@ -64,13 +64,13 @@ pub struct Document {
 
 impl Default for Document {
     fn default() -> Self {
-        Self::new()
+        Self::empty()
     }
 }
 
 impl Document {
     /// Create a new empty XML document
-    pub fn new() -> Self {
+    pub fn empty() -> Self {
         Self {
             internal: Arc::new(InternalDocument::new()),
         }

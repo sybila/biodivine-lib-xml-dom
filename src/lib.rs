@@ -109,7 +109,7 @@ pub use qualified_name::QualifiedName;
 /// assert!(doc.root().is_none());
 /// ```
 pub fn create_document() -> Document {
-    Document::new()
+    Document::empty()
 }
 
 #[cfg(test)]

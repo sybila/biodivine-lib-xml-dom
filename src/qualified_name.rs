@@ -106,7 +106,7 @@ impl QualifiedName {
     /// # Examples
     /// ```rust
     /// use biodivine_lib_xml_dom::{Document, QualifiedName, Namespace};
-    /// let doc = Document::new();
+    /// let doc = Document::empty();
     /// let el = doc.create_element(QualifiedName::without_namespace("foo").unwrap());
     /// el.declare_default_namespace(Namespace::default("http://default.com").unwrap());
     /// let qn = QualifiedName::resolve(&el, "bar").unwrap();
@@ -313,7 +313,7 @@ mod tests {
 
     #[test]
     fn test_resolve_no_prefix() {
-        let doc = Document::new();
+        let doc = Document::empty();
         let el = doc.create_element(q_name("foo").unwrap());
         el.declare_default_namespace(Namespace::default("http://default.com").unwrap());
         let qn = QualifiedName::resolve(&el, "bar").unwrap();
@@ -323,7 +323,7 @@ mod tests {
 
     #[test]
     fn test_resolve_with_prefix() {
-        let doc = Document::new();
+        let doc = Document::empty();
         let el = doc.create_element(q_name("foo").unwrap());
         el.declare_namespace(
             "ex".to_string(),
@@ -338,7 +338,7 @@ mod tests {
     #[test]
     fn test_resolve_with_parent_ns() {
         // Test that a namespace declared on a parent element is used for resolution.
-        let doc = Document::new();
+        let doc = Document::empty();
         let parent = doc.create_element(q_name("parent").unwrap());
         parent.declare_namespace(
             "ex".to_string(),
@@ -355,7 +355,7 @@ mod tests {
 
     #[test]
     fn test_resolve_undefined_prefix() {
-        let doc = Document::new();
+        let doc = Document::empty();
         let el = doc.create_element(q_name("foo").unwrap());
         let err = QualifiedName::resolve(&el, "ex:bar").unwrap_err();
         assert!(matches!(err, XmlError::NamespaceError(_)));

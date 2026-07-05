@@ -106,7 +106,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     <!-- Main content section -->
     <content>
         <p>This is the main content.</p>
-        <!-- TODO: Add more content here -->
+        <!-- This content may need some tuning. -->
+        <section>
+            <p>Introduction to the topic.</p>
+        </section>
+        <section>
+            <p>Further details and analysis.</p>
+        </section>
     </content>
 </document>"#;
 

@@ -331,6 +331,11 @@ mod tests {
         );
     }
 
+    /// Helper function to create an NCName in tests. Panics if the string is invalid.
+    fn nc_name(s: &str) -> NCName {
+        NCName::try_from(s).unwrap()
+    }
+
     #[test]
     fn test_ncname_helper() {
         // rule: rule.well-formedness.name-starts-with-valid-char.md
@@ -373,12 +378,9 @@ mod tests {
         // rule: rule.namespace-basics.empty-string-not-namespace-name.md
         verify_rule_exists("rule.namespace-basics.empty-string-not-namespace-name.md");
         // Valid namespace
-        assert!(
-            validate_namespace("http://example.com", Some(&NCName::try_from("ex").unwrap()))
-                .is_ok()
-        );
+        assert!(validate_namespace("http://example.com", Some(&nc_name("ex"))).is_ok());
         // Empty URI
-        assert!(validate_namespace("", Some(&NCName::try_from("ex").unwrap())).is_err());
+        assert!(validate_namespace("", Some(&nc_name("ex"))).is_err());
         // Default namespace with empty URI
         assert!(validate_namespace("", None).is_err());
         // Default namespace with valid URI
@@ -386,10 +388,7 @@ mod tests {
         // New with None prefix
         assert!(validate_namespace("http://example.com", None).is_ok());
         // New with Some valid prefix
-        assert!(
-            validate_namespace("http://example.com", Some(&NCName::try_from("ex").unwrap()))
-                .is_ok()
-        );
+        assert!(validate_namespace("http://example.com", Some(&nc_name("ex"))).is_ok());
     }
 
     #[test]
@@ -401,26 +400,14 @@ mod tests {
         // rule: rule.namespace-basics.xml-namespace-not-default.md
         verify_rule_exists("rule.namespace-basics.xml-namespace-not-default.md");
         // `xml` prefix with its reserved URI is valid
-        assert!(
-            validate_namespace(RESERVED_XML_URI, Some(&NCName::try_from("xml").unwrap())).is_ok()
-        );
+        assert!(validate_namespace(RESERVED_XML_URI, Some(&nc_name("xml"))).is_ok());
 
         // `xml` prefix with a different URI is invalid
-        assert!(
-            validate_namespace(
-                "http://example.com",
-                Some(&NCName::try_from("xml").unwrap())
-            )
-            .is_err()
-        );
+        assert!(validate_namespace("http://example.com", Some(&nc_name("xml"))).is_err());
 
         // Any other prefix with the reserved XML URI is invalid
-        assert!(
-            validate_namespace(RESERVED_XML_URI, Some(&NCName::try_from("ex").unwrap())).is_err()
-        );
-        assert!(
-            validate_namespace(RESERVED_XML_URI, Some(&NCName::try_from("foo").unwrap())).is_err()
-        );
+        assert!(validate_namespace(RESERVED_XML_URI, Some(&nc_name("ex"))).is_err());
+        assert!(validate_namespace(RESERVED_XML_URI, Some(&nc_name("foo"))).is_err());
 
         // The reserved XML URI as default namespace is invalid
         assert!(validate_namespace(RESERVED_XML_URI, None).is_err());
@@ -435,29 +422,12 @@ mod tests {
         // rule: rule.namespace-basics.xmlns-namespace-not-default.md
         verify_rule_exists("rule.namespace-basics.xmlns-namespace-not-default.md");
         // `xmlns` prefix must never be declared
-        assert!(
-            validate_namespace(
-                "http://example.com",
-                Some(&NCName::try_from("xmlns").unwrap())
-            )
-            .is_err()
-        );
-        assert!(
-            validate_namespace(
-                RESERVED_XMLNS_URI,
-                Some(&NCName::try_from("xmlns").unwrap())
-            )
-            .is_err()
-        );
+        assert!(validate_namespace("http://example.com", Some(&nc_name("xmlns"))).is_err());
+        assert!(validate_namespace(RESERVED_XMLNS_URI, Some(&nc_name("xmlns"))).is_err());
 
         // The reserved xmlns URI cannot be bound to any prefix
-        assert!(
-            validate_namespace(RESERVED_XMLNS_URI, Some(&NCName::try_from("ex").unwrap())).is_err()
-        );
-        assert!(
-            validate_namespace(RESERVED_XMLNS_URI, Some(&NCName::try_from("foo").unwrap()))
-                .is_err()
-        );
+        assert!(validate_namespace(RESERVED_XMLNS_URI, Some(&nc_name("ex"))).is_err());
+        assert!(validate_namespace(RESERVED_XMLNS_URI, Some(&nc_name("foo"))).is_err());
 
         // The reserved xmlns URI as default namespace is invalid
         assert!(validate_namespace(RESERVED_XMLNS_URI, None).is_err());
@@ -472,57 +442,18 @@ mod tests {
         // rule: rule.well-formedness.name-valid-chars.md
         verify_rule_exists("rule.well-formedness.name-valid-chars.md");
         // Valid prefixes
-        assert!(
-            validate_namespace("http://example.com", Some(&NCName::try_from("ex").unwrap()))
-                .is_ok()
-        );
-        assert!(
-            validate_namespace(
-                "http://example.com",
-                Some(&NCName::try_from("ex_1").unwrap())
-            )
-            .is_ok()
-        );
-        assert!(
-            validate_namespace(
-                "http://example.com",
-                Some(&NCName::try_from("_private").unwrap())
-            )
-            .is_ok()
-        );
-        assert!(
-            validate_namespace(
-                "http://example.com",
-                Some(&NCName::try_from("a-b").unwrap())
-            )
-            .is_ok()
-        );
-        assert!(
-            validate_namespace(
-                "http://example.com",
-                Some(&NCName::try_from("a.b").unwrap())
-            )
-            .is_ok()
-        );
-        assert!(
-            validate_namespace(
-                "http://example.com",
-                Some(&NCName::try_from("A1_B-c.d").unwrap())
-            )
-            .is_ok()
-        );
-        assert!(
-            validate_namespace(RESERVED_XML_URI, Some(&NCName::try_from("xml").unwrap())).is_ok()
-        );
+        assert!(validate_namespace("http://example.com", Some(&nc_name("ex"))).is_ok());
+        assert!(validate_namespace("http://example.com", Some(&nc_name("ex_1"))).is_ok());
+        assert!(validate_namespace("http://example.com", Some(&nc_name("_private"))).is_ok());
+        assert!(validate_namespace("http://example.com", Some(&nc_name("a-b"))).is_ok());
+        assert!(validate_namespace("http://example.com", Some(&nc_name("a.b"))).is_ok());
+        assert!(validate_namespace("http://example.com", Some(&nc_name("A1_B-c.d"))).is_ok());
+        assert!(validate_namespace(RESERVED_XML_URI, Some(&nc_name("xml"))).is_ok());
         assert!(validate_namespace("http://example.com", None).is_ok());
 
         // Invalid: reserved URI with wrong prefix
-        assert!(
-            validate_namespace(RESERVED_XML_URI, Some(&NCName::try_from("ex").unwrap())).is_err()
-        );
-        assert!(
-            validate_namespace(RESERVED_XMLNS_URI, Some(&NCName::try_from("ex").unwrap())).is_err()
-        );
+        assert!(validate_namespace(RESERVED_XML_URI, Some(&nc_name("ex"))).is_err());
+        assert!(validate_namespace(RESERVED_XMLNS_URI, Some(&nc_name("ex"))).is_err());
 
         // Invalid: empty URI
         assert!(validate_namespace("", None).is_err());
@@ -532,20 +463,8 @@ mod tests {
     fn test_uri_comparison_case_sensitive() {
         // rule: rule.namespace-basics.uri-comparison-literal-case-sensitive.md
         verify_rule_exists("rule.namespace-basics.uri-comparison-literal-case-sensitive.md");
-        assert!(
-            validate_namespace(
-                "http://example.org/ns",
-                Some(&NCName::try_from("ex").unwrap())
-            )
-            .is_ok()
-        );
-        assert!(
-            validate_namespace(
-                "http://example.org/NS",
-                Some(&NCName::try_from("ex").unwrap())
-            )
-            .is_ok()
-        );
+        assert!(validate_namespace("http://example.org/ns", Some(&nc_name("ex"))).is_ok());
+        assert!(validate_namespace("http://example.org/NS", Some(&nc_name("ex"))).is_ok());
     }
 
     #[test]
@@ -563,12 +482,12 @@ mod tests {
 
         // Prefixed
         let (prefix, local) = split_qname("ex:foo").unwrap();
-        assert_eq!(prefix, Some(NCName::try_from("ex").unwrap()));
+        assert_eq!(prefix, Some(nc_name("ex")));
         assert_eq!(local.as_str(), "foo");
 
         // Unicode
         let (prefix, local) = split_qname("\u{00C0}:\u{4E00}").unwrap();
-        assert_eq!(prefix, Some(NCName::try_from("\u{00C0}").unwrap()));
+        assert_eq!(prefix, Some(nc_name("\u{00C0}")));
         assert_eq!(local.as_str(), "\u{4E00}");
     }
 

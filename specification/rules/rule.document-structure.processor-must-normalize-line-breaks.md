@@ -18,5 +18,9 @@ line two</root>
 
 ```xml
 <?xml version="1.0"?>
-<root>line one\rline two</root>
+<!-- An implementation violation cannot be shown by this document alone.
+     If the source entity contains a literal carriage return between the
+     two text lines, the processor must report it to the application as #xA. -->
+<root>line one
+line two</root>
 ```

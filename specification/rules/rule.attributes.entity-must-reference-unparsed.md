@@ -14,9 +14,8 @@ Values of type ENTITY must match the Name production; each Name must match the n
   <!ELEMENT root (item)>
   <!ELEMENT item EMPTY>
   <!ATTLIST item file ENTITY #REQUIRED>
-  <!ENTITY % image SYSTEM "image.ent">
   <!NOTATION gif SYSTEM "gifviewer">
-  <!ENTITY mygif NDATA gif SYSTEM "image.gif">
+  <!ENTITY mygif SYSTEM "image.gif" NDATA gif>
 ]>
 <root>
   <item file="mygif"/>

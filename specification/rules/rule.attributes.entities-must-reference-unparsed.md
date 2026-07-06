@@ -16,8 +16,8 @@ Values of type ENTITIES must match the Names production; each Name must match th
   <!ATTLIST item files ENTITIES #REQUIRED>
   <!NOTATION gif SYSTEM "gifviewer">
   <!NOTATION jpg SYSTEM "jpgviewer">
-  <!ENTITY img1 NDATA gif SYSTEM "a.gif">
-  <!ENTITY img2 NDATA jpg SYSTEM "b.jpg">
+  <!ENTITY img1 SYSTEM "a.gif" NDATA gif>
+  <!ENTITY img2 SYSTEM "b.jpg" NDATA jpg>
 ]>
 <root>
   <item files="img1 img2"/>
@@ -33,7 +33,7 @@ Values of type ENTITIES must match the Names production; each Name must match th
   <!ELEMENT item EMPTY>
   <!ATTLIST item files ENTITIES #REQUIRED>
   <!NOTATION gif SYSTEM "gifviewer">
-  <!ENTITY img1 NDATA gif SYSTEM "a.gif">
+  <!ENTITY img1 SYSTEM "a.gif" NDATA gif>
 ]>
 <root>
   <item files="img1 missing"/>

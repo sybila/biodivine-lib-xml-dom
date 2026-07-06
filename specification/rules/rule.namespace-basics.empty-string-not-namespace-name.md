@@ -1,6 +1,6 @@
 # Rule: Empty string must not be used as a namespace name
 
-The empty string must not be used as a namespace name in a namespace declaration, even though it is a legal URI reference.
+The empty string must not be used as a namespace name, even though it is a legal URI reference. An empty default namespace declaration (`xmlns=""`) is allowed, but it removes the default namespace instead of binding the empty string as a namespace name.
 
 ## Rationale
 
@@ -9,8 +9,9 @@ The empty string must not be used as a namespace name in a namespace declaration
 ## Valid Example
 
 ```xml
-<root xmlns:ex="http://example.org/ns">
+<root xmlns:ex="http://example.org/ns" xmlns="">
   <ex:item/>
+  <item/>
 </root>
 ```
 

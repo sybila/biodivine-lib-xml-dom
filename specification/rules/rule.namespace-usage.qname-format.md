@@ -24,8 +24,7 @@ Element and attribute names in namespace-aware XML documents must match the QNam
 <?xml version="1.0"?>
 <root xmlns:ex="http://example.org">
   <ex:item id="1"/>
-  <!-- The prefix "undeclared" is not bound to any namespace.
-       A prefix used in a QName must be declared via xmlns:Prefix. -->
-  <undeclared:element name="bad"/>
+  <!-- A QName can have at most one colon: Prefix:LocalPart. -->
+  <ex:item:detail name="bad"/>
 </root>
 ```

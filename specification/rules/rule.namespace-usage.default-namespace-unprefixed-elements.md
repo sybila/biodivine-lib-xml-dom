@@ -17,14 +17,16 @@ An unprefixed element name within the scope of a default namespace declaration t
 </root>
 ```
 
-## Violating Example
+## No Default Namespace Example
 
 ```xml
 <?xml version="1.0"?>
-<!-- An element with an undeclared prefix is incorrectly assumed
-     to be in the default namespace when xmlns="" has removed it.
-     The prefix "ex" must be declared to use ex:item. -->
-<root xmlns="http://example.org">
-  <ex:item xmlns=""/>
+<!-- Without a default namespace declaration in scope, both unprefixed
+     element names have no namespace name. -->
+<root>
+  <item>not in a namespace</item>
 </root>
 ```
+
+> A namespace-aware processor that assigns `item` to `http://example.org` here
+> would violate this rule.

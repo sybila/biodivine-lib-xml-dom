@@ -12,7 +12,7 @@ The appearance of any character or general-entity reference in the DTD except wi
 <?xml version="1.0"?>
 <!DOCTYPE root [
   <!ENTITY greeting "Hello">
-  <!ATTLIST root msg CDATA "#&greeting;">
+  <!ATTLIST root msg CDATA "&greeting;">
 ]>
 <root/>
 ```

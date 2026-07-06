@@ -19,14 +19,16 @@ Default namespace declarations do not apply to attribute names; an unprefixed at
 
 > The `id` attribute has no namespace, even though the element is in the default namespace.
 
-## Violating Example
+## Misinterpretation Example
 
 ```xml
 <?xml version="1.0"?>
 <root xmlns="http://example.org">
   <item id="123"/>
 </root>
-<!-- A common misconception is that 'id' would be in the
-     default namespace http://example.org. In reality,
-     unprefixed attributes always have no namespace. -->
 ```
+
+> This document is namespace-well-formed. The violation would be an
+> implementation or application treating the unprefixed `id` attribute as if it
+> were in the default namespace `http://example.org`; by §6.2, it has no
+> namespace name.

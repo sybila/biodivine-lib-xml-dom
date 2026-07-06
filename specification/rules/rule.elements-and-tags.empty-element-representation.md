@@ -15,9 +15,14 @@ An empty element must be represented either as a start-tag immediately followed 
 <root><br/><br></br></root>
 ```
 
-## Violating Example
+## Misinterpretation Example
 
 ```xml
 <?xml version="1.0"?>
 <root><br>text</br></root>
 ```
+
+> This is not an empty element, because `br` has character content. The
+> empty-element representation rule is violated only if an implementation treats
+> an element with content as empty, or fails to recognize either `<br/>` or
+> `<br></br>` as representing an empty element.

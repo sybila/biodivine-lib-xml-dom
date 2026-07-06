@@ -16,6 +16,8 @@ Whitespace (S) consists of one or more space (#x20), tab (#x9), carriage return 
 ## Violating Example
 
 ```xml
-<!-- fragment: non-breaking space (#xA0) is NOT whitespace -->
-<root attr=" value ">content</root>
+<!-- An implementation violation cannot be shown by this document alone.
+     If a parser treats the non-breaking space character referenced here
+     as XML whitespace (S), it violates the definition of S. -->
+<root attr="&#xA0;"/>
 ```

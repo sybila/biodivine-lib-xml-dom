@@ -12,7 +12,7 @@ The declaration of a general entity must precede any reference to it which appea
 <?xml version="1.0"?>
 <!DOCTYPE root [
   <!ENTITY unit "kg">
-  <!ATTLIST root weight CDATA "#&unit;">
+  <!ATTLIST root weight CDATA "&unit;">
 ]>
 <root/>
 ```
@@ -22,7 +22,7 @@ The declaration of a general entity must precede any reference to it which appea
 ```xml
 <?xml version="1.0"?>
 <!DOCTYPE root [
-  <!ATTLIST root weight CDATA "#&unit;">
+  <!ATTLIST root weight CDATA "&unit;">
   <!ENTITY unit "kg">
 ]>
 <root/>

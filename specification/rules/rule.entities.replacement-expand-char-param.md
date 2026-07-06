@@ -11,23 +11,25 @@ The actual replacement text that is included must contain the replacement text o
 ```xml
 <?xml version="1.0"?>
 <!DOCTYPE root [
-  <!ENTITY % pub "&&#xC9;ditions">
-  <!ENTITY book "La Peste %pub;">
+  <!ENTITY % pub "&#xC9;ditions">
+  <!ENTITY rights "All rights reserved">
+  <!ENTITY book "La Peste, %pub;. &rights;">
 ]>
 <root>&book;</root>
 ```
 
-> In the valid case, `&book;` expands to `La Peste &Éditions` — the parameter entity `%pub;` is expanded to its replacement text `&&#xC9;ditions`, and the character reference `&#xC9;` is expanded to the character É.
+> In the valid case, the replacement text for `book` contains `La Peste, Éditions. &rights;` — the parameter entity `%pub;` is expanded, the character reference `&#xC9;` is expanded to `É`, and the general entity reference `&rights;` remains unexpanded in the replacement text.
 
 ## Violating Example
 
 ```xml
 <?xml version="1.0"?>
 <!DOCTYPE root [
-  <!ENTITY % pub "&&#xC9;ditions">
-  <!ENTITY book "La Peste %pub;">
+  <!ENTITY % pub "&#xC9;ditions">
+  <!ENTITY rights "All rights reserved">
+  <!ENTITY book "La Peste, %pub;. &rights;">
 ]>
 <root>&book;</root>
 ```
 
-> A processor that fails to expand `%pub;` or `&#xC9;` in the replacement text would produce incorrect output, violating this rule.
+> A processor that fails to expand `%pub;` or `&#xC9;` while constructing the replacement text would violate this rule.

@@ -10,8 +10,9 @@ In a document with an external subset or parameter entity references, if the doc
 
 ```xml
 <?xml version="1.0" standalone="no"?>
-<!DOCTYPE root SYSTEM "external.dtd">
-<!ENTITY greet "hello">
+<!DOCTYPE root SYSTEM "external.dtd" [
+  <!ENTITY greet "hello">
+]>
 <root label="&greet;"/>
 ```
 

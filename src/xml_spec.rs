@@ -80,18 +80,12 @@ pub(crate) fn validate_namespace(uri: &str, prefix: Option<&str>) -> Result<(), 
 
         // `xml` prefix must only bind to its reserved URI
         if p == "xml" {
-            if uri != RESERVED_XML_URI {
-                return Err(XmlError::NamespaceError(format!(
-                    "The prefix 'xml' can only be bound to '{RESERVED_XML_URI}', not '{uri}'"
-                )));
-            }
-        } else {
+            validate_xml_prefix_binding(Some(uri))?;
+        } else if uri == RESERVED_XML_URI {
             // No prefix other than `xml` may bind to the reserved XML URI
-            if uri == RESERVED_XML_URI {
-                return Err(XmlError::NamespaceError(format!(
-                    "The URI '{RESERVED_XML_URI}' can only be bound to the 'xml' prefix, not '{p}'"
-                )));
-            }
+            return Err(XmlError::NamespaceError(format!(
+                "The URI '{RESERVED_XML_URI}' can only be bound to the 'xml' prefix, not '{p}'"
+            )));
         }
     }
 
@@ -130,6 +124,20 @@ pub(crate) fn validate_local_name(name: &str) -> Result<(), XmlError> {
     if !is_valid_ncname(name) {
         return Err(XmlError::NamespaceError(format!(
             "Local name '{name}' is not a valid NCName"
+        )));
+    }
+    Ok(())
+}
+
+/// Validate that a string is a valid NCName.
+///
+/// # Errors
+///
+/// Returns an error if the string is empty or contains invalid characters for an NCName.
+fn validate_ncname(name: &str) -> Result<(), XmlError> {
+    if !is_valid_ncname(name) {
+        return Err(XmlError::NamespaceError(format!(
+            "'{name}' is not a valid NCName"
         )));
     }
     Ok(())
@@ -181,16 +189,6 @@ pub(crate) fn split_qname(qname: &str) -> Result<(Option<&str>, &str), XmlError>
     }
 }
 
-/// Validate that an NCName string is valid.
-fn validate_ncname(name: &str) -> Result<(), XmlError> {
-    if !is_valid_ncname(name) {
-        return Err(XmlError::NamespaceError(format!(
-            "'{name}' is not a valid NCName"
-        )));
-    }
-    Ok(())
-}
-
 /// Validate constraints on a namespace prefix during QName resolution.
 ///
 /// This checks the XML Namespaces specification rules for the `xml` prefix:
@@ -216,17 +214,30 @@ pub(crate) fn validate_resolved_prefix(
     }
 
     if prefix == "xml" {
-        match resolved_uri {
-            Some(uri) if uri == RESERVED_XML_URI => Ok(()),
-            Some(uri) => Err(XmlError::NamespaceError(format!(
-                "The prefix 'xml' can only be bound to '{RESERVED_XML_URI}', not '{uri}'"
-            ))),
-            None => Err(XmlError::NamespaceError(format!(
-                "The prefix 'xml' must be bound to '{RESERVED_XML_URI}'"
-            ))),
-        }
+        validate_xml_prefix_binding(resolved_uri)
     } else {
         Ok(())
+    }
+}
+
+/// Validate that the `xml` prefix is bound to its reserved URI.
+///
+/// # Parameters
+///
+/// - `uri`: The URI the `xml` prefix is bound to, if any.
+///
+/// # Errors
+///
+/// Returns an error if the URI is not the reserved XML namespace URI.
+fn validate_xml_prefix_binding(uri: Option<&str>) -> Result<(), XmlError> {
+    match uri {
+        Some(u) if u == RESERVED_XML_URI => Ok(()),
+        Some(u) => Err(XmlError::NamespaceError(format!(
+            "The prefix 'xml' can only be bound to '{RESERVED_XML_URI}', not '{u}'"
+        ))),
+        None => Err(XmlError::NamespaceError(format!(
+            "The prefix 'xml' must be bound to '{RESERVED_XML_URI}'"
+        ))),
     }
 }
 

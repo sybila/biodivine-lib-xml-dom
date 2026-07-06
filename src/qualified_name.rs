@@ -200,7 +200,7 @@ impl PartialEq for QualifiedName {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
             && match (&self.namespace, &other.namespace) {
-                (Some(a), Some(b)) => Namespace::is_equal_ns(a, b),
+                (Some(a), Some(b)) => a.is_equal_ns(b),
                 (None, None) => true,
                 _ => false,
             }

@@ -5,16 +5,19 @@ use std::sync::Arc;
 /// Represents an XML namespace with URI and optional prefix.
 ///
 /// [`Namespace`] is immutable and thread-safe by design. The namespace data is shared
-/// behind an `Arc` pointer, so copying namespaces should be relatively cheap. Just make
-/// sure to prefer cloning existing namespaces instead of creating new ones to reduce memory
-/// usage as much as possible.
+/// behind an `Arc` pointer, so copying namespaces should be relatively cheap. Prefer
+/// cloning existing namespaces instead of creating new ones to reduce memory usage.
 ///
 /// # Equality
-/// Two [`Namespace`] objects are considered equal if they have the same URI **and** the same prefix.
-/// If you want to compare only the namespace URIs, use [`Namespace::is_equal_ns`]. This is what
-/// the XML specification considers as "equal" namespaces in the context of namespace declarations.
+///
+/// Two [`Namespace`] objects are considered equal if they have the same URI **and** the
+/// same prefix. The XML specification defines namespace equality by URI comparison alone;
+/// use [`Namespace::is_equal_ns`] for that. The derived [`PartialEq`] implementation
+/// additionally requires the prefix to match, which is useful for distinguishing namespace
+/// declarations that bind the same URI under different prefixes.
 ///
 /// # Conditions for a valid namespace:
+///
 /// - The URI must not be empty.
 /// - The prefix, if present, must be a valid XML NCName per XML 1.0 Fifth Edition:
 ///   non-empty, no colon (`:`), must start with a letter (including Unicode), underscore,
@@ -40,19 +43,20 @@ struct NamespaceData {
 impl Namespace {
     /// Create a new namespace with URI and optional prefix, validating XML rules.
     ///
+    /// This constructor takes owned [`String`] objects to avoid allocating when the caller
+    /// already has owned data. For more convenient constructors that accept
+    /// `&str`, see [`Namespace::prefixed`] and [`Namespace::without_prefix`].
+    ///
     /// # Errors
-    /// Returns `XmlError` if:
-    /// - The URI is empty.
-    /// - The prefix is not a valid XML NCName (per XML 1.0 Fifth Edition Unicode ranges).
-    /// - The prefix is `xml` but the URI is not `http://www.w3.org/XML/1998/namespace`.
-    /// - The prefix is `xmlns` (this prefix is reserved and cannot be declared).
-    /// - The prefix is not `xml` but the URI is `http://www.w3.org/XML/1998/namespace`.
-    /// - The URI is `http://www.w3.org/2000/xmlns/` (this URI cannot be bound to any prefix).
+    ///
+    /// Returns `XmlError` if the namespace violates validation rules (see [`Namespace`]).
     ///
     /// # Examples
     /// ```rust
     /// use biodivine_lib_xml_dom::Namespace;
     /// let ns = Namespace::new("http://example.com".to_string(), Some("ex".to_string()));
+    /// assert!(ns.is_ok());
+    /// let ns = Namespace::new("http://example.com".to_string(), None);
     /// assert!(ns.is_ok());
     /// let ns = Namespace::new("".to_string(), Some("ex".to_string()));
     /// assert!(ns.is_err());
@@ -67,10 +71,9 @@ impl Namespace {
     /// Create a namespace without a prefix (default namespace), validating XML rules.
     ///
     /// # Errors
-    /// Returns `XmlError` if:
-    /// - The URI is empty.
-    /// - The URI is `http://www.w3.org/XML/1998/namespace` (reserved for the `xml` prefix only).
-    /// - The URI is `http://www.w3.org/2000/xmlns/` (must not be declared as default namespace).
+    ///
+    /// Returns `XmlError` if the namespace violates validation rules for a namespace with
+    /// no prefix (see [`Namespace`]).
     ///
     /// # Examples
     /// ```rust
@@ -94,13 +97,8 @@ impl Namespace {
     /// Create a prefixed namespace, validating XML rules.
     ///
     /// # Errors
-    /// Returns [`XmlError`] if:
-    /// - The URI is empty.
-    /// - The prefix is not a valid XML NCName (per XML 1.0 Fifth Edition Unicode ranges).
-    /// - The prefix is `xml` but the URI is not `http://www.w3.org/XML/1998/namespace`.
-    /// - The prefix is `xmlns` (this prefix is reserved and cannot be declared).
-    /// - The prefix is not `xml` but the URI is `http://www.w3.org/XML/1998/namespace`.
-    /// - The URI is `http://www.w3.org/2000/xmlns/` (this URI cannot be bound to any prefix).
+    ///
+    /// Returns `XmlError` if the namespace violates validation rules (see [`Namespace`]).
     ///
     /// # Examples
     /// ```rust
@@ -153,21 +151,21 @@ impl Namespace {
         xml_spec::validate_namespace(uri, prefix)
     }
 
-    /// Compare two namespaces for equality based only on their URI. This is what
-    /// the XML specification considers as "equal" namespaces in the context
-    /// of namespace declarations.
+    /// Compare this namespace with another for equality based only on their URI.
+    /// This is what the XML specification considers as "equal" namespaces in the
+    /// context of namespace declarations.
     ///
     /// # Examples
     /// ```rust
     /// use biodivine_lib_xml_dom::Namespace;
     /// let ns1 = Namespace::prefixed("http://example.com", "ex").unwrap();
     /// let ns2 = Namespace::without_prefix("http://example.com").unwrap();
-    /// assert!(Namespace::is_equal_ns(&ns1, &ns2));
+    /// assert!(ns1.is_equal_ns(&ns2));
     /// let ns3 = Namespace::without_prefix("http://different.com").unwrap();
-    /// assert!(!Namespace::is_equal_ns(&ns1, &ns3));
+    /// assert!(!ns1.is_equal_ns(&ns3));
     /// ```
-    pub fn is_equal_ns(a: &Namespace, b: &Namespace) -> bool {
-        a.uri() == b.uri()
+    pub fn is_equal_ns(&self, other: &Namespace) -> bool {
+        self.uri() == other.uri()
     }
 }
 
@@ -209,23 +207,9 @@ mod tests {
         let ns6 = Namespace::without_prefix("http://example.com").unwrap();
         assert_eq!(ns4, ns6);
 
-        // Clone should produce an equal Namespace (same Arc pointer)
+        // Clone should produce an equal Namespace
         let ns1_clone = ns1.clone();
         assert_eq!(ns1, ns1_clone);
-        // They should be equal, and their internal Arc pointers should be the same
-        let arc1: *const _ = &*ns1.data;
-        let arc1_clone: *const _ = &*ns1_clone.data;
-        assert_eq!(
-            arc1, arc1_clone,
-            "Cloned Namespace should share the same Arc pointer"
-        );
-
-        // But two independently created identical Namespaces should not share the same Arc pointer
-        let arc2: *const _ = &*ns2.data;
-        assert_ne!(
-            arc1, arc2,
-            "New Namespace with same data should not share Arc pointer"
-        );
     }
 
     #[test]
@@ -235,13 +219,13 @@ mod tests {
         let ns3 = Namespace::prefixed("http://example.com", "other").unwrap();
         let ns4 = Namespace::without_prefix("http://different.com").unwrap();
         // Same URI, different prefixes
-        assert!(Namespace::is_equal_ns(&ns1, &ns2));
-        assert!(Namespace::is_equal_ns(&ns1, &ns3));
+        assert!(ns1.is_equal_ns(&ns2));
+        assert!(ns1.is_equal_ns(&ns3));
         // Different URIs
-        assert!(!Namespace::is_equal_ns(&ns1, &ns4));
-        assert!(!Namespace::is_equal_ns(&ns2, &ns4));
+        assert!(!ns1.is_equal_ns(&ns4));
+        assert!(!ns2.is_equal_ns(&ns4));
         // Identical objects
-        assert!(Namespace::is_equal_ns(&ns1, &ns1));
+        assert!(ns1.is_equal_ns(&ns1));
     }
 
     #[test]

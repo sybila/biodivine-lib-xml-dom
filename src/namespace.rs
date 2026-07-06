@@ -67,7 +67,7 @@ impl Namespace {
     /// }
     /// ```
     pub fn new(uri: String, prefix: Option<NCName>) -> Result<Self, XmlError> {
-        Self::validate(&uri, prefix.as_ref())?;
+        xml_spec::validate_namespace(&uri, prefix.as_ref())?;
         Ok(Self {
             data: Arc::new(NamespaceData { uri, prefix }),
         })
@@ -156,11 +156,6 @@ impl Namespace {
         self.data.prefix.as_ref().map(|p| p.as_str())
     }
 
-    /// Validate the URI and prefix according to XML namespace rules.
-    fn validate(uri: &str, prefix: Option<&NCName>) -> Result<(), XmlError> {
-        xml_spec::validate_namespace(uri, prefix)
-    }
-
     /// Compare this namespace with another for equality based only on their URI.
     /// This is what the XML specification considers as "equal" namespaces in the
     /// context of namespace declarations.
@@ -194,7 +189,7 @@ mod tests {
 
         assert_eq!(element.name(), "test");
         assert_eq!(element.namespace(), Some(namespace));
-        assert_eq!(element.qualified_name().qualified_name_string(), "ex:test");
+        assert_eq!(element.qualified_name().to_string(), "ex:test");
     }
 
     #[test]

@@ -103,9 +103,7 @@ impl TryFrom<&str> for NCName {
         if is_valid_ncname(s) {
             Ok(NCName(s.to_string()))
         } else {
-            Err(XmlError::NamespaceError(format!(
-                "'{s}' is not a valid NCName"
-            )))
+            Err(XmlError::InvalidXml(format!("'{s}' is not a valid NCName")))
         }
     }
 }
@@ -117,9 +115,7 @@ impl TryFrom<String> for NCName {
         if is_valid_ncname(&s) {
             Ok(NCName(s))
         } else {
-            Err(XmlError::NamespaceError(format!(
-                "'{s}' is not a valid NCName"
-            )))
+            Err(XmlError::InvalidXml(format!("'{s}' is not a valid NCName")))
         }
     }
 }
@@ -129,13 +125,10 @@ impl TryFrom<String> for NCName {
 /// NCName = Name - (Char* ':' Char*), where Name uses NameStartChar and NameChar
 /// from XML 1.0 Fifth Edition. This implementation uses the full Unicode ranges.
 ///
-/// Note: This function is prive in `xml_spec`, because instead of performing manual checks,
+/// Note: This function is private in `xml_spec`, because instead of performing manual checks,
 /// we should be using [`NCName`] struct instead.
 fn is_valid_ncname(s: &str) -> bool {
     if s.is_empty() {
-        return false;
-    }
-    if s.contains(':') {
         return false;
     }
     let mut chars = s.chars();

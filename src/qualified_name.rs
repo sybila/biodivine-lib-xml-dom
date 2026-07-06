@@ -4,6 +4,8 @@ use crate::namespace::Namespace;
 use crate::xml_spec::{self, NCName};
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::fmt;
+use std::sync::OnceLock;
 
 /// Represents a qualified XML name (local name plus optional namespace).
 ///
@@ -57,11 +59,11 @@ impl QualifiedName {
     /// already has validated data (e.g., from [`xml_spec::split_qname`]). For more convenient
     /// constructors that accept `&str`, see [`QualifiedName::without_namespace`] and
     /// [`QualifiedName::with_namespace`].
-    pub fn new(name: NCName, namespace: Option<Namespace>) -> XmlResult<Self> {
-        Ok(Self {
+    pub fn new(name: NCName, namespace: Option<Namespace>) -> Self {
+        Self {
             local_name: name,
             namespace,
-        })
+        }
     }
 
     /// Create a qualified name without a namespace.
@@ -188,14 +190,20 @@ impl QualifiedName {
         Self::resolve_qname(element, qualified_name, false)
     }
 
+    /// Returns the cached namespace for the predefined `xml` prefix.
+    fn xml_namespace() -> &'static Namespace {
+        static XML_NS: OnceLock<Namespace> = OnceLock::new();
+        XML_NS.get_or_init(|| {
+            Namespace::prefixed(xml_spec::RESERVED_XML_URI, "xml")
+                .expect("xml namespace should always be valid")
+        })
+    }
+
     /// Construct a [`QualifiedName`] for the predefined `xml` prefix.
     fn resolve_xml_prefix(local_name: NCName) -> XmlResult<Self> {
-        xml_spec::validate_resolved_prefix("xml", Some(xml_spec::RESERVED_XML_URI))?;
-        let ns = Namespace::prefixed(xml_spec::RESERVED_XML_URI, "xml")
-            .map_err(|e| XmlError::NamespaceError(e.to_string()))?;
         Ok(Self {
             local_name,
-            namespace: Some(ns),
+            namespace: Some(Self::xml_namespace().clone()),
         })
     }
 
@@ -209,6 +217,50 @@ impl QualifiedName {
         qualified_name: &str,
         apply_default_namespace: bool,
     ) -> XmlResult<Self> {
+        Self::resolve_with_lookup(
+            qualified_name,
+            apply_default_namespace,
+            |prefix| element.get_namespace(prefix.as_str()),
+            || element.get_namespace(""),
+        )
+    }
+
+    /// Internal resolver shared by the map-based resolution methods.
+    fn resolve_with_map(
+        qualified_name: &str,
+        ns_map: &HashMap<String, String>,
+        apply_default_namespace: bool,
+    ) -> XmlResult<Self> {
+        Self::resolve_with_lookup(
+            qualified_name,
+            apply_default_namespace,
+            |prefix| {
+                ns_map
+                    .get(prefix.as_str())
+                    .and_then(|uri| Namespace::prefixed(uri, prefix).ok())
+            },
+            || {
+                ns_map
+                    .get("")
+                    .and_then(|uri| Namespace::without_prefix(uri).ok())
+            },
+        )
+    }
+
+    /// Common resolver that delegates namespace lookup to closures.
+    ///
+    /// `lookup_prefix` resolves a non-xml prefix to its namespace.
+    /// `lookup_default` resolves the default namespace (empty prefix).
+    fn resolve_with_lookup<F, G>(
+        qualified_name: &str,
+        apply_default_namespace: bool,
+        lookup_prefix: F,
+        lookup_default: G,
+    ) -> XmlResult<Self>
+    where
+        F: FnOnce(&NCName) -> Option<Namespace>,
+        G: FnOnce() -> Option<Namespace>,
+    {
         let (prefix, local_name) = xml_spec::split_qname(qualified_name)?;
 
         let namespace = if let Some(prefix) = prefix {
@@ -216,14 +268,14 @@ impl QualifiedName {
                 return Self::resolve_xml_prefix(local_name);
             }
 
-            let ns = element.get_namespace(prefix.as_str()).ok_or_else(|| {
-                XmlError::NamespaceError(format!("Undefined namespace prefix: {}", prefix.as_str()))
+            let ns = lookup_prefix(&prefix).ok_or_else(|| {
+                XmlError::NamespaceError(format!("Undefined namespace prefix: {prefix}"))
             })?;
 
             xml_spec::validate_resolved_prefix(prefix.as_str(), Some(ns.uri()))?;
             Some(ns)
         } else if apply_default_namespace {
-            element.get_namespace("")
+            lookup_default()
         } else {
             None
         };
@@ -288,71 +340,14 @@ impl QualifiedName {
     ) -> XmlResult<Self> {
         Self::resolve_with_map(qualified_name, ns_map, false)
     }
+}
 
-    /// Internal resolver shared by the map-based resolution methods.
-    fn resolve_with_map(
-        qualified_name: &str,
-        ns_map: &HashMap<String, String>,
-        apply_default_namespace: bool,
-    ) -> XmlResult<Self> {
-        let (prefix, local_name) = xml_spec::split_qname(qualified_name)?;
-
-        let namespace = if let Some(prefix) = prefix {
-            if prefix == "xml" {
-                return Self::resolve_xml_prefix(local_name);
-            }
-
-            let uri = ns_map.get(prefix.as_str()).ok_or_else(|| {
-                XmlError::NamespaceError(format!("Undefined namespace prefix: {}", prefix.as_str()))
-            })?;
-
-            xml_spec::validate_resolved_prefix(prefix.as_str(), Some(uri))?;
-
-            let ns = Namespace::prefixed(uri, prefix.as_str())
-                .map_err(|e| XmlError::NamespaceError(e.to_string()))?;
-            Some(ns)
-        } else if apply_default_namespace {
-            if let Some(uri) = ns_map.get("") {
-                let ns = Namespace::without_prefix(uri)
-                    .map_err(|e| XmlError::NamespaceError(e.to_string()))?;
-                Some(ns)
-            } else {
-                None
-            }
+impl fmt::Display for QualifiedName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(prefix) = self.namespace().and_then(|ns| ns.prefix()) {
+            write!(f, "{prefix}:{}", self.local_name())
         } else {
-            None
-        };
-
-        Ok(Self {
-            local_name,
-            namespace,
-        })
-    }
-
-    /// Returns the qualified name as a string (e.g., `prefix:local_name` or just `local_name`).
-    ///
-    /// Note that this representation is lossy: two semantically equal [`QualifiedName`] objects
-    /// (same URI and local name, different prefix) may produce different strings.
-    /// Use [`QualifiedName::local_name`] and [`QualifiedName::namespace`] for reliable comparison.
-    ///
-    /// # Examples
-    /// ```rust
-    /// use biodivine_lib_xml_dom::{Namespace, QualifiedName};
-    /// let ns = Namespace::prefixed("http://example.com", "ex").unwrap();
-    /// let qn = QualifiedName::with_namespace("foo", &ns).unwrap();
-    /// assert_eq!(qn.qualified_name_string(), "ex:foo");
-    /// let qn2 = QualifiedName::without_namespace("bar").unwrap();
-    /// assert_eq!(qn2.qualified_name_string(), "bar");
-    /// ```
-    pub fn qualified_name_string(&self) -> String {
-        if let Some(ns) = self.namespace() {
-            if let Some(prefix) = ns.prefix() {
-                format!("{}:{}", prefix, self.local_name())
-            } else {
-                self.local_name().to_string()
-            }
-        } else {
-            self.local_name().to_string()
+            write!(f, "{}", self.local_name())
         }
     }
 }
@@ -548,7 +543,7 @@ mod tests {
         // Namespace without prefix should produce just the local name
         let ns = ns("http://example.com");
         let qn = q_ns_name("foo", &ns).unwrap();
-        assert_eq!(qn.qualified_name_string(), "foo");
+        assert_eq!(qn.to_string(), "foo");
     }
 
     #[test]

@@ -357,7 +357,7 @@ mod tests {
             root.namespace().unwrap().uri(),
             "http://www.w3.org/1999/xhtml"
         );
-        assert_eq!(root.qualified_name().qualified_name_string(), "html:html");
+        assert_eq!(root.qualified_name().to_string(), "html:html");
     }
 
     #[test]

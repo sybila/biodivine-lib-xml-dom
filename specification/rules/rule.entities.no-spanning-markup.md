@@ -16,6 +16,8 @@ No start-tag, end-tag, empty-element tag, element, comment, processing instructi
 <root>&fulltag;</root>
 ```
 
+> The entire `<b>bold</b>` element is contained within a single entity, satisfying this rule.
+
 ## Violating Example
 
 ```xml
@@ -23,5 +25,7 @@ No start-tag, end-tag, empty-element tag, element, comment, processing instructi
 <!DOCTYPE root [
   <!ENTITY half "<b">
 ]>
-<root>&half;>text</root>
+<root>&half;text</b></root>
 ```
+
+> The start-tag `<b>` begins in the entity `half`, but the end-tag `</b>` appears outside the entity in the document content, spanning an entity boundary.

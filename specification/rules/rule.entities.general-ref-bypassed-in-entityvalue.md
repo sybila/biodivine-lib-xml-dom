@@ -17,6 +17,8 @@ When a general entity reference appears in the EntityValue in an entity declarat
 <root>&wrapper;</root>
 ```
 
+> In the valid case, `&wrapper;` expands to `text &other; more` — the `&other;` inside the EntityValue is left as a literal entity reference and is NOT expanded when `&wrapper;` is later processed.
+
 ## Violating Example
 
 ```xml
@@ -27,3 +29,5 @@ When a general entity reference appears in the EntityValue in an entity declarat
 ]>
 <root>&wrapper;</root>
 ```
+
+> A processor that incorrectly expands `&other;` inside the EntityValue, producing `text replacement more` instead of `text &other; more`, would violate this rule.

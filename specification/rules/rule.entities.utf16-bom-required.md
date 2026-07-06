@@ -1,6 +1,6 @@
 # Rule: UTF-16 entities must begin with BOM
 
-Entities encoded in UTF-16 must begin with the Byte Order Mark (U+FEFF).
+Entities encoded in UTF-16 must begin with the Byte Order Mark (U+FEFF, encoded as bytes FE FF for UTF-16BE or FF FE for UTF-16LE).
 
 ## Rationale
 
@@ -9,11 +9,15 @@ Entities encoded in UTF-16 must begin with the Byte Order Mark (U+FEFF).
 ## Valid Example
 
 ```xml
-<root>UTF-16 encoded with BOM prefix</root>
+<?xml version="1.0"?>
+<!-- UTF-16 encoded with BOM (FE FF bytes at start of file) -->
+<!-- The first two bytes of the file are the BOM, followed by the text declaration -->
 ```
 
 ## Violating Example
 
 ```xml
-<root>UTF-16 encoded without BOM prefix</root>
+<?xml version="1.0"?>
+<!-- UTF-16 encoded without BOM (no FE FF bytes at start of file) -->
+<!-- This is a fatal error per the specification -->
 ```

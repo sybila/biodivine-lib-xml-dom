@@ -1,4 +1,4 @@
-# Rule: DOCTYPE name must match root element type
+# Rule: [VC] DOCTYPE name must match root element type
 
 The Name in the document type declaration must match the element type of the root element.
 

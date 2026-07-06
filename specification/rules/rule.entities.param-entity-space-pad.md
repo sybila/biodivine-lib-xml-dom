@@ -15,18 +15,20 @@ When a parameter-entity reference is recognized in the DTD and included, its rep
   <!ELEMENT root (%pe;)*>
   <!-- Effectively: <!ELEMENT root ( hello )* -->
 ]>
+<root/>
 ```
 
 ## Violating Example
 
 ```xml
 <!-- If a processor failed to add space padding, %pe; would expand
-     to "hello" without spaces, potentially causing token merging:
-     "beforehelloafter" instead of "before hello after" -->
+     to "hello" without spaces, causing token merging. For example,
+     <!ELEMENT root before%pe;after> would become
+     <!ELEMENT root beforehelloafter> (one invalid token)
+     instead of <!ELEMENT root before hello after> (three tokens). -->
 <!DOCTYPE root [
   <!ENTITY % pe "hello">
   <!ELEMENT root before%pe;after>
-  <!-- Without padding: "beforehelloafter" (one token, likely invalid)
-     With padding: "before hello after" (three tokens) -->
 ]>
+<root/>
 ```

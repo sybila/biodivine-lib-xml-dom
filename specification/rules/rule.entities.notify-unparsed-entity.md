@@ -18,6 +18,8 @@ When the name of an unparsed entity appears as a token in the value of an attrib
 <root img="image"/>
 ```
 
+> A validating processor that provides the application with the system identifier of the unparsed entity `image` and its notation `gif` satisfies this rule.
+
 ## Violating Example
 
 ```xml
@@ -29,3 +31,5 @@ When the name of an unparsed entity appears as a token in the value of an attrib
 ]>
 <root img="image"/>
 ```
+
+> A validating processor that fails to provide the application with the entity and notation identifiers would violate this rule.

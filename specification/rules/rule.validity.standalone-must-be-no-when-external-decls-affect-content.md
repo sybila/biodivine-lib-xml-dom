@@ -1,4 +1,4 @@
-# Rule: Standalone declaration must be "no" when external markup declarations affect document content
+# Rule: [VC] Standalone declaration must be "no" when external markup declarations affect document content
 
 The standalone document declaration must have the value "no" if any external markup declarations contain declarations of attributes with default values, entities (other than amp, lt, gt, apos, quot) referenced in the document, attributes with tokenized types where normalization differs, or element types with element content where whitespace occurs.
 

@@ -21,7 +21,10 @@ An unprefixed element name within the scope of a default namespace declaration t
 
 ```xml
 <?xml version="1.0"?>
+<!-- An element with an undeclared prefix is incorrectly assumed
+     to be in the default namespace when xmlns="" has removed it.
+     The prefix "ex" must be declared to use ex:item. -->
 <root xmlns="http://example.org">
-  <item xmlns="">incorrectly expects no namespace</item>
+  <ex:item xmlns=""/>
 </root>
 ```

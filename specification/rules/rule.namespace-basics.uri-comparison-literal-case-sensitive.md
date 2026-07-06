@@ -20,8 +20,10 @@ URI references identifying namespaces must be compared as identical strings with
 ## Violating Example
 
 ```xml
-<!-- Treating these as the same namespace would be a violation -->
-<!-- "http://example.org/ns" and "http://example.org/NS" are different -->
+<!-- A processor that treats "http://example.org/ns" and
+     "http://example.org/NS" as the same namespace would
+     violate this rule. The correct behavior is to treat
+     them as two distinct namespace names. -->
 <root xmlns:a="http://example.org/ns"
       xmlns:b="http://example.org/NS">
   <!-- a:item and b:item are in DIFFERENT namespaces -->

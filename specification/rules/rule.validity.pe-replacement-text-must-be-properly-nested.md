@@ -1,4 +1,4 @@
-# Rule: Parameter entity replacement text must be properly nested with markup declarations
+# Rule: [VC] Parameter entity replacement text must be properly nested with markup declarations
 
 If either the first character or the last character of a markup declaration is contained in the replacement text for a parameter-entity reference, both must be contained in the same replacement text.
 

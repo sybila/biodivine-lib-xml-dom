@@ -18,6 +18,8 @@ XML processors must provide applications with the name and external identifier(s
 <root img="image"/>
 ```
 
+> A processor that provides the application with the notation name `gif` and its system identifier `image/gif` satisfies this rule.
+
 ## Violating Example
 
 ```xml
@@ -29,3 +31,5 @@ XML processors must provide applications with the name and external identifier(s
 ]>
 <root img="image"/>
 ```
+
+> A processor that fails to provide the application with the notation information would violate this rule.

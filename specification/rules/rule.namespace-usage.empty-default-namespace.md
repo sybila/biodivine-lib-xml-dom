@@ -18,12 +18,3 @@ A default namespace declaration with an empty string value removes the default n
   <after>back to default namespace</after>
 </root>
 ```
-
-## Violating Example
-
-```xml
-<?xml version="1.0"?>
-<root xmlns="http://example.org">
-  <item xmlns="">in no namespace, not default</item>
-</root>
-```

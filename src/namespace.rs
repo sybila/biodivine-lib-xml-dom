@@ -1,5 +1,5 @@
 use crate::error::XmlError;
-use crate::xml_spec;
+use crate::xml_spec::{self, NCName};
 use std::sync::Arc;
 
 /// Represents an XML namespace with URI and optional prefix.
@@ -37,7 +37,7 @@ pub struct Namespace {
 #[derive(Debug, PartialEq, Eq, Hash)]
 struct NamespaceData {
     uri: String,
-    prefix: Option<String>,
+    prefix: Option<NCName>,
 }
 
 impl Namespace {
@@ -62,9 +62,13 @@ impl Namespace {
     /// assert!(ns.is_err());
     /// ```
     pub fn new(uri: String, prefix: Option<String>) -> Result<Self, XmlError> {
-        Self::validate(&uri, prefix.as_deref())?;
+        let prefix_ncname = prefix.map(NCName::try_from).transpose()?;
+        Self::validate(&uri, prefix_ncname.as_ref())?;
         Ok(Self {
-            data: Arc::new(NamespaceData { uri, prefix }),
+            data: Arc::new(NamespaceData {
+                uri,
+                prefix: prefix_ncname,
+            }),
         })
     }
 
@@ -111,11 +115,12 @@ impl Namespace {
     pub fn prefixed<U: AsRef<str>, P: AsRef<str>>(uri: U, prefix: P) -> Result<Self, XmlError> {
         let uri_str = uri.as_ref();
         let prefix_str = prefix.as_ref();
-        Self::validate(uri_str, Some(prefix_str))?;
+        let prefix_ncname = NCName::try_from(prefix_str)?;
+        Self::validate(uri_str, Some(&prefix_ncname))?;
         Ok(Self {
             data: Arc::new(NamespaceData {
                 uri: uri_str.to_string(),
-                prefix: Some(prefix_str.to_string()),
+                prefix: Some(prefix_ncname),
             }),
         })
     }
@@ -132,22 +137,41 @@ impl Namespace {
         &self.data.uri
     }
 
-    /// Get a reference to the namespace prefix, if any.
+    /// Get a reference to the namespace prefix as an [`NCName`], if any.
+    ///
+    /// The returned [`NCName`] is guaranteed to be a valid XML NCName.
     ///
     /// # Examples
     /// ```rust
     /// use biodivine_lib_xml_dom::Namespace;
     /// let ns = Namespace::prefixed("http://example.com", "ex").unwrap();
-    /// assert_eq!(ns.prefix(), Some("ex"));
+    /// assert_eq!(ns.prefix().map(|p| p.as_str()), Some("ex"));
     /// let ns = Namespace::without_prefix("http://example.com").unwrap();
     /// assert_eq!(ns.prefix(), None);
     /// ```
-    pub fn prefix(&self) -> Option<&str> {
-        self.data.prefix.as_deref()
+    pub fn prefix(&self) -> Option<&NCName> {
+        self.data.prefix.as_ref()
+    }
+
+    /// Get a reference to the namespace prefix as a string slice, if any.
+    ///
+    /// This is a convenience method that returns the prefix as `&str`.
+    /// Prefer [`Namespace::prefix`] when you need the type-safe [`NCName`] representation.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use biodivine_lib_xml_dom::Namespace;
+    /// let ns = Namespace::prefixed("http://example.com", "ex").unwrap();
+    /// assert_eq!(ns.prefix_str(), Some("ex"));
+    /// let ns = Namespace::without_prefix("http://example.com").unwrap();
+    /// assert_eq!(ns.prefix_str(), None);
+    /// ```
+    pub fn prefix_str(&self) -> Option<&str> {
+        self.data.prefix.as_ref().map(|p| p.as_str())
     }
 
     /// Validate the URI and prefix according to XML namespace rules.
-    fn validate(uri: &str, prefix: Option<&str>) -> Result<(), XmlError> {
+    fn validate(uri: &str, prefix: Option<&NCName>) -> Result<(), XmlError> {
         xml_spec::validate_namespace(uri, prefix)
     }
 

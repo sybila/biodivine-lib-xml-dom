@@ -1,7 +1,7 @@
 use crate::element::Element;
 use crate::error::{XmlError, XmlResult};
 use crate::namespace::Namespace;
-use crate::xml_spec;
+use crate::xml_spec::{self, NCName};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
@@ -46,40 +46,22 @@ use std::collections::HashMap;
 /// ```
 #[derive(Debug, Clone)]
 pub struct QualifiedName {
-    local_name: String,
+    local_name: NCName,
     namespace: Option<Namespace>,
 }
 
 impl QualifiedName {
     /// Create a new qualified name with a local name and optional namespace.
     ///
-    /// This constructor takes an owned [`String`] to avoid allocating when the caller
-    /// already has owned data (e.g., from [`xml_spec::split_qname`]). For more convenient
+    /// This constructor takes an owned [`NCName`] to avoid allocating when the caller
+    /// already has validated data (e.g., from [`xml_spec::split_qname`]). For more convenient
     /// constructors that accept `&str`, see [`QualifiedName::without_namespace`] and
     /// [`QualifiedName::with_namespace`].
-    ///
-    /// # Errors
-    ///
-    /// Returns [`XmlError::InvalidXml`] if the local name is not a valid NCName.
-    pub fn new(name: String, namespace: Option<Namespace>) -> XmlResult<Self> {
-        xml_spec::validate_local_name(&name)?;
+    pub fn new(name: NCName, namespace: Option<Namespace>) -> XmlResult<Self> {
         Ok(Self {
             local_name: name,
             namespace,
         })
-    }
-
-    /// Create a new qualified name with a pre-validated local name and optional namespace.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure that `name` is a valid NCName (e.g., it was already validated
-    /// by [`xml_spec::split_qname`] or [`xml_spec::validate_local_name`]).
-    unsafe fn new_unchecked(name: String, namespace: Option<Namespace>) -> Self {
-        Self {
-            local_name: name,
-            namespace,
-        }
     }
 
     /// Create a qualified name without a namespace.
@@ -92,11 +74,15 @@ impl QualifiedName {
     /// ```rust
     /// use biodivine_lib_xml_dom::QualifiedName;
     /// let qn = QualifiedName::without_namespace("foo").unwrap();
-    /// assert_eq!(qn.local_name(), "foo");
+    /// assert_eq!(qn.local_name_str(), "foo");
     /// assert!(qn.namespace().is_none());
     /// ```
     pub fn without_namespace<S: AsRef<str>>(name: S) -> XmlResult<Self> {
-        Self::new(name.as_ref().to_string(), None)
+        let ncname = NCName::try_from(name.as_ref())?;
+        Ok(Self {
+            local_name: ncname,
+            namespace: None,
+        })
     }
 
     /// Create a qualified name with a namespace.
@@ -110,16 +96,30 @@ impl QualifiedName {
     /// use biodivine_lib_xml_dom::{Namespace, QualifiedName};
     /// let ns = Namespace::without_prefix("http://example.com").unwrap();
     /// let qn = QualifiedName::with_namespace("foo", &ns).unwrap();
-    /// assert_eq!(qn.local_name(), "foo");
+    /// assert_eq!(qn.local_name_str(), "foo");
     /// assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
     /// ```
     pub fn with_namespace<S: AsRef<str>>(name: S, namespace: &Namespace) -> XmlResult<Self> {
-        Self::new(name.as_ref().to_string(), Some(namespace.clone()))
+        let ncname = NCName::try_from(name.as_ref())?;
+        Ok(Self {
+            local_name: ncname,
+            namespace: Some(namespace.clone()),
+        })
     }
 
-    /// Get the local name.
-    pub fn local_name(&self) -> &str {
+    /// Get the local name as an [`NCName`].
+    ///
+    /// The returned [`NCName`] is guaranteed to be a valid XML NCName.
+    pub fn local_name(&self) -> &NCName {
         &self.local_name
+    }
+
+    /// Get the local name as a string slice.
+    ///
+    /// This is a convenience method that returns the local name as `&str`.
+    /// Prefer [`QualifiedName::local_name`] when you need the type-safe [`NCName`] representation.
+    pub fn local_name_str(&self) -> &str {
+        self.local_name.as_str()
     }
 
     /// Get the namespace, if any.
@@ -189,13 +189,14 @@ impl QualifiedName {
     }
 
     /// Construct a [`QualifiedName`] for the predefined `xml` prefix.
-    fn resolve_xml_prefix(local_name: &str) -> XmlResult<Self> {
+    fn resolve_xml_prefix(local_name: NCName) -> XmlResult<Self> {
         xml_spec::validate_resolved_prefix("xml", Some(xml_spec::RESERVED_XML_URI))?;
         let ns = Namespace::prefixed(xml_spec::RESERVED_XML_URI, "xml")
             .map_err(|e| XmlError::NamespaceError(e.to_string()))?;
-        // Safe: `local_name` was extracted from a valid QName by the caller of this function,
-        // which already validated it via `xml_spec::split_qname`.
-        Ok(unsafe { Self::new_unchecked(local_name.to_string(), Some(ns)) })
+        Ok(Self {
+            local_name,
+            namespace: Some(ns),
+        })
     }
 
     /// Internal resolver shared by [`resolve_element`] and [`resolve_attribute`].
@@ -215,11 +216,11 @@ impl QualifiedName {
                 return Self::resolve_xml_prefix(local_name);
             }
 
-            let ns = element.get_namespace(prefix).ok_or_else(|| {
-                XmlError::NamespaceError(format!("Undefined namespace prefix: {prefix}"))
+            let ns = element.get_namespace(prefix.as_str()).ok_or_else(|| {
+                XmlError::NamespaceError(format!("Undefined namespace prefix: {}", prefix.as_str()))
             })?;
 
-            xml_spec::validate_resolved_prefix(prefix, Some(ns.uri()))?;
+            xml_spec::validate_resolved_prefix(prefix.as_str(), Some(ns.uri()))?;
             Some(ns)
         } else if apply_default_namespace {
             element.get_namespace("")
@@ -227,8 +228,10 @@ impl QualifiedName {
             None
         };
 
-        // Safe: `local_name` was validated by `xml_spec::split_qname` above.
-        Ok(unsafe { Self::new_unchecked(local_name.to_string(), namespace) })
+        Ok(Self {
+            local_name,
+            namespace,
+        })
     }
 
     /// Resolve a qualified name for an **element** using a namespace map (prefix -> URI).
@@ -299,13 +302,13 @@ impl QualifiedName {
                 return Self::resolve_xml_prefix(local_name);
             }
 
-            let uri = ns_map.get(prefix).ok_or_else(|| {
-                XmlError::NamespaceError(format!("Undefined namespace prefix: {prefix}"))
+            let uri = ns_map.get(prefix.as_str()).ok_or_else(|| {
+                XmlError::NamespaceError(format!("Undefined namespace prefix: {}", prefix.as_str()))
             })?;
 
-            xml_spec::validate_resolved_prefix(prefix, Some(uri))?;
+            xml_spec::validate_resolved_prefix(prefix.as_str(), Some(uri))?;
 
-            let ns = Namespace::prefixed(uri, prefix)
+            let ns = Namespace::prefixed(uri, prefix.as_str())
                 .map_err(|e| XmlError::NamespaceError(e.to_string()))?;
             Some(ns)
         } else if apply_default_namespace {
@@ -320,8 +323,10 @@ impl QualifiedName {
             None
         };
 
-        // Safe: `local_name` was validated by `xml_spec::split_qname` above.
-        Ok(unsafe { Self::new_unchecked(local_name.to_string(), namespace) })
+        Ok(Self {
+            local_name,
+            namespace,
+        })
     }
 
     /// Returns the qualified name as a string (e.g., `prefix:local_name` or just `local_name`).
@@ -420,9 +425,10 @@ mod tests {
     fn test_creation_and_error() {
         let ns = ns("http://example.com");
         let qn = q_ns_name("foo", &ns).unwrap();
-        assert_eq!(qn.local_name(), "foo");
+        assert_eq!(qn.local_name_str(), "foo");
         assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
-        assert!(QualifiedName::new("foo:bar".to_string(), None).is_err());
+        // new() takes NCName, so we test via try_from which will fail for invalid input
+        assert!(NCName::try_from("foo:bar").is_err());
         assert!(QualifiedName::with_namespace("foo:bar", &ns).is_err());
         assert!(QualifiedName::without_namespace("foo:bar").is_err());
     }
@@ -485,8 +491,8 @@ mod tests {
         );
         let qn = QualifiedName::resolve_element(&el, "ex:bar").unwrap();
         assert_eq!(qn.local_name(), "bar");
-        assert_eq!(qn.namespace().as_ref().unwrap().uri(), "http://example.com");
-        assert_eq!(qn.namespace().as_ref().unwrap().prefix(), Some("ex"));
+        assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
+        assert_eq!(qn.namespace().unwrap().prefix_str(), Some("ex"));
     }
 
     #[test]
@@ -504,7 +510,7 @@ mod tests {
         // Now resolve a qualified name on the child, should use parent's namespace
         let qn = QualifiedName::resolve_element(&child, "ex:bar").unwrap();
         assert_eq!(qn.local_name(), "bar");
-        assert_eq!(qn.namespace().as_ref().unwrap().uri(), "http://parent.com");
+        assert_eq!(qn.namespace().unwrap().uri(), "http://parent.com");
     }
 
     #[test]
@@ -610,7 +616,7 @@ mod tests {
         let qn = QualifiedName::resolve_element_with_namespace_map("ex:foo", &ns_map).unwrap();
         assert_eq!(qn.local_name(), "foo");
         assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
-        assert_eq!(qn.namespace().unwrap().prefix(), Some("ex"));
+        assert_eq!(qn.namespace().unwrap().prefix_str(), Some("ex"));
     }
 
     #[test]
@@ -620,7 +626,7 @@ mod tests {
         let qn = QualifiedName::resolve_attribute_with_namespace_map("ex:foo", &ns_map).unwrap();
         assert_eq!(qn.local_name(), "foo");
         assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
-        assert_eq!(qn.namespace().unwrap().prefix(), Some("ex"));
+        assert_eq!(qn.namespace().unwrap().prefix_str(), Some("ex"));
     }
 
     #[test]

@@ -501,11 +501,8 @@ mod tests {
             .find(|(q, _)| q.local_name() == "attr" && q.namespace().is_some())
             .expect("Missing namespaced attribute");
         assert_eq!(ns_attr.1, "value");
-        assert_eq!(
-            ns_attr.0.namespace().as_ref().unwrap().uri(),
-            "http://example.com"
-        );
-        assert_eq!(ns_attr.0.namespace().as_ref().unwrap().prefix(), Some("ex"));
+        assert_eq!(ns_attr.0.namespace().unwrap().uri(), "http://example.com");
+        assert_eq!(ns_attr.0.namespace().unwrap().prefix_str(), Some("ex"));
         // Find the non-namespaced attribute
         let attr2 = attrs
             .iter()
@@ -523,14 +520,8 @@ mod tests {
             .find(|(q, _)| q.local_name() == "attr" && q.namespace().is_some())
             .expect("Missing namespaced attribute after round-trip");
         assert_eq!(ns_attr2.1, "value");
-        assert_eq!(
-            ns_attr2.0.namespace().as_ref().unwrap().uri(),
-            "http://example.com"
-        );
-        assert_eq!(
-            ns_attr2.0.namespace().as_ref().unwrap().prefix(),
-            Some("ex")
-        );
+        assert_eq!(ns_attr2.0.namespace().unwrap().uri(), "http://example.com");
+        assert_eq!(ns_attr2.0.namespace().unwrap().prefix_str(), Some("ex"));
     }
 
     #[test]
@@ -547,11 +538,8 @@ mod tests {
             .find(|(q, _)| q.local_name() == "attr" && q.namespace().is_some())
             .expect("Missing namespaced attribute");
         assert_eq!(ns_attr.1, "value");
-        assert_eq!(
-            ns_attr.0.namespace().as_ref().unwrap().uri(),
-            "http://example.com"
-        );
-        assert_eq!(ns_attr.0.namespace().as_ref().unwrap().prefix(), Some("ex"));
+        assert_eq!(ns_attr.0.namespace().unwrap().uri(), "http://example.com");
+        assert_eq!(ns_attr.0.namespace().unwrap().prefix_str(), Some("ex"));
         // Find the non-namespaced attribute
         let attr2 = attrs
             .iter()
@@ -570,14 +558,8 @@ mod tests {
             .find(|(q, _)| q.local_name() == "attr" && q.namespace().is_some())
             .expect("Missing namespaced attribute after round-trip");
         assert_eq!(ns_attr2.1, "value");
-        assert_eq!(
-            ns_attr2.0.namespace().as_ref().unwrap().uri(),
-            "http://example.com"
-        );
-        assert_eq!(
-            ns_attr2.0.namespace().as_ref().unwrap().prefix(),
-            Some("ex")
-        );
+        assert_eq!(ns_attr2.0.namespace().unwrap().uri(), "http://example.com");
+        assert_eq!(ns_attr2.0.namespace().unwrap().prefix_str(), Some("ex"));
     }
 
     #[test]

@@ -96,6 +96,12 @@ impl PartialEq<String> for NCName {
     }
 }
 
+impl<'a> From<&'a NCName> for std::borrow::Cow<'a, str> {
+    fn from(ncname: &'a NCName) -> Self {
+        std::borrow::Cow::Borrowed(&ncname.0)
+    }
+}
+
 impl TryFrom<&str> for NCName {
     type Error = XmlError;
 

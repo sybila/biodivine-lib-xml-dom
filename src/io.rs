@@ -11,6 +11,7 @@ use crate::QualifiedName;
 use crate::document::Document;
 use crate::element::Element;
 use crate::error::{XmlError, XmlResult};
+use crate::xml_spec::NCName;
 
 /// Parse XML from a file
 pub fn parse_file<P: AsRef<Path>>(path: P) -> XmlResult<Document> {
@@ -32,7 +33,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
 
     let doc = Document::empty();
     let mut stack: Vec<Element> = Vec::new();
-    let mut ns_stack: Vec<HashMap<String, String>> = vec![HashMap::new()];
+    let mut ns_stack: Vec<HashMap<Option<NCName>, String>> = vec![HashMap::new()];
     let mut buf = Vec::new();
 
     loop {
@@ -42,9 +43,9 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                 let mut ns_map = ns_stack.last().unwrap().clone();
                 let namespace_declarations = extract_namespace_declarations(e)?;
                 for (prefix, uri) in &namespace_declarations {
-                    if prefix.is_empty() && uri.is_empty() {
+                    if prefix.is_none() && uri.is_empty() {
                         // Empty default namespace declaration removes any prior default ns binding
-                        ns_map.remove("");
+                        ns_map.remove(&None);
                     } else {
                         ns_map.insert(prefix.clone(), uri.clone());
                     }
@@ -108,8 +109,8 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                 let mut ns_map = ns_stack.last().unwrap().clone();
                 let namespace_declarations = extract_namespace_declarations(e)?;
                 for (prefix, uri) in &namespace_declarations {
-                    if prefix.is_empty() && uri.is_empty() {
-                        ns_map.remove("");
+                    if prefix.is_none() && uri.is_empty() {
+                        ns_map.remove(&None);
                     } else {
                         ns_map.insert(prefix.clone(), uri.clone());
                     }
@@ -135,7 +136,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
 fn parse_element(
     doc: &Document,
     e: &BytesStart,
-    ns_map: &HashMap<String, String>,
+    ns_map: &HashMap<Option<NCName>, String>,
 ) -> XmlResult<Element> {
     // 1. Extract namespace declarations (already done in caller)
     // 2. Use the provided ns_map for resolution
@@ -153,14 +154,18 @@ fn parse_element(
     // 5. Apply namespace declarations to the element
     let namespace_declarations = extract_namespace_declarations(e)?;
     for (prefix, uri) in namespace_declarations {
-        if prefix.is_empty() {
-            if uri.is_empty() {
-                element.declare_empty_default_namespace();
-            } else {
-                element.declare_default_namespace(Namespace::without_prefix(&uri)?);
+        match prefix {
+            Some(prefix_ncname) => {
+                element
+                    .declare_namespace(&prefix_ncname, Namespace::prefixed(&uri, &prefix_ncname)?);
             }
-        } else {
-            element.declare_namespace(prefix.clone(), Namespace::prefixed(&uri, &prefix)?);
+            None => {
+                if uri.is_empty() {
+                    element.declare_empty_default_namespace();
+                } else {
+                    element.declare_default_namespace(Namespace::without_prefix(&uri)?);
+                }
+            }
         }
     }
     // 6. Add all attributes, resolving their qualified names using the provided ns_map
@@ -188,7 +193,7 @@ fn parse_element(
 }
 
 /// Extract namespace declarations from attributes
-fn extract_namespace_declarations(e: &BytesStart) -> XmlResult<Vec<(String, String)>> {
+fn extract_namespace_declarations(e: &BytesStart) -> XmlResult<Vec<(Option<NCName>, String)>> {
     let mut namespace_declarations = Vec::new();
     for attr in e.attributes() {
         let attr = attr.map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {e}")))?;
@@ -197,17 +202,18 @@ fn extract_namespace_declarations(e: &BytesStart) -> XmlResult<Vec<(String, Stri
         let value = attr
             .normalized_value(XmlVersion::Explicit1_0)
             .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute value: {e}")))?;
-        if let Some(prefix) = key.strip_prefix("xmlns:") {
+        if let Some(prefix_str) = key.strip_prefix("xmlns:") {
             // NSC: No Prefix Undeclaring - the attribute value MUST NOT be empty for a prefix
             if value.is_empty() {
                 return Err(XmlError::NamespaceError(format!(
-                    "Namespace prefix '{prefix}' may not be undeclared with an empty string"
+                    "Namespace prefix '{prefix_str}' may not be undeclared with an empty string"
                 )));
             }
-            namespace_declarations.push((prefix.to_string(), value.to_string()));
+            let prefix_ncname = NCName::try_from(prefix_str)?;
+            namespace_declarations.push((Some(prefix_ncname), value.to_string()));
         } else if key == "xmlns" {
             // Empty default namespace declaration is allowed (removes the default ns from scope)
-            namespace_declarations.push(("".to_string(), value.to_string()));
+            namespace_declarations.push((None, value.to_string()));
         }
     }
     Ok(namespace_declarations)
@@ -245,16 +251,17 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
     let mut attrs = Vec::new();
     for (prefix, ns) in element.namespace_declarations() {
         match ns {
-            Some(ns_val) => {
-                if prefix.is_empty() {
+            Some(ns_val) => match prefix {
+                None => {
                     attrs.push(("xmlns".to_string(), ns_val.uri().to_string()));
-                } else {
-                    attrs.push((format!("xmlns:{prefix}"), ns_val.uri().to_string()));
                 }
-            }
+                Some(prefix_ncname) => {
+                    attrs.push((format!("xmlns:{prefix_ncname}"), ns_val.uri().to_string()));
+                }
+            },
             None => {
                 // Empty default namespace declaration (xmlns="")
-                if prefix.is_empty() {
+                if prefix.is_none() {
                     attrs.push(("xmlns".to_string(), String::new()));
                 }
                 // Note: xmlns:prefix="" is not a valid declaration per spec, so no else branch
@@ -272,7 +279,8 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
             attrs.push((qname.local_name().to_string(), value.clone()));
         }
     }
-    let start = BytesStart::new(element.name()).with_attributes(
+    let name = element.name();
+    let start = BytesStart::new(&*name).with_attributes(
         attrs
             .iter()
             .map(|(k, v)| (k.as_bytes(), v.as_bytes()))
@@ -309,7 +317,8 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
             }
         }
     }
-    let end = BytesEnd::new(element.name());
+    let name = element.name();
+    let end = BytesEnd::new(&*name);
     writer.write_event(Event::End(end))?;
     Ok(())
 }
@@ -366,7 +375,8 @@ mod tests {
 
         let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
         let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns).unwrap());
-        root.declare_namespace("html".to_string(), html_ns.clone());
+        let html_prefix: NCName = "html".try_into().unwrap();
+        root.declare_namespace(&html_prefix, html_ns.clone());
         doc.set_root(root.clone()).unwrap();
 
         let head = doc.create_element(QualifiedName::without_namespace("head").unwrap());
@@ -411,48 +421,51 @@ mod tests {
         let root = doc.root().unwrap();
 
         assert_eq!(root.name(), "root");
+        let default_prefix: NCName = "default".try_into().unwrap();
         assert_eq!(
-            root.namespace_declarations().get("default"),
+            root.namespace_declarations().get(&Some(default_prefix)),
             Some(&Some(
                 Namespace::prefixed("http://default.com", "default").unwrap()
             ))
         );
 
+        let ex_prefix: NCName = "ex".try_into().unwrap();
         let first_child = root.element_children()[0].clone();
         assert_eq!(
-            first_child.get_namespace("ex"),
+            first_child.get_namespace(Some(&ex_prefix)),
             Some(Namespace::prefixed("http://example.com", "ex").unwrap())
         );
 
         let nested = first_child.element_children()[1].clone();
         assert_eq!(
-            nested.get_namespace("ex"),
+            nested.get_namespace(Some(&ex_prefix)),
             Some(Namespace::prefixed("http://example-another.com", "ex").unwrap())
         );
 
         let deep = nested.element_children()[1].clone();
         assert_eq!(
-            deep.get_namespace("ex"),
+            deep.get_namespace(Some(&ex_prefix)),
             Some(Namespace::prefixed("http://example-third.com", "ex").unwrap())
         );
 
         let back_to_original = first_child.element_children()[2].clone();
         assert_eq!(
-            back_to_original.get_namespace("ex"),
+            back_to_original.get_namespace(Some(&ex_prefix)),
             Some(Namespace::prefixed("http://example.com", "ex").unwrap())
         );
 
         let second_child = root.element_children()[1].clone();
         assert_eq!(
-            second_child.get_namespace("ex"),
+            second_child.get_namespace(Some(&ex_prefix)),
             Some(Namespace::prefixed("http://example-another.com", "ex").unwrap())
         );
 
         let output = write_string(&doc).unwrap();
         let doc2 = parse_string(&output).unwrap();
         let root2 = doc2.root().unwrap();
+        let default_prefix2: NCName = "default".try_into().unwrap();
         assert_eq!(
-            root2.get_namespace("default"),
+            root2.get_namespace(Some(&default_prefix2)),
             Some(Namespace::prefixed("http://default.com", "default").unwrap())
         );
     }

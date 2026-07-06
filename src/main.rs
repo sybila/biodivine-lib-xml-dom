@@ -1,4 +1,6 @@
+use biodivine_lib_xml_dom::xml_spec::NCName;
 use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName, parse_string, write_string};
+use std::convert::TryInto;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("XML DOM Library Example");
@@ -12,9 +14,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns)?);
 
     // Declare namespaces on the root element
-    root.declare_namespace("html".to_string(), html_ns.clone());
+    let html_prefix: NCName = "html".try_into()?;
+    root.declare_namespace(&html_prefix, html_ns.clone());
     let svg_ns = Namespace::prefixed("http://www.w3.org/2000/svg", "svg")?;
-    root.declare_namespace("svg".to_string(), svg_ns.clone());
+    let svg_prefix: NCName = "svg".try_into()?;
+    root.declare_namespace(&svg_prefix, svg_ns.clone());
 
     doc.set_root(root.clone())?;
 

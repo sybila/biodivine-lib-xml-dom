@@ -220,15 +220,15 @@ impl QualifiedName {
         Self::resolve_with_lookup(
             qualified_name,
             apply_default_namespace,
-            |prefix| element.get_namespace(prefix.as_str()),
-            || element.get_namespace(""),
+            |prefix| element.get_namespace(Some(prefix)),
+            || element.get_namespace(None),
         )
     }
 
     /// Internal resolver shared by the map-based resolution methods.
     fn resolve_with_map(
         qualified_name: &str,
-        ns_map: &HashMap<String, String>,
+        ns_map: &HashMap<Option<NCName>, String>,
         apply_default_namespace: bool,
     ) -> XmlResult<Self> {
         Self::resolve_with_lookup(
@@ -236,12 +236,12 @@ impl QualifiedName {
             apply_default_namespace,
             |prefix| {
                 ns_map
-                    .get(prefix.as_str())
+                    .get(&Some(prefix.clone()))
                     .and_then(|uri| Namespace::prefixed(uri, prefix).ok())
             },
             || {
                 ns_map
-                    .get("")
+                    .get(&None)
                     .and_then(|uri| Namespace::without_prefix(uri).ok())
             },
         )
@@ -288,7 +288,7 @@ impl QualifiedName {
 
     /// Resolve a qualified name for an **element** using a namespace map (prefix -> URI).
     ///
-    /// Unprefixed names are bound to the default namespace (empty string key) if present.
+    /// Unprefixed names are bound to the default namespace (`None` key) if present.
     /// The `xml` prefix is automatically recognized and bound to its reserved URI.
     /// For attribute resolution, use [`QualifiedName::resolve_attribute_with_namespace_map`].
     ///
@@ -300,15 +300,16 @@ impl QualifiedName {
     /// ```rust
     /// use std::collections::HashMap;
     /// use biodivine_lib_xml_dom::QualifiedName;
-    /// let mut ns_map = HashMap::new();
-    /// ns_map.insert("ex".to_string(), "http://example.com".to_string());
+    /// use biodivine_lib_xml_dom::xml_spec::NCName;
+    /// let mut ns_map: HashMap<Option<NCName>, String> = HashMap::new();
+    /// ns_map.insert(Some("ex".try_into().unwrap()), "http://example.com".to_string());
     /// let qn = QualifiedName::resolve_element_with_namespace_map("ex:foo", &ns_map).unwrap();
     /// assert_eq!(qn.local_name(), "foo");
     /// assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
     /// ```
     pub fn resolve_element_with_namespace_map(
         qualified_name: &str,
-        ns_map: &HashMap<String, String>,
+        ns_map: &HashMap<Option<NCName>, String>,
     ) -> XmlResult<Self> {
         Self::resolve_with_map(qualified_name, ns_map, true)
     }
@@ -327,8 +328,9 @@ impl QualifiedName {
     /// ```rust
     /// use std::collections::HashMap;
     /// use biodivine_lib_xml_dom::QualifiedName;
-    /// let mut ns_map = HashMap::new();
-    /// ns_map.insert("".to_string(), "http://default.com".to_string());
+    /// use biodivine_lib_xml_dom::xml_spec::NCName;
+    /// let mut ns_map: HashMap<Option<NCName>, String> = HashMap::new();
+    /// ns_map.insert(None, "http://default.com".to_string());
     /// // Unprefixed attributes ignore the default namespace
     /// let qn = QualifiedName::resolve_attribute_with_namespace_map("foo", &ns_map).unwrap();
     /// assert_eq!(qn.local_name(), "foo");
@@ -336,7 +338,7 @@ impl QualifiedName {
     /// ```
     pub fn resolve_attribute_with_namespace_map(
         qualified_name: &str,
-        ns_map: &HashMap<String, String>,
+        ns_map: &HashMap<Option<NCName>, String>,
     ) -> XmlResult<Self> {
         Self::resolve_with_map(qualified_name, ns_map, false)
     }
@@ -480,8 +482,9 @@ mod tests {
     fn test_resolve_with_prefix() {
         let doc = Document::empty();
         let el = doc.create_element(q_name("foo").unwrap());
+        let ex_prefix: NCName = "ex".try_into().unwrap();
         el.declare_namespace(
-            "ex".to_string(),
+            &ex_prefix,
             Namespace::prefixed("http://example.com", "ex").unwrap(),
         );
         let qn = QualifiedName::resolve_element(&el, "ex:bar").unwrap();
@@ -495,8 +498,9 @@ mod tests {
         // Test that a namespace declared on a parent element is used for resolution.
         let doc = Document::empty();
         let parent = doc.create_element(q_name("parent").unwrap());
+        let ex_prefix: NCName = "ex".try_into().unwrap();
         parent.declare_namespace(
-            "ex".to_string(),
+            &ex_prefix,
             Namespace::prefixed("http://parent.com", "ex").unwrap(),
         );
         let child = doc.create_element(q_name("child").unwrap());
@@ -562,8 +566,9 @@ mod tests {
         // Prefixed attributes should resolve normally
         let doc = Document::empty();
         let el = doc.create_element(q_name("foo").unwrap());
+        let ex_prefix: NCName = "ex".try_into().unwrap();
         el.declare_namespace(
-            "ex".to_string(),
+            &ex_prefix,
             Namespace::prefixed("http://example.com", "ex").unwrap(),
         );
         let qn = QualifiedName::resolve_attribute(&el, "ex:bar").unwrap();
@@ -586,7 +591,7 @@ mod tests {
 
     #[test]
     fn test_resolve_with_map_xml_prefix_auto() {
-        let ns_map = HashMap::new();
+        let ns_map: HashMap<Option<NCName>, String> = HashMap::new();
         let qn = QualifiedName::resolve_element_with_namespace_map("xml:lang", &ns_map).unwrap();
         assert_eq!(qn.local_name(), "lang");
         assert_eq!(
@@ -597,8 +602,8 @@ mod tests {
 
     #[test]
     fn test_resolve_attribute_with_map_ignores_default_ns() {
-        let mut ns_map = HashMap::new();
-        ns_map.insert("".to_string(), "http://default.com".to_string());
+        let mut ns_map: HashMap<Option<NCName>, String> = HashMap::new();
+        ns_map.insert(None, "http://default.com".to_string());
         let qn = QualifiedName::resolve_attribute_with_namespace_map("bar", &ns_map).unwrap();
         assert_eq!(qn.local_name(), "bar");
         assert!(qn.namespace().is_none());
@@ -606,8 +611,11 @@ mod tests {
 
     #[test]
     fn test_resolve_with_map_prefixed() {
-        let mut ns_map = HashMap::new();
-        ns_map.insert("ex".to_string(), "http://example.com".to_string());
+        let mut ns_map: HashMap<Option<NCName>, String> = HashMap::new();
+        ns_map.insert(
+            Some("ex".try_into().unwrap()),
+            "http://example.com".to_string(),
+        );
         let qn = QualifiedName::resolve_element_with_namespace_map("ex:foo", &ns_map).unwrap();
         assert_eq!(qn.local_name(), "foo");
         assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
@@ -616,8 +624,11 @@ mod tests {
 
     #[test]
     fn test_resolve_attribute_with_map_prefixed() {
-        let mut ns_map = HashMap::new();
-        ns_map.insert("ex".to_string(), "http://example.com".to_string());
+        let mut ns_map: HashMap<Option<NCName>, String> = HashMap::new();
+        ns_map.insert(
+            Some("ex".try_into().unwrap()),
+            "http://example.com".to_string(),
+        );
         let qn = QualifiedName::resolve_attribute_with_namespace_map("ex:foo", &ns_map).unwrap();
         assert_eq!(qn.local_name(), "foo");
         assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");

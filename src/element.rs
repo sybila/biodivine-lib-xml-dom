@@ -6,6 +6,7 @@ use crate::QualifiedName;
 use crate::document::Document;
 use crate::error::XmlResult;
 use crate::namespace::Namespace;
+use crate::xml_spec::NCName;
 
 #[derive(Debug, Clone)]
 pub enum XmlNode {
@@ -30,8 +31,9 @@ pub(crate) struct ElementData {
     /// Parent element (None if root or detached)
     pub parent: Option<Element>,
     /// Namespace declarations on this element (prefix -> Option<Namespace>).
-    /// None represents xmlns="" or xmlns:prefix="" (i.e. the prefix was declared but unbound).
-    pub namespace_declarations: BTreeMap<String, Option<Namespace>>,
+    /// The key is `None` for the default namespace, `Some(prefix)` for a prefixed namespace.
+    /// The value is `None` for empty declarations (xmlns="" or xmlns:prefix="").
+    pub namespace_declarations: BTreeMap<Option<NCName>, Option<Namespace>>,
 }
 
 #[derive(Debug, Clone)]
@@ -50,8 +52,8 @@ impl Element {
         })))
     }
 
-    pub fn name(&self) -> String {
-        self.0.read().qualified_name.local_name().to_string()
+    pub fn name(&self) -> NCName {
+        self.0.read().qualified_name.local_name().clone()
     }
 
     pub fn namespace(&self) -> Option<Namespace> {
@@ -62,11 +64,11 @@ impl Element {
         self.0.read().qualified_name.clone()
     }
 
-    pub fn declare_namespace(&self, prefix: String, namespace: Namespace) {
+    pub fn declare_namespace(&self, prefix: &NCName, namespace: Namespace) {
         self.0
             .write()
             .namespace_declarations
-            .insert(prefix, Some(namespace));
+            .insert(Some(prefix.clone()), Some(namespace));
     }
 
     /// Declare a default namespace on this element. For empty default declarations
@@ -75,21 +77,18 @@ impl Element {
         self.0
             .write()
             .namespace_declarations
-            .insert("".to_string(), Some(namespace));
+            .insert(None, Some(namespace));
     }
 
     /// Declare an empty default namespace on this element (xmlns="").
     /// This removes the default namespace within its scope per XML Namespaces spec §6.2.
     pub fn declare_empty_default_namespace(&self) {
-        self.0
-            .write()
-            .namespace_declarations
-            .insert("".to_string(), None);
+        self.0.write().namespace_declarations.insert(None, None);
     }
 
-    pub fn get_namespace(&self, prefix: &str) -> Option<Namespace> {
+    pub fn get_namespace(&self, prefix: Option<&NCName>) -> Option<Namespace> {
         let inner = self.0.read();
-        if let Some(Some(ns)) = inner.namespace_declarations.get(prefix) {
+        if let Some(Some(ns)) = inner.namespace_declarations.get(&prefix.cloned()) {
             return Some(ns.clone());
         }
         if let Some(parent) = &inner.parent {
@@ -99,17 +98,11 @@ impl Element {
         }
     }
 
-    pub fn resolve_qualified_name(
-        &self,
-        qualified_name: &str,
-    ) -> XmlResult<(String, Option<Namespace>)> {
-        match QualifiedName::resolve_element(self, qualified_name) {
-            Ok(qname) => Ok((qname.local_name().to_string(), qname.namespace().cloned())),
-            Err(e) => Err(e),
-        }
+    pub fn resolve_qualified_name(&self, qualified_name: &str) -> XmlResult<QualifiedName> {
+        QualifiedName::resolve_element(self, qualified_name)
     }
 
-    pub fn namespace_declarations(&self) -> BTreeMap<String, Option<Namespace>> {
+    pub fn namespace_declarations(&self) -> BTreeMap<Option<NCName>, Option<Namespace>> {
         self.0.read().namespace_declarations.clone()
     }
 

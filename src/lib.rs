@@ -106,6 +106,14 @@ mod io;
 mod namespace;
 mod qualified_name;
 
+/// Internal module containing XML specification-enforced validation logic and constants.
+///
+/// This module separates rules mandated by XML 1.0 and XML Namespaces specifications
+/// (NCName validation, reserved prefixes/URIs, namespace binding rules) from library
+/// design choices like `Arc`-backed immutability or convenience constructors. Tests here
+/// verify compliance against the specification rule files in `specification/rules/`.
+mod xml_spec;
+
 // Re-export public API
 pub use document::Document;
 pub use element::Element;

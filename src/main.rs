@@ -58,7 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let xml_output = write_string(&doc)?;
     println!("Generated XML:");
-    println!("{}", xml_output);
+    println!("{xml_output}");
 
     // Example 2: Parse XML from string
     println!("\n2. Parsing XML from string:");
@@ -124,7 +124,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Get all comments
     let comments = comment_root.comment_children();
-    println!("Comments in root: {:?}", comments);
+    println!("Comments in root: {comments:?}");
 
     // Get comments from child elements
     let header_children = comment_root.element_children();
@@ -133,7 +133,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .find(|e| e.name() == "header")
         .unwrap();
     let header_comments = header.comment_children();
-    println!("Comments in header: {:?}", header_comments);
+    println!("Comments in header: {header_comments:?}");
 
     let content_children = comment_root.element_children();
     let content = content_children
@@ -141,7 +141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .find(|e| e.name() == "content")
         .unwrap();
     let content_comments = content.comment_children();
-    println!("Comments in content: {:?}", content_comments);
+    println!("Comments in content: {content_comments:?}");
 
     // Create a new document with comments
     println!("\n4. Creating document with comments:");
@@ -161,7 +161,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let new_xml = write_string(&new_doc)?;
     println!("Generated XML with comments:");
-    println!("{}", new_xml);
+    println!("{new_xml}");
 
     Ok(())
 }

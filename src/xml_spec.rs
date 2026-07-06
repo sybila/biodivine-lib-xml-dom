@@ -67,8 +67,7 @@ pub(crate) fn validate_namespace(uri: &str, prefix: Option<&str>) -> Result<(), 
     if let Some(p) = prefix {
         if !is_valid_ncname(p) {
             return Err(XmlError::NamespaceError(format!(
-                "Namespace prefix '{}' is not a valid XML NCName",
-                p
+                "Namespace prefix '{p}' is not a valid XML NCName"
             )));
         }
 
@@ -83,16 +82,14 @@ pub(crate) fn validate_namespace(uri: &str, prefix: Option<&str>) -> Result<(), 
         if p == "xml" {
             if uri != RESERVED_XML_URI {
                 return Err(XmlError::NamespaceError(format!(
-                    "The prefix 'xml' can only be bound to '{}', not '{}'",
-                    RESERVED_XML_URI, uri
+                    "The prefix 'xml' can only be bound to '{RESERVED_XML_URI}', not '{uri}'"
                 )));
             }
         } else {
             // No prefix other than `xml` may bind to the reserved XML URI
             if uri == RESERVED_XML_URI {
                 return Err(XmlError::NamespaceError(format!(
-                    "The URI '{}' can only be bound to the 'xml' prefix, not '{}'",
-                    RESERVED_XML_URI, p
+                    "The URI '{RESERVED_XML_URI}' can only be bound to the 'xml' prefix, not '{p}'"
                 )));
             }
         }
@@ -101,16 +98,14 @@ pub(crate) fn validate_namespace(uri: &str, prefix: Option<&str>) -> Result<(), 
     // Neither reserved URI may be used as a default namespace
     if prefix.is_none() && (uri == RESERVED_XML_URI || uri == RESERVED_XMLNS_URI) {
         return Err(XmlError::NamespaceError(format!(
-            "The URI '{}' cannot be declared as the default namespace",
-            uri
+            "The URI '{uri}' cannot be declared as the default namespace"
         )));
     }
 
     // No prefix may bind to the reserved xmlns URI
     if uri == RESERVED_XMLNS_URI {
         return Err(XmlError::NamespaceError(format!(
-            "The URI '{}' cannot be bound to any prefix",
-            RESERVED_XMLNS_URI
+            "The URI '{RESERVED_XMLNS_URI}' cannot be bound to any prefix"
         )));
     }
 

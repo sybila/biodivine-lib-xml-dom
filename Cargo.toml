@@ -7,3 +7,6 @@ edition = "2024"
 parking_lot = "0.12"
 quick-xml = "0.41"
 thiserror = "2.0"
+
+[lints.clippy]
+uninlined_format_args = "warn"

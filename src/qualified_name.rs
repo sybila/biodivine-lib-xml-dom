@@ -122,8 +122,7 @@ impl QualifiedName {
                 QualifiedName::new(local_name, Some(ns))
             } else {
                 Err(XmlError::NamespaceError(format!(
-                    "Undefined namespace prefix: {}",
-                    prefix
+                    "Undefined namespace prefix: {prefix}"
                 )))
             }
         } else {
@@ -161,8 +160,7 @@ impl QualifiedName {
                 QualifiedName::new(local_name, Some(ns))
             } else {
                 Err(XmlError::NamespaceError(format!(
-                    "Undefined namespace prefix: {}",
-                    prefix
+                    "Undefined namespace prefix: {prefix}"
                 )))
             }
         } else if let Some(uri) = ns_map.get("") {

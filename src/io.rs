@@ -14,8 +14,8 @@ use crate::error::{XmlError, XmlResult};
 
 /// Parse XML from a file
 pub fn parse_file<P: AsRef<Path>>(path: P) -> XmlResult<Document> {
-    let file = File::open(path)
-        .map_err(|e| XmlError::InvalidXml(format!("Failed to open file: {}", e)))?;
+    let file =
+        File::open(path).map_err(|e| XmlError::InvalidXml(format!("Failed to open file: {e}")))?;
     let reader = BufReader::new(file);
     parse_reader(reader)
 }
@@ -65,9 +65,9 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
             }
             Ok(Event::Text(e)) => {
                 if let Some(current) = stack.last() {
-                    let text = e.xml10_content().map_err(|e| {
-                        XmlError::InvalidXml(format!("Invalid text content: {}", e))
-                    })?;
+                    let text = e
+                        .xml10_content()
+                        .map_err(|e| XmlError::InvalidXml(format!("Invalid text content: {e}")))?;
                     current.add_text(text.to_string());
                 }
             }
@@ -75,7 +75,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
             Ok(Event::Comment(e)) => {
                 if let Some(current) = stack.last() {
                     let comment = std::str::from_utf8(&e).map_err(|e| {
-                        XmlError::InvalidXml(format!("Invalid UTF-8 in comment: {}", e))
+                        XmlError::InvalidXml(format!("Invalid UTF-8 in comment: {e}"))
                     })?;
                     current.add_comment(comment.to_string());
                 }
@@ -85,10 +85,10 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                 if let Some(current) = stack.last() {
                     // In newer quick-xml, BytesPI provides target and content separately
                     let target = std::str::from_utf8(e.target()).map_err(|e| {
-                        XmlError::InvalidXml(format!("Invalid UTF-8 in PI target: {}", e))
+                        XmlError::InvalidXml(format!("Invalid UTF-8 in PI target: {e}"))
                     })?;
                     let content = std::str::from_utf8(e.content()).map_err(|e| {
-                        XmlError::InvalidXml(format!("Invalid UTF-8 in PI content: {}", e))
+                        XmlError::InvalidXml(format!("Invalid UTF-8 in PI content: {e}"))
                     })?;
                     // Remove leading and trailing whitespace from content
                     let data = content.trim();
@@ -97,9 +97,8 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
             }
             Ok(Event::CData(e)) => {
                 if let Some(current) = stack.last() {
-                    let cdata = std::str::from_utf8(&e).map_err(|e| {
-                        XmlError::InvalidXml(format!("Invalid CDATA content: {}", e))
-                    })?;
+                    let cdata = std::str::from_utf8(&e)
+                        .map_err(|e| XmlError::InvalidXml(format!("Invalid CDATA content: {e}")))?;
                     current.add_cdata(cdata.to_string());
                 }
             }
@@ -126,7 +125,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
             Ok(Event::GeneralRef(_)) => {
                 unimplemented!("Custom entities are currently not supported.")
             }
-            Err(e) => return Err(XmlError::InvalidXml(format!("XML parsing error: {}", e))),
+            Err(e) => return Err(XmlError::InvalidXml(format!("XML parsing error: {e}"))),
         }
         buf.clear();
     }
@@ -142,7 +141,7 @@ fn parse_element(
     // 2. Use the provided ns_map for resolution
     // 3. Resolve the qualified name of the tag
     let name = std::str::from_utf8(e.name().into_inner())
-        .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {}", e)))?;
+        .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in element name: {e}")))?;
     let qname = match QualifiedName::resolve_with_namespace_map(name, ns_map) {
         Ok(q) => q,
         Err(e) => {
@@ -167,12 +166,12 @@ fn parse_element(
     // 6. Add all attributes, resolving their qualified names using the provided ns_map
     let mut attributes = BTreeMap::new();
     for attr in e.attributes() {
-        let attr = attr.map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
+        let attr = attr.map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {e}")))?;
         let key = std::str::from_utf8(attr.key.into_inner())
-            .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e)))?;
+            .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {e}")))?;
         let value = attr
             .normalized_value(XmlVersion::Explicit1_0)
-            .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute value: {}", e)))?;
+            .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute value: {e}")))?;
         if key.starts_with("xmlns") {
             continue;
         }
@@ -192,18 +191,17 @@ fn parse_element(
 fn extract_namespace_declarations(e: &BytesStart) -> XmlResult<Vec<(String, String)>> {
     let mut namespace_declarations = Vec::new();
     for attr in e.attributes() {
-        let attr = attr.map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {}", e)))?;
+        let attr = attr.map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {e}")))?;
         let key = std::str::from_utf8(attr.key.into_inner())
-            .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {}", e)))?;
+            .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in attribute name: {e}")))?;
         let value = attr
             .normalized_value(XmlVersion::Explicit1_0)
-            .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute value: {}", e)))?;
+            .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute value: {e}")))?;
         if let Some(prefix) = key.strip_prefix("xmlns:") {
             // NSC: No Prefix Undeclaring - the attribute value MUST NOT be empty for a prefix
             if value.is_empty() {
                 return Err(XmlError::NamespaceError(format!(
-                    "Namespace prefix '{}' may not be undeclared with an empty string",
-                    prefix
+                    "Namespace prefix '{prefix}' may not be undeclared with an empty string"
                 )));
             }
             namespace_declarations.push((prefix.to_string(), value.to_string()));
@@ -218,7 +216,7 @@ fn extract_namespace_declarations(e: &BytesStart) -> XmlResult<Vec<(String, Stri
 /// Write XML document to a file
 pub fn write_file<P: AsRef<Path>>(doc: &Document, path: P) -> XmlResult<()> {
     let file = File::create(path)
-        .map_err(|e| XmlError::InvalidXml(format!("Failed to create file: {}", e)))?;
+        .map_err(|e| XmlError::InvalidXml(format!("Failed to create file: {e}")))?;
     let writer = BufWriter::new(file);
     write_writer(doc, writer)
 }
@@ -228,7 +226,7 @@ pub fn write_string(doc: &Document) -> XmlResult<String> {
     let mut buffer = Vec::new();
     write_writer(doc, &mut buffer)?;
     String::from_utf8(buffer)
-        .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in output: {}", e)))
+        .map_err(|e| XmlError::InvalidXml(format!("Invalid UTF-8 in output: {e}")))
 }
 
 /// Write XML document to a generic writer
@@ -251,7 +249,7 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
                 if prefix.is_empty() {
                     attrs.push(("xmlns".to_string(), ns_val.uri().to_string()));
                 } else {
-                    attrs.push((format!("xmlns:{}", prefix), ns_val.uri().to_string()));
+                    attrs.push((format!("xmlns:{prefix}"), ns_val.uri().to_string()));
                 }
             }
             None => {
@@ -304,7 +302,7 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
                 let pi_content = if data.is_empty() {
                     target.to_string()
                 } else {
-                    format!("{} {}", target, data)
+                    format!("{target} {data}")
                 };
                 let pi_event = BytesPI::new(&pi_content);
                 writer.write_event(Event::PI(pi_event))?;

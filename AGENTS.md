@@ -7,3 +7,4 @@
 ## Additional instructions
 
  - After each non-trivial code change, make sure to run `cargo fmt`. Then check for any issues reported by `cargo clippy` and `cargo test`.
+ - If a type is referenced in a documentation, it should be referenced in a way that allows `cargo doc` to resolve it as a link. For example, "[`String`]" instead of just "`String`".

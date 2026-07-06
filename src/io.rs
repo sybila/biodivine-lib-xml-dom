@@ -42,7 +42,12 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                 let mut ns_map = ns_stack.last().unwrap().clone();
                 let namespace_declarations = extract_namespace_declarations(e)?;
                 for (prefix, uri) in &namespace_declarations {
-                    ns_map.insert(prefix.clone(), uri.clone());
+                    if prefix.is_empty() && uri.is_empty() {
+                        // Empty default namespace declaration removes any prior default ns binding
+                        ns_map.remove("");
+                    } else {
+                        ns_map.insert(prefix.clone(), uri.clone());
+                    }
                 }
                 ns_stack.push(ns_map.clone());
                 let parent = stack.last();
@@ -104,7 +109,11 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                 let mut ns_map = ns_stack.last().unwrap().clone();
                 let namespace_declarations = extract_namespace_declarations(e)?;
                 for (prefix, uri) in &namespace_declarations {
-                    ns_map.insert(prefix.clone(), uri.clone());
+                    if prefix.is_empty() && uri.is_empty() {
+                        ns_map.remove("");
+                    } else {
+                        ns_map.insert(prefix.clone(), uri.clone());
+                    }
                 }
                 let parent = stack.last();
                 let element = parse_element(&doc, e, &ns_map)?;
@@ -146,7 +155,11 @@ fn parse_element(
     let namespace_declarations = extract_namespace_declarations(e)?;
     for (prefix, uri) in namespace_declarations {
         if prefix.is_empty() {
-            element.declare_default_namespace(Namespace::default(&uri)?);
+            if uri.is_empty() {
+                element.declare_empty_default_namespace();
+            } else {
+                element.declare_default_namespace(Namespace::without_prefix(&uri)?);
+            }
         } else {
             element.declare_namespace(prefix.clone(), Namespace::prefixed(&uri, &prefix)?);
         }
@@ -186,8 +199,16 @@ fn extract_namespace_declarations(e: &BytesStart) -> XmlResult<Vec<(String, Stri
             .normalized_value(XmlVersion::Explicit1_0)
             .map_err(|e| XmlError::InvalidXml(format!("Invalid attribute value: {}", e)))?;
         if let Some(prefix) = key.strip_prefix("xmlns:") {
+            // NSC: No Prefix Undeclaring - the attribute value MUST NOT be empty for a prefix
+            if value.is_empty() {
+                return Err(XmlError::NamespaceError(format!(
+                    "Namespace prefix '{}' may not be undeclared with an empty string",
+                    prefix
+                )));
+            }
             namespace_declarations.push((prefix.to_string(), value.to_string()));
         } else if key == "xmlns" {
+            // Empty default namespace declaration is allowed (removes the default ns from scope)
             namespace_declarations.push(("".to_string(), value.to_string()));
         }
     }
@@ -225,10 +246,21 @@ pub fn write_writer<W: Write>(doc: &Document, writer: W) -> XmlResult<()> {
 fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResult<()> {
     let mut attrs = Vec::new();
     for (prefix, ns) in element.namespace_declarations() {
-        if prefix.is_empty() {
-            attrs.push(("xmlns".to_string(), ns.uri().to_string()));
-        } else {
-            attrs.push((format!("xmlns:{}", prefix), ns.uri().to_string()));
+        match ns {
+            Some(ns_val) => {
+                if prefix.is_empty() {
+                    attrs.push(("xmlns".to_string(), ns_val.uri().to_string()));
+                } else {
+                    attrs.push((format!("xmlns:{}", prefix), ns_val.uri().to_string()));
+                }
+            }
+            None => {
+                // Empty default namespace declaration (xmlns="")
+                if prefix.is_empty() {
+                    attrs.push(("xmlns".to_string(), String::new()));
+                }
+                // Note: xmlns:prefix="" is not a valid declaration per spec, so no else branch
+            }
         }
     }
     for (qname, value) in element.attributes().iter() {
@@ -383,7 +415,9 @@ mod tests {
         assert_eq!(root.name(), "root");
         assert_eq!(
             root.namespace_declarations().get("default"),
-            Some(&Namespace::prefixed("http://default.com", "default").unwrap())
+            Some(&Some(
+                Namespace::prefixed("http://default.com", "default").unwrap()
+            ))
         );
 
         let first_child = root.element_children()[0].clone();
@@ -830,5 +864,142 @@ mod tests {
             actual, expected,
             "Mixed content with processing instructions should be preserved"
         );
+    }
+
+    #[test]
+    fn test_empty_default_namespace_removes_scope() {
+        // rule.namespace-usage.empty-default-namespace.md
+        // xmlns="" removes the default namespace from scope so unprefixed elements belong to no namespace
+        let xml = r#"<root xmlns="http://default.org">
+    <in_ns>has default namespace</in_ns>
+    <child xmlns="">
+        <no_ns>should have no namespace</no_ns>
+        <nested xmlns="http://other.org">
+            <back_in_ns>nested back in a namespace</back_in_ns>
+        </nested>
+    </child>
+    <after_empty>back to default namespace</after_empty>
+</root>"#;
+
+        let doc = parse_string(xml).unwrap();
+        let root = doc.root().unwrap();
+
+        // Root is in the default namespace.
+        assert_eq!(
+            root.namespace().as_ref().map(|ns| ns.uri()),
+            Some("http://default.org")
+        );
+
+        let in_ns = root.element_children()[0].clone();
+        assert_eq!(in_ns.name(), "in_ns");
+        assert_eq!(
+            in_ns.namespace().as_ref().map(|ns| ns.uri()),
+            Some("http://default.org")
+        );
+
+        // Per XML Namespaces §6.2, the scope of xmlns="" extends from the start-tag itself,
+        // so <child xmlns=""> has no namespace (not its parent's default).
+        let child = root.element_children()[1].clone();
+        assert_eq!(child.name(), "child");
+        assert!(child.namespace().is_none());
+
+        // The no_ns element inside child should have *no* namespace.
+        let no_ns = child.element_children()[0].clone();
+        assert_eq!(no_ns.name(), "no_ns");
+        assert!(no_ns.namespace().is_none());
+
+        // Nested element declares its own default namespace.
+        let nested = child.element_children()[1].clone();
+        assert_eq!(nested.name(), "nested");
+        assert_eq!(
+            nested.namespace().as_ref().map(|ns| ns.uri()),
+            Some("http://other.org")
+        );
+
+        let back_in_ns = nested.element_children()[0].clone();
+        assert_eq!(back_in_ns.name(), "back_in_ns");
+        assert_eq!(
+            back_in_ns.namespace().as_ref().map(|ns| ns.uri()),
+            Some("http://other.org")
+        );
+
+        // after_empty is outside the empty-declr scope, so back in the default namespace.
+        let after_empty = root.element_children()[2].clone();
+        assert_eq!(after_empty.name(), "after_empty");
+        assert_eq!(
+            after_empty.namespace().as_ref().map(|ns| ns.uri()),
+            Some("http://default.org")
+        );
+
+        // Round-trip should survive.
+        let output = write_string(&doc).unwrap();
+        let doc2 = parse_string(&output).unwrap();
+        let root2 = doc2.root().unwrap();
+        assert_eq!(root2.element_children()[0].name(), "in_ns");
+        assert_eq!(
+            root2.element_children()[1].element_children()[0].name(),
+            "no_ns"
+        );
+        assert!(
+            root2.element_children()[1].element_children()[0]
+                .namespace()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn test_prefix_undeclaring_rejected() {
+        // rule.namespace-usage.no-prefix-undeclaring.md
+        // xmlns:prefix="" is a namespace well-formedness error.
+        let xml = r#"<root xmlns:p="">
+    <p:child>value</p:child>
+</root>"#;
+
+        let result = parse_string(xml);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("may not be undeclared"),
+            "Error should mention undeclared prefix, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_empty_default_namespace_roundtrip() {
+        // Check that empty default namespace declarations survive parse -> write -> parse.
+        let xml = r#"<root xmlns="http://default.org">
+    <child xmlns="">
+        <inner/>
+    </child>
+</root>"#;
+
+        let doc = parse_string(xml).unwrap();
+        let output = write_string(&doc).unwrap();
+        assert!(
+            output.contains("xmlns=\"\""),
+            "Empty ns declaration should be serialized, got: {}",
+            output
+        );
+
+        let doc2 = parse_string(&output).unwrap();
+        let child2 = doc2.root().unwrap().element_children()[0].clone();
+        let inner2 = child2.element_children()[0].clone();
+        assert!(inner2.namespace().is_none());
+    }
+
+    #[test]
+    fn test_empty_default_namespace_at_root() {
+        // xmlns="" on the root element means no default namespace from the start.
+        let xml = r#"<root xmlns="">
+    <child>value</child>
+</root>"#;
+
+        let doc = parse_string(xml).unwrap();
+        let root = doc.root().unwrap();
+        assert!(root.namespace().is_none());
+
+        let child = root.element_children()[0].clone();
+        assert!(child.namespace().is_none());
     }
 }

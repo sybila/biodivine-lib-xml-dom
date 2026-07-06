@@ -29,8 +29,9 @@ pub(crate) struct ElementData {
     pub children: Vec<XmlNode>,
     /// Parent element (None if root or detached)
     pub parent: Option<Element>,
-    /// Namespace declarations on this element (prefix -> Namespace)
-    pub namespace_declarations: BTreeMap<String, Namespace>,
+    /// Namespace declarations on this element (prefix -> Option<Namespace>).
+    /// None represents xmlns="" or xmlns:prefix="" (i.e. the prefix was declared but unbound).
+    pub namespace_declarations: BTreeMap<String, Option<Namespace>>,
 }
 
 #[derive(Debug, Clone)]
@@ -65,19 +66,30 @@ impl Element {
         self.0
             .write()
             .namespace_declarations
-            .insert(prefix, namespace);
+            .insert(prefix, Some(namespace));
     }
 
+    /// Declare a default namespace on this element. For empty default declarations
+    /// (xmlns=""), use [`Element::declare_empty_default_namespace`].
     pub fn declare_default_namespace(&self, namespace: Namespace) {
         self.0
             .write()
             .namespace_declarations
-            .insert("".to_string(), namespace);
+            .insert("".to_string(), Some(namespace));
+    }
+
+    /// Declare an empty default namespace on this element (xmlns="").
+    /// This removes the default namespace within its scope per XML Namespaces spec §6.2.
+    pub fn declare_empty_default_namespace(&self) {
+        self.0
+            .write()
+            .namespace_declarations
+            .insert("".to_string(), None);
     }
 
     pub fn get_namespace(&self, prefix: &str) -> Option<Namespace> {
         let inner = self.0.read();
-        if let Some(ns) = inner.namespace_declarations.get(prefix) {
+        if let Some(Some(ns)) = inner.namespace_declarations.get(prefix) {
             return Some(ns.clone());
         }
         if let Some(parent) = &inner.parent {
@@ -97,7 +109,7 @@ impl Element {
         }
     }
 
-    pub fn namespace_declarations(&self) -> BTreeMap<String, Namespace> {
+    pub fn namespace_declarations(&self) -> BTreeMap<String, Option<Namespace>> {
         self.0.read().namespace_declarations.clone()
     }
 

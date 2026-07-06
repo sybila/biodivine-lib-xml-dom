@@ -24,7 +24,7 @@ use std::collections::HashMap;
 ///
 /// ```rust
 /// use biodivine_lib_xml_dom::{Namespace, QualifiedName};
-/// let ns = Namespace::default("http://example.com").unwrap();
+/// let ns = Namespace::without_prefix("http://example.com").unwrap();
 /// let qn = QualifiedName::with_namespace("foo", &ns).unwrap();
 /// assert_eq!(qn.name(), "foo");
 /// assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
@@ -80,7 +80,7 @@ impl QualifiedName {
     /// # Examples
     /// ```rust
     /// use biodivine_lib_xml_dom::{Namespace, QualifiedName};
-    /// let ns = Namespace::default("http://example.com").unwrap();
+    /// let ns = Namespace::without_prefix("http://example.com").unwrap();
     /// let qn = QualifiedName::with_namespace("foo", &ns).unwrap();
     /// assert_eq!(qn.name(), "foo");
     /// assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
@@ -108,7 +108,7 @@ impl QualifiedName {
     /// use biodivine_lib_xml_dom::{Document, QualifiedName, Namespace};
     /// let doc = Document::empty();
     /// let el = doc.create_element(QualifiedName::without_namespace("foo").unwrap());
-    /// el.declare_default_namespace(Namespace::default("http://default.com").unwrap());
+    /// el.declare_default_namespace(Namespace::without_prefix("http://default.com").unwrap());
     /// let qn = QualifiedName::resolve(&el, "bar").unwrap();
     /// assert_eq!(qn.name(), "bar");
     /// assert_eq!(qn.namespace().unwrap().uri(), "http://default.com");
@@ -166,8 +166,8 @@ impl QualifiedName {
                 )))
             }
         } else if let Some(uri) = ns_map.get("") {
-            let ns =
-                Namespace::default(uri).map_err(|e| XmlError::NamespaceError(e.to_string()))?;
+            let ns = Namespace::without_prefix(uri)
+                .map_err(|e| XmlError::NamespaceError(e.to_string()))?;
             QualifiedName::new(qualified_name, Some(ns))
         } else {
             QualifiedName::new(qualified_name, None)
@@ -247,7 +247,7 @@ mod tests {
 
     // Utility function for tests: create a namespace from a string and panic on error.
     fn ns(uri: &str) -> Namespace {
-        Namespace::default(uri).unwrap()
+        Namespace::without_prefix(uri).unwrap()
     }
     // Utility function for tests: create a namespace with prefix and panic on error.
     fn pns(uri: &str, prefix: &str) -> Namespace {
@@ -315,7 +315,7 @@ mod tests {
     fn test_resolve_no_prefix() {
         let doc = Document::empty();
         let el = doc.create_element(q_name("foo").unwrap());
-        el.declare_default_namespace(Namespace::default("http://default.com").unwrap());
+        el.declare_default_namespace(Namespace::without_prefix("http://default.com").unwrap());
         let qn = QualifiedName::resolve(&el, "bar").unwrap();
         assert_eq!(qn.name(), "bar");
         assert_eq!(qn.namespace().unwrap().uri(), "http://default.com");

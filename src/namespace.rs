@@ -54,21 +54,22 @@ impl Namespace {
     /// # Examples
     /// ```rust
     /// use biodivine_lib_xml_dom::Namespace;
-    /// let ns = Namespace::new("http://example.com".to_string(), Some("ex".to_string()));
+    /// use biodivine_lib_xml_dom::xml_spec::NCName;
+    /// use std::convert::TryInto;
+    /// let prefix: NCName = "ex".try_into().unwrap();
+    /// let ns = Namespace::new("http://example.com".to_string(), Some(prefix));
     /// assert!(ns.is_ok());
     /// let ns = Namespace::new("http://example.com".to_string(), None);
     /// assert!(ns.is_ok());
-    /// let ns = Namespace::new("".to_string(), Some("ex".to_string()));
-    /// assert!(ns.is_err());
+    /// let invalid: Result<NCName, _> = "123".try_into();
+    /// if let Err(_) = invalid {
+    ///     // Invalid NCNames are rejected at construction
+    /// }
     /// ```
-    pub fn new(uri: String, prefix: Option<String>) -> Result<Self, XmlError> {
-        let prefix_ncname = prefix.map(NCName::try_from).transpose()?;
-        Self::validate(&uri, prefix_ncname.as_ref())?;
+    pub fn new(uri: String, prefix: Option<NCName>) -> Result<Self, XmlError> {
+        Self::validate(&uri, prefix.as_ref())?;
         Ok(Self {
-            data: Arc::new(NamespaceData {
-                uri,
-                prefix: prefix_ncname,
-            }),
+            data: Arc::new(NamespaceData { uri, prefix }),
         })
     }
 
@@ -88,14 +89,7 @@ impl Namespace {
     /// assert!(ns.is_err());
     /// ```
     pub fn without_prefix<U: AsRef<str>>(uri: U) -> Result<Self, XmlError> {
-        let uri_str = uri.as_ref();
-        Self::validate(uri_str, None)?;
-        Ok(Self {
-            data: Arc::new(NamespaceData {
-                uri: uri_str.to_string(),
-                prefix: None,
-            }),
-        })
+        Self::new(uri.as_ref().to_string(), None)
     }
 
     /// Create a prefixed namespace, validating XML rules.
@@ -113,16 +107,8 @@ impl Namespace {
     /// assert!(ns.is_err());
     /// ```
     pub fn prefixed<U: AsRef<str>, P: AsRef<str>>(uri: U, prefix: P) -> Result<Self, XmlError> {
-        let uri_str = uri.as_ref();
-        let prefix_str = prefix.as_ref();
-        let prefix_ncname = NCName::try_from(prefix_str)?;
-        Self::validate(uri_str, Some(&prefix_ncname))?;
-        Ok(Self {
-            data: Arc::new(NamespaceData {
-                uri: uri_str.to_string(),
-                prefix: Some(prefix_ncname),
-            }),
-        })
+        let prefix_ncname = NCName::try_from(prefix.as_ref())?;
+        Self::new(uri.as_ref().to_string(), Some(prefix_ncname))
     }
 
     /// Get a reference to the namespace URI.

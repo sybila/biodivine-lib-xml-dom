@@ -51,7 +51,7 @@ impl Element {
     }
 
     pub fn name(&self) -> String {
-        self.0.read().qualified_name.name().to_string()
+        self.0.read().qualified_name.local_name().to_string()
     }
 
     pub fn namespace(&self) -> Option<Namespace> {
@@ -103,8 +103,8 @@ impl Element {
         &self,
         qualified_name: &str,
     ) -> XmlResult<(String, Option<Namespace>)> {
-        match QualifiedName::resolve(self, qualified_name) {
-            Ok(qname) => Ok((qname.name().to_string(), qname.namespace().cloned())),
+        match QualifiedName::resolve_element(self, qualified_name) {
+            Ok(qname) => Ok((qname.local_name().to_string(), qname.namespace().cloned())),
             Err(e) => Err(e),
         }
     }
@@ -137,13 +137,13 @@ impl Element {
         for (qname, value) in &inner.attributes {
             if let Some(ns) = qname.namespace() {
                 if let Some(prefix) = ns.prefix() {
-                    if format!("{}:{}", prefix, qname.name()) == qualified_name {
+                    if format!("{}:{}", prefix, qname.local_name()) == qualified_name {
                         return Some((qname.clone(), value.clone()));
                     }
-                } else if qname.name() == qualified_name {
+                } else if qname.local_name() == qualified_name {
                     return Some((qname.clone(), value.clone()));
                 }
-            } else if qname.name() == qualified_name {
+            } else if qname.local_name() == qualified_name {
                 return Some((qname.clone(), value.clone()));
             }
         }

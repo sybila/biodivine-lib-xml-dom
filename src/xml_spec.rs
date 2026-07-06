@@ -112,6 +112,124 @@ pub(crate) fn validate_namespace(uri: &str, prefix: Option<&str>) -> Result<(), 
     Ok(())
 }
 
+/// Validate that a local name (the part of a QName after the colon, or the whole
+/// name if unqualified) is a valid NCName.
+///
+/// The local part of a QName must be an NCName per the XML Namespaces specification.
+///
+/// # Errors
+///
+/// Returns an error if the name is empty, starts with an invalid character,
+/// or contains characters not allowed in an NCName.
+pub(crate) fn validate_local_name(name: &str) -> Result<(), XmlError> {
+    if name.is_empty() {
+        return Err(XmlError::NamespaceError(
+            "Local name must not be empty".to_string(),
+        ));
+    }
+    if !is_valid_ncname(name) {
+        return Err(XmlError::NamespaceError(format!(
+            "Local name '{name}' is not a valid NCName"
+        )));
+    }
+    Ok(())
+}
+
+/// Split a qualified name string into its prefix and local name components,
+/// validating that the format is correct (at most one colon) and both parts
+/// are valid NCNames.
+///
+/// Returns `(prefix, local_name)` where `prefix` is `None` for unprefixed names.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The name contains more than one colon
+/// - The prefix is not a valid NCName
+/// - The local name is not a valid NCName
+pub(crate) fn split_qname(qname: &str) -> Result<(Option<&str>, &str), XmlError> {
+    if qname.is_empty() {
+        return Err(XmlError::NamespaceError(
+            "Qualified name must not be empty".to_string(),
+        ));
+    }
+
+    // Check for multiple colons — a QName may have at most one.
+    if qname.matches(':').count() > 1 {
+        return Err(XmlError::NamespaceError(format!(
+            "Qualified name '{qname}' contains more than one colon"
+        )));
+    }
+
+    if let Some(colon_pos) = qname.find(':') {
+        let prefix = &qname[..colon_pos];
+        let local_name = &qname[colon_pos + 1..];
+
+        if prefix.is_empty() {
+            return Err(XmlError::NamespaceError(
+                "Qualified name cannot have an empty prefix".to_string(),
+            ));
+        }
+
+        validate_ncname(prefix)?;
+        validate_local_name(local_name)?;
+
+        Ok((Some(prefix), local_name))
+    } else {
+        validate_local_name(qname)?;
+        Ok((None, qname))
+    }
+}
+
+/// Validate that an NCName string is valid.
+fn validate_ncname(name: &str) -> Result<(), XmlError> {
+    if !is_valid_ncname(name) {
+        return Err(XmlError::NamespaceError(format!(
+            "'{name}' is not a valid NCName"
+        )));
+    }
+    Ok(())
+}
+
+/// Validate constraints on a namespace prefix during QName resolution.
+///
+/// This checks the XML Namespaces specification rules for the `xml` prefix:
+/// - The `xml` prefix must only be bound to `http://www.w3.org/XML/1998/namespace`.
+/// - The `xmlns` prefix must never be used as a namespace prefix in a QName.
+///
+/// # Parameters
+///
+/// - `prefix`: The prefix from the QName (or empty string for unprefixed).
+/// - `resolved_uri`: The URI the prefix resolved to, if any.
+///
+/// # Errors
+///
+/// Returns an error if the prefix violates namespace constraints.
+pub(crate) fn validate_resolved_prefix(
+    prefix: &str,
+    resolved_uri: Option<&str>,
+) -> Result<(), XmlError> {
+    if prefix == "xmlns" {
+        return Err(XmlError::NamespaceError(
+            "The prefix 'xmlns' is reserved and cannot be used in a qualified name".to_string(),
+        ));
+    }
+
+    if prefix == "xml" {
+        match resolved_uri {
+            Some(uri) if uri == RESERVED_XML_URI => Ok(()),
+            Some(uri) => Err(XmlError::NamespaceError(format!(
+                "The prefix 'xml' can only be bound to '{RESERVED_XML_URI}', not '{uri}'"
+            ))),
+            None => Err(XmlError::NamespaceError(format!(
+                "The prefix 'xml' must be bound to '{RESERVED_XML_URI}'"
+            ))),
+        }
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,5 +401,92 @@ mod tests {
         verify_rule_exists("rule.namespace-basics.uri-comparison-literal-case-sensitive.md");
         assert!(validate_namespace("http://example.org/ns", Some("ex")).is_ok());
         assert!(validate_namespace("http://example.org/NS", Some("ex")).is_ok());
+    }
+
+    #[test]
+    fn test_split_qname_valid() {
+        // rule: rule.namespace-usage.qname-format.md
+        verify_rule_exists("rule.namespace-usage.qname-format.md");
+        // rule: rule.namespace-usage.zero-or-one-colon.md
+        verify_rule_exists("rule.namespace-usage.zero-or-one-colon.md");
+        // rule: rule.namespace-usage.prefix-and-localpart-ncname.md
+        verify_rule_exists("rule.namespace-usage.prefix-and-localpart-ncname.md");
+        // Unprefixed
+        let (prefix, local) = split_qname("foo").unwrap();
+        assert_eq!(prefix, None);
+        assert_eq!(local, "foo");
+
+        // Prefixed
+        let (prefix, local) = split_qname("ex:foo").unwrap();
+        assert_eq!(prefix, Some("ex"));
+        assert_eq!(local, "foo");
+
+        // Unicode
+        let (prefix, local) = split_qname("\u{00C0}:\u{4E00}").unwrap();
+        assert_eq!(prefix, Some("\u{00C0}"));
+        assert_eq!(local, "\u{4E00}");
+    }
+
+    #[test]
+    fn test_split_qname_invalid() {
+        // rule: rule.namespace-usage.zero-or-one-colon.md
+        verify_rule_exists("rule.namespace-usage.zero-or-one-colon.md");
+        // Multiple colons
+        assert!(split_qname("a:b:c").is_err());
+
+        // Empty name
+        assert!(split_qname("").is_err());
+
+        // Empty prefix
+        assert!(split_qname(":foo").is_err());
+
+        // Empty local part
+        assert!(split_qname("ex:").is_err());
+
+        // Invalid prefix (starts with digit)
+        assert!(split_qname("1a:foo").is_err());
+
+        // Invalid local part (starts with digit)
+        assert!(split_qname("ex:1foo").is_err());
+
+        // Invalid local part (contains space)
+        assert!(split_qname("ex:foo bar").is_err());
+    }
+
+    #[test]
+    fn test_validate_local_name() {
+        // rule: rule.namespace-usage.prefix-and-localpart-ncname.md
+        verify_rule_exists("rule.namespace-usage.prefix-and-localpart-ncname.md");
+        assert!(validate_local_name("foo").is_ok());
+        assert!(validate_local_name("_").is_ok());
+        assert!(validate_local_name("a-b").is_ok());
+        assert!(validate_local_name("a.b").is_ok());
+        assert!(validate_local_name("a1").is_ok());
+
+        assert!(validate_local_name("").is_err());
+        assert!(validate_local_name("1a").is_err());
+        assert!(validate_local_name("a b").is_err());
+        assert!(validate_local_name("a:b").is_err());
+    }
+
+    #[test]
+    fn test_validate_resolved_prefix() {
+        // rule: rule.namespace-basics.xml-prefix-fixed-binding.md
+        verify_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding.md");
+        // Valid: regular prefix
+        assert!(validate_resolved_prefix("ex", Some("http://example.com")).is_ok());
+        assert!(validate_resolved_prefix("ex", None).is_ok());
+
+        // Valid: xml prefix with correct URI
+        assert!(validate_resolved_prefix("xml", Some(RESERVED_XML_URI)).is_ok());
+
+        // Invalid: xml prefix with wrong URI
+        assert!(validate_resolved_prefix("xml", Some("http://example.com")).is_err());
+
+        // Invalid: xml prefix unbound
+        assert!(validate_resolved_prefix("xml", None).is_err());
+
+        // Invalid: xmlns prefix
+        assert!(validate_resolved_prefix("xmlns", Some("http://example.com")).is_err());
     }
 }

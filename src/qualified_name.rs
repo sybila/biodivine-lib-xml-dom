@@ -1,6 +1,7 @@
 use crate::element::Element;
 use crate::error::{XmlError, XmlResult};
 use crate::namespace::Namespace;
+use crate::xml_spec;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
@@ -42,14 +43,10 @@ impl QualifiedName {
     /// Create a new qualified name with a local name and optional namespace.
     ///
     /// # Errors
-    /// Returns an error if the name contains a colon (`:`).
+    /// Returns an error if the name is not a valid NCName.
     fn new<S: AsRef<str>>(name: S, namespace: Option<Namespace>) -> XmlResult<Self> {
         let name = name.as_ref();
-        if name.contains(':') {
-            return Err(XmlError::NamespaceError(
-                "Qualified name must not contain ':'; use resolved name and namespace".to_string(),
-            ));
-        }
+        xml_spec::validate_local_name(name)?;
         Ok(Self {
             name: name.to_string(),
             namespace,
@@ -59,7 +56,8 @@ impl QualifiedName {
     /// Create a qualified name without a namespace.
     ///
     /// # Errors
-    /// Returns an error if the name contains a colon (`:`).
+    /// Returns an error if the name is not a valid NCName (e.g., empty, starts with a digit,
+    /// or contains disallowed characters).
     ///
     /// # Examples
     /// ```rust
@@ -75,7 +73,8 @@ impl QualifiedName {
     /// Create a qualified name with a namespace.
     ///
     /// # Errors
-    /// Returns an error if the name contains a colon (`:`).
+    /// Returns an error if the name is not a valid NCName (e.g., empty, starts with a digit,
+    /// or contains disallowed characters).
     ///
     /// # Examples
     /// ```rust
@@ -102,6 +101,8 @@ impl QualifiedName {
     /// Resolve a qualified name in the context of an element and its namespace declarations.
     ///
     /// The namespace prefix must be declared on the element or one of its parents.
+    /// Validates that the QName has at most one colon, that both prefix and local part
+    /// are valid NCNames, and that reserved prefixes (`xml`, `xmlns`) are used correctly.
     ///
     /// # Examples
     /// ```rust
@@ -114,17 +115,15 @@ impl QualifiedName {
     /// assert_eq!(qn.namespace().unwrap().uri(), "http://default.com");
     /// ```
     pub fn resolve(element: &Element, qualified_name: &str) -> XmlResult<Self> {
-        if let Some(colon_pos) = qualified_name.find(':') {
-            let prefix = &qualified_name[..colon_pos];
-            let local_name = &qualified_name[colon_pos + 1..];
-            let ns = element.get_namespace(prefix);
-            if let Some(ns) = ns {
-                QualifiedName::new(local_name, Some(ns))
-            } else {
-                Err(XmlError::NamespaceError(format!(
-                    "Undefined namespace prefix: {prefix}"
-                )))
-            }
+        let (prefix, local_name) = xml_spec::split_qname(qualified_name)?;
+
+        if let Some(prefix) = prefix {
+            let ns = element.get_namespace(prefix).ok_or_else(|| {
+                XmlError::NamespaceError(format!("Undefined namespace prefix: {prefix}"))
+            })?;
+
+            xml_spec::validate_resolved_prefix(prefix, Some(ns.uri()))?;
+            QualifiedName::new(local_name, Some(ns))
         } else {
             let ns = element.get_namespace("");
             if let Some(ns) = ns {
@@ -136,6 +135,9 @@ impl QualifiedName {
     }
 
     /// Resolve a qualified name using a namespace map (prefix -> URI).
+    ///
+    /// Validates that the QName has at most one colon, that both prefix and local part
+    /// are valid NCNames, and that reserved prefixes (`xml`, `xmlns`) are used correctly.
     ///
     /// # Examples
     /// ```rust
@@ -151,18 +153,18 @@ impl QualifiedName {
         qualified_name: &str,
         ns_map: &HashMap<String, String>,
     ) -> XmlResult<Self> {
-        if let Some(colon_pos) = qualified_name.find(':') {
-            let prefix = &qualified_name[..colon_pos];
-            let local_name = &qualified_name[colon_pos + 1..];
-            if let Some(uri) = ns_map.get(prefix) {
-                let ns = Namespace::prefixed(uri, prefix)
-                    .map_err(|e| XmlError::NamespaceError(e.to_string()))?;
-                QualifiedName::new(local_name, Some(ns))
-            } else {
-                Err(XmlError::NamespaceError(format!(
-                    "Undefined namespace prefix: {prefix}"
-                )))
-            }
+        let (prefix, local_name) = xml_spec::split_qname(qualified_name)?;
+
+        if let Some(prefix) = prefix {
+            let uri = ns_map.get(prefix).ok_or_else(|| {
+                XmlError::NamespaceError(format!("Undefined namespace prefix: {prefix}"))
+            })?;
+
+            xml_spec::validate_resolved_prefix(prefix, Some(uri))?;
+
+            let ns = Namespace::prefixed(uri, prefix)
+                .map_err(|e| XmlError::NamespaceError(e.to_string()))?;
+            QualifiedName::new(local_name, Some(ns))
         } else if let Some(uri) = ns_map.get("") {
             let ns = Namespace::without_prefix(uri)
                 .map_err(|e| XmlError::NamespaceError(e.to_string()))?;

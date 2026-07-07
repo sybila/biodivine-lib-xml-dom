@@ -52,7 +52,7 @@ impl Element {
         })))
     }
 
-    pub fn name(&self) -> NCName {
+    pub fn local_name(&self) -> NCName {
         self.0.read().qualified_name.local_name().clone()
     }
 

@@ -279,7 +279,7 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
             attrs.push((qname.local_name().to_string(), value.clone()));
         }
     }
-    let name = element.name();
+    let name = element.local_name();
     let start = BytesStart::new(&*name).with_attributes(
         attrs
             .iter()
@@ -317,7 +317,7 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
             }
         }
     }
-    let name = element.name();
+    let name = element.local_name();
     let end = BytesEnd::new(&*name);
     writer.write_event(Event::End(end))?;
     Ok(())
@@ -343,7 +343,10 @@ mod tests {
 
         // Parse again to verify round-trip
         let doc2 = parse_string(&output).unwrap();
-        assert_eq!(doc.root().unwrap().name(), doc2.root().unwrap().name());
+        assert_eq!(
+            doc.root().unwrap().local_name(),
+            doc2.root().unwrap().local_name()
+        );
     }
 
     #[test]
@@ -361,7 +364,7 @@ mod tests {
         let doc = parse_string(xml).unwrap();
         let root = doc.root().unwrap();
 
-        assert_eq!(root.name(), "html");
+        assert_eq!(root.local_name(), "html");
         assert!(root.namespace().is_some());
         assert_eq!(
             root.namespace().unwrap().uri(),
@@ -420,7 +423,7 @@ mod tests {
         let doc = parse_string(xml).unwrap();
         let root = doc.root().unwrap();
 
-        assert_eq!(root.name(), "root");
+        assert_eq!(root.local_name(), "root");
         assert_eq!(
             root.namespace_declarations().get(&Some(nc_name("default"))),
             Some(&Some(
@@ -472,13 +475,15 @@ mod tests {
         let xml = r#"<a> some text <b> other text </b> more text <c> other text </c> </a>"#;
         let doc = parse_string(xml).unwrap();
         let root = doc.root().unwrap();
-        assert_eq!(root.name(), "a");
+        assert_eq!(root.local_name(), "a");
         let children = root.children();
         let mut actual: Vec<String> = vec![];
         for node in children {
             match node {
                 crate::element::XmlNode::Text(t) => actual.push(format!("text:{:?}", t)),
-                crate::element::XmlNode::Element(e) => actual.push(format!("element:{}", e.name())),
+                crate::element::XmlNode::Element(e) => {
+                    actual.push(format!("element:{}", e.local_name()))
+                }
                 crate::element::XmlNode::Comment(c) => actual.push(format!("comment:{:?}", c)),
                 crate::element::XmlNode::CData(c) => actual.push(format!("cdata:{:?}", c)),
                 crate::element::XmlNode::ProcessingInstruction(target, data) => {
@@ -595,8 +600,8 @@ mod tests {
         // Check that elements are still parsed correctly
         let elements = root.element_children();
         assert_eq!(elements.len(), 2);
-        assert_eq!(elements[0].name(), "child");
-        assert_eq!(elements[1].name(), "child");
+        assert_eq!(elements[0].local_name(), "child");
+        assert_eq!(elements[1].local_name(), "child");
 
         // Check round-trip serialization
         let output = write_string(&doc).unwrap();
@@ -655,8 +660,8 @@ mod tests {
         // Check that elements are still parsed correctly
         let elements = root.element_children();
         assert_eq!(elements.len(), 2);
-        assert_eq!(elements[0].name(), "child");
-        assert_eq!(elements[1].name(), "child");
+        assert_eq!(elements[0].local_name(), "child");
+        assert_eq!(elements[1].local_name(), "child");
 
         // Check round-trip serialization
         let output = write_string(&doc).unwrap();
@@ -707,7 +712,9 @@ mod tests {
         for node in children {
             match node {
                 crate::element::XmlNode::Text(t) => actual.push(format!("text:{:?}", t)),
-                crate::element::XmlNode::Element(e) => actual.push(format!("element:{}", e.name())),
+                crate::element::XmlNode::Element(e) => {
+                    actual.push(format!("element:{}", e.local_name()))
+                }
                 crate::element::XmlNode::Comment(c) => actual.push(format!("comment:{:?}", c)),
                 crate::element::XmlNode::CData(c) => actual.push(format!("cdata:{:?}", c)),
                 crate::element::XmlNode::ProcessingInstruction(target, data) => {
@@ -761,8 +768,8 @@ mod tests {
         // Check that elements are still parsed correctly
         let elements = root.element_children();
         assert_eq!(elements.len(), 2);
-        assert_eq!(elements[0].name(), "child");
-        assert_eq!(elements[1].name(), "child");
+        assert_eq!(elements[0].local_name(), "child");
+        assert_eq!(elements[1].local_name(), "child");
 
         // Check round-trip serialization
         let output = write_string(&doc).unwrap();
@@ -834,7 +841,9 @@ mod tests {
         for node in children {
             match node {
                 crate::element::XmlNode::Text(t) => actual.push(format!("text:{:?}", t)),
-                crate::element::XmlNode::Element(e) => actual.push(format!("element:{}", e.name())),
+                crate::element::XmlNode::Element(e) => {
+                    actual.push(format!("element:{}", e.local_name()))
+                }
                 crate::element::XmlNode::Comment(c) => actual.push(format!("comment:{:?}", c)),
                 crate::element::XmlNode::CData(c) => actual.push(format!("cdata:{:?}", c)),
                 crate::element::XmlNode::ProcessingInstruction(target, data) => {
@@ -881,7 +890,7 @@ mod tests {
         );
 
         let in_ns = root.element_children()[0].clone();
-        assert_eq!(in_ns.name(), "in_ns");
+        assert_eq!(in_ns.local_name(), "in_ns");
         assert_eq!(
             in_ns.namespace().as_ref().map(|ns| ns.uri()),
             Some("http://default.org")
@@ -890,24 +899,24 @@ mod tests {
         // Per XML Namespaces §6.2, the scope of xmlns="" extends from the start-tag itself,
         // so <child xmlns=""> has no namespace (not its parent's default).
         let child = root.element_children()[1].clone();
-        assert_eq!(child.name(), "child");
+        assert_eq!(child.local_name(), "child");
         assert!(child.namespace().is_none());
 
         // The no_ns element inside child should have *no* namespace.
         let no_ns = child.element_children()[0].clone();
-        assert_eq!(no_ns.name(), "no_ns");
+        assert_eq!(no_ns.local_name(), "no_ns");
         assert!(no_ns.namespace().is_none());
 
         // Nested element declares its own default namespace.
         let nested = child.element_children()[1].clone();
-        assert_eq!(nested.name(), "nested");
+        assert_eq!(nested.local_name(), "nested");
         assert_eq!(
             nested.namespace().as_ref().map(|ns| ns.uri()),
             Some("http://other.org")
         );
 
         let back_in_ns = nested.element_children()[0].clone();
-        assert_eq!(back_in_ns.name(), "back_in_ns");
+        assert_eq!(back_in_ns.local_name(), "back_in_ns");
         assert_eq!(
             back_in_ns.namespace().as_ref().map(|ns| ns.uri()),
             Some("http://other.org")
@@ -915,7 +924,7 @@ mod tests {
 
         // after_empty is outside the empty-declr scope, so back in the default namespace.
         let after_empty = root.element_children()[2].clone();
-        assert_eq!(after_empty.name(), "after_empty");
+        assert_eq!(after_empty.local_name(), "after_empty");
         assert_eq!(
             after_empty.namespace().as_ref().map(|ns| ns.uri()),
             Some("http://default.org")
@@ -925,9 +934,9 @@ mod tests {
         let output = write_string(&doc).unwrap();
         let doc2 = parse_string(&output).unwrap();
         let root2 = doc2.root().unwrap();
-        assert_eq!(root2.element_children()[0].name(), "in_ns");
+        assert_eq!(root2.element_children()[0].local_name(), "in_ns");
         assert_eq!(
-            root2.element_children()[1].element_children()[0].name(),
+            root2.element_children()[1].element_children()[0].local_name(),
             "no_ns"
         );
         assert!(

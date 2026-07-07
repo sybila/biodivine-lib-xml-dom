@@ -65,7 +65,7 @@
 //!
 //! let doc = parse_string(xml).unwrap();
 //! let root = doc.root().unwrap();
-//! assert_eq!(root.name(), "root");
+//! assert_eq!(root.local_name(), "root");
 //! ```
 //!
 //! ## Working with Comments
@@ -144,7 +144,7 @@ mod tests {
     fn test_create_element() {
         let doc = Document::empty();
         let element = doc.create_element(QualifiedName::without_namespace("test").unwrap());
-        assert_eq!(element.name(), "test");
+        assert_eq!(element.local_name(), "test");
         assert!(element.namespace().is_none());
     }
 
@@ -159,7 +159,7 @@ mod tests {
         let children = parent.children();
         assert_eq!(children.len(), 1);
         match &children[0] {
-            element::XmlNode::Element(e) => assert_eq!(e.name(), "child"),
+            element::XmlNode::Element(e) => assert_eq!(e.local_name(), "child"),
             element::XmlNode::Text(_) => panic!("Expected element child, got text"),
             element::XmlNode::Comment(_) => panic!("Expected element child, got comment"),
             element::XmlNode::CData(_) => panic!("Expected element child, got cdata"),

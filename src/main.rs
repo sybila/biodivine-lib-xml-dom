@@ -83,14 +83,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = parsed_doc
         .root()
         .ok_or("Parsed document has no root element")?;
-    println!("Parsed document root: {}", root.name());
+    println!("Parsed document root: {}", root.local_name());
     let books: Vec<_> = root.element_children();
     println!("Number of books: {}", books.len());
 
     for book in books {
-        println!("  - Book: {}", book.name());
+        println!("  - Book: {}", book.local_name());
         let children = book.element_children();
-        let title = children.iter().find(|e| e.name() == "title").unwrap();
+        let title = children.iter().find(|e| e.local_name() == "title").unwrap();
         println!("    Title: {}", title.text_children().join(""));
     }
 
@@ -121,7 +121,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let comment_root = comment_doc.root().unwrap();
 
     println!("Parsed document with comments:");
-    println!("Root element: {}", comment_root.name());
+    println!("Root element: {}", comment_root.local_name());
 
     // Get all comments
     let comments = comment_root.comment_children();
@@ -131,7 +131,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let header_children = comment_root.element_children();
     let header = header_children
         .iter()
-        .find(|e| e.name() == "header")
+        .find(|e| e.local_name() == "header")
         .unwrap();
     let header_comments = header.comment_children();
     println!("Comments in header: {header_comments:?}");
@@ -139,7 +139,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let content_children = comment_root.element_children();
     let content = content_children
         .iter()
-        .find(|e| e.name() == "content")
+        .find(|e| e.local_name() == "content")
         .unwrap();
     let content_comments = content.comment_children();
     println!("Comments in content: {content_comments:?}");

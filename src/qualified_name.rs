@@ -5,9 +5,13 @@ use crate::xml_spec::{self, NCName};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 /// Represents a qualified XML name (local name plus optional namespace).
+///
+/// [`QualifiedName`] is immutable and thread-safe by design. The qualified name data is shared
+/// behind an `Arc` pointer, so copying qualified names should be relatively cheap. Prefer
+/// cloning existing qualified names instead of creating new ones to reduce memory usage.
 ///
 /// Used for both element and attribute names. A qualified name consists of a local name
 /// and an optional namespace. The namespace, if present, is represented by a [`Namespace`].
@@ -48,6 +52,11 @@ use std::sync::OnceLock;
 /// ```
 #[derive(Debug, Clone)]
 pub struct QualifiedName {
+    data: Arc<QualifiedNameData>,
+}
+
+#[derive(Debug)]
+struct QualifiedNameData {
     local_name: NCName,
     namespace: Option<Namespace>,
 }
@@ -61,8 +70,10 @@ impl QualifiedName {
     /// [`QualifiedName::with_namespace`].
     pub fn new(name: NCName, namespace: Option<Namespace>) -> Self {
         Self {
-            local_name: name,
-            namespace,
+            data: Arc::new(QualifiedNameData {
+                local_name: name,
+                namespace,
+            }),
         }
     }
 
@@ -81,10 +92,7 @@ impl QualifiedName {
     /// ```
     pub fn without_namespace<S: AsRef<str>>(name: S) -> XmlResult<Self> {
         let ncname = NCName::try_from(name.as_ref())?;
-        Ok(Self {
-            local_name: ncname,
-            namespace: None,
-        })
+        Ok(Self::new(ncname, None))
     }
 
     /// Create a qualified name with a namespace.
@@ -103,17 +111,14 @@ impl QualifiedName {
     /// ```
     pub fn with_namespace<S: AsRef<str>>(name: S, namespace: &Namespace) -> XmlResult<Self> {
         let ncname = NCName::try_from(name.as_ref())?;
-        Ok(Self {
-            local_name: ncname,
-            namespace: Some(namespace.clone()),
-        })
+        Ok(Self::new(ncname, Some(namespace.clone())))
     }
 
     /// Get the local name as an [`NCName`].
     ///
     /// The returned [`NCName`] is guaranteed to be a valid XML NCName.
     pub fn local_name(&self) -> &NCName {
-        &self.local_name
+        &self.data.local_name
     }
 
     /// Get the local name as a string slice.
@@ -121,12 +126,12 @@ impl QualifiedName {
     /// This is a convenience method that returns the local name as `&str`.
     /// Prefer [`QualifiedName::local_name`] when you need the type-safe [`NCName`] representation.
     pub fn local_name_str(&self) -> &str {
-        self.local_name.as_str()
+        self.data.local_name.as_str()
     }
 
     /// Get the namespace, if any.
     pub fn namespace(&self) -> Option<&Namespace> {
-        self.namespace.as_ref()
+        self.data.namespace.as_ref()
     }
 
     /// Resolve a qualified name for an **element** in the context of an [`Element`] and its
@@ -201,10 +206,7 @@ impl QualifiedName {
 
     /// Construct a [`QualifiedName`] for the predefined `xml` prefix.
     fn resolve_xml_prefix(local_name: NCName) -> XmlResult<Self> {
-        Ok(Self {
-            local_name,
-            namespace: Some(Self::xml_namespace().clone()),
-        })
+        Ok(Self::new(local_name, Some(Self::xml_namespace().clone())))
     }
 
     /// Internal resolver shared by [`resolve_element`] and [`resolve_attribute`].
@@ -280,10 +282,7 @@ impl QualifiedName {
             None
         };
 
-        Ok(Self {
-            local_name,
-            namespace,
-        })
+        Ok(Self::new(local_name, namespace))
     }
 
     /// Resolve a qualified name for an **element** using a namespace map (prefix -> URI).
@@ -346,18 +345,18 @@ impl QualifiedName {
 
 impl fmt::Display for QualifiedName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(prefix) = self.namespace().and_then(|ns| ns.prefix()) {
-            write!(f, "{prefix}:{}", self.local_name())
+        if let Some(prefix) = self.data.namespace.as_ref().and_then(|ns| ns.prefix()) {
+            write!(f, "{prefix}:{}", self.data.local_name)
         } else {
-            write!(f, "{}", self.local_name())
+            write!(f, "{}", self.data.local_name)
         }
     }
 }
 
 impl PartialEq for QualifiedName {
     fn eq(&self, other: &Self) -> bool {
-        self.local_name == other.local_name
-            && match (&self.namespace, &other.namespace) {
+        self.data.local_name == other.data.local_name
+            && match (&self.data.namespace, &other.data.namespace) {
                 (Some(a), Some(b)) => a.is_equal_ns(b),
                 (None, None) => true,
                 _ => false,
@@ -375,10 +374,10 @@ impl PartialOrd for QualifiedName {
 
 impl Ord for QualifiedName {
     fn cmp(&self, other: &Self) -> Ordering {
-        let ns_a = self.namespace.as_ref().map(|ns| ns.uri());
-        let ns_b = other.namespace.as_ref().map(|ns| ns.uri());
+        let ns_a = self.data.namespace.as_ref().map(|ns| ns.uri());
+        let ns_b = other.data.namespace.as_ref().map(|ns| ns.uri());
         match ns_a.cmp(&ns_b) {
-            Ordering::Equal => self.local_name.cmp(&other.local_name),
+            Ordering::Equal => self.data.local_name.cmp(&other.data.local_name),
             ord => ord,
         }
     }
@@ -386,8 +385,8 @@ impl Ord for QualifiedName {
 
 impl std::hash::Hash for QualifiedName {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.local_name.hash(state);
-        if let Some(ns) = &self.namespace {
+        self.data.local_name.hash(state);
+        if let Some(ns) = &self.data.namespace {
             ns.uri().hash(state);
         }
     }

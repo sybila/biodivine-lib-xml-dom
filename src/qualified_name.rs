@@ -56,8 +56,8 @@ impl QualifiedName {
     /// Create a new qualified name with a local name and optional namespace.
     ///
     /// This constructor takes an owned [`NCName`] to avoid allocating when the caller
-    /// already has validated data (e.g., from [`xml_spec::split_qname`]). For more convenient
-    /// constructors that accept `&str`, see [`QualifiedName::without_namespace`] and
+    /// already has validated data. For more convenient constructors that accept `&str`,
+    /// but have to perform validation see [`QualifiedName::without_namespace`] and
     /// [`QualifiedName::with_namespace`].
     pub fn new(name: NCName, namespace: Option<Namespace>) -> Self {
         Self {

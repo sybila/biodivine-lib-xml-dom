@@ -315,6 +315,12 @@ fn validate_xml_prefix_binding(uri: Option<&str>) -> Result<(), XmlError> {
     }
 }
 
+/// Helper function to create an NCName. Panics if the string is invalid.
+/// Primarily intended for use in tests and examples.
+pub fn nc_name(s: &str) -> NCName {
+    NCName::try_from(s).unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -328,11 +334,6 @@ mod tests {
             "Rule file {} does not exist",
             rule_file
         );
-    }
-
-    /// Helper function to create an NCName in tests. Panics if the string is invalid.
-    fn nc_name(s: &str) -> NCName {
-        NCName::try_from(s).unwrap()
     }
 
     #[test]

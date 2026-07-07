@@ -328,6 +328,7 @@ mod tests {
     use super::*;
     use crate::Document;
     use crate::Namespace;
+    use crate::xml_spec::nc_name;
 
     #[test]
     fn test_parse_and_write_simple_xml() {
@@ -375,8 +376,7 @@ mod tests {
 
         let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
         let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns).unwrap());
-        let html_prefix: NCName = "html".try_into().unwrap();
-        root.declare_namespace(&html_prefix, html_ns.clone());
+        root.declare_namespace(&nc_name("html"), html_ns.clone());
         doc.set_root(root.clone()).unwrap();
 
         let head = doc.create_element(QualifiedName::without_namespace("head").unwrap());
@@ -421,51 +421,48 @@ mod tests {
         let root = doc.root().unwrap();
 
         assert_eq!(root.name(), "root");
-        let default_prefix: NCName = "default".try_into().unwrap();
         assert_eq!(
-            root.namespace_declarations().get(&Some(default_prefix)),
+            root.namespace_declarations().get(&Some(nc_name("default"))),
             Some(&Some(
                 Namespace::prefixed("http://default.com", "default").unwrap()
             ))
         );
 
-        let ex_prefix: NCName = "ex".try_into().unwrap();
         let first_child = root.element_children()[0].clone();
         assert_eq!(
-            first_child.get_namespace(Some(&ex_prefix)),
+            first_child.get_namespace(Some(&nc_name("ex"))),
             Some(Namespace::prefixed("http://example.com", "ex").unwrap())
         );
 
         let nested = first_child.element_children()[1].clone();
         assert_eq!(
-            nested.get_namespace(Some(&ex_prefix)),
+            nested.get_namespace(Some(&nc_name("ex"))),
             Some(Namespace::prefixed("http://example-another.com", "ex").unwrap())
         );
 
         let deep = nested.element_children()[1].clone();
         assert_eq!(
-            deep.get_namespace(Some(&ex_prefix)),
+            deep.get_namespace(Some(&nc_name("ex"))),
             Some(Namespace::prefixed("http://example-third.com", "ex").unwrap())
         );
 
         let back_to_original = first_child.element_children()[2].clone();
         assert_eq!(
-            back_to_original.get_namespace(Some(&ex_prefix)),
+            back_to_original.get_namespace(Some(&nc_name("ex"))),
             Some(Namespace::prefixed("http://example.com", "ex").unwrap())
         );
 
         let second_child = root.element_children()[1].clone();
         assert_eq!(
-            second_child.get_namespace(Some(&ex_prefix)),
+            second_child.get_namespace(Some(&nc_name("ex"))),
             Some(Namespace::prefixed("http://example-another.com", "ex").unwrap())
         );
 
         let output = write_string(&doc).unwrap();
         let doc2 = parse_string(&output).unwrap();
         let root2 = doc2.root().unwrap();
-        let default_prefix2: NCName = "default".try_into().unwrap();
         assert_eq!(
-            root2.get_namespace(Some(&default_prefix2)),
+            root2.get_namespace(Some(&nc_name("default"))),
             Some(Namespace::prefixed("http://default.com", "default").unwrap())
         );
     }

@@ -40,15 +40,13 @@
 //!
 //! ```rust
 //! use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
-//! use biodivine_lib_xml_dom::xml_spec::NCName;
-//! use std::convert::TryInto;
+//! use biodivine_lib_xml_dom::xml_spec::nc_name;
 //!
 //! // Create a new document and elements in a single block
 //! let doc = Document::empty();
 //! let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
 //! let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns).unwrap());
-//! let html_prefix: NCName = "html".try_into().unwrap();
-//! root.declare_namespace(&html_prefix, html_ns.clone());
+//! root.declare_namespace(&nc_name("html"), html_ns.clone());
 //! doc.set_root(root.clone()).unwrap();
 //! let body = doc.create_element(QualifiedName::without_namespace("body").unwrap());
 //! body.add_attribute(QualifiedName::without_namespace("class").unwrap(), "main".to_string());
@@ -134,6 +132,7 @@ pub use qualified_name::QualifiedName;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::xml_spec::nc_name;
 
     #[test]
     fn test_create_document() {
@@ -175,14 +174,13 @@ mod tests {
     fn test_namespace_declaration() {
         let doc = Document::empty();
         let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
-        let ex_prefix: xml_spec::NCName = "ex".try_into().unwrap();
         root.declare_namespace(
-            &ex_prefix,
+            &nc_name("ex"),
             Namespace::prefixed("http://example.com", "ex").unwrap(),
         );
 
         assert_eq!(
-            root.get_namespace(Some(&ex_prefix)),
+            root.get_namespace(Some(&nc_name("ex"))),
             Some(Namespace::prefixed("http://example.com", "ex").unwrap())
         );
     }
@@ -191,9 +189,8 @@ mod tests {
     fn test_qualified_name_resolution() {
         let doc = Document::empty();
         let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
-        let ex_prefix: xml_spec::NCName = "ex".try_into().unwrap();
         root.declare_namespace(
-            &ex_prefix,
+            &nc_name("ex"),
             Namespace::prefixed("http://example.com", "ex").unwrap(),
         );
 

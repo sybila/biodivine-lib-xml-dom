@@ -35,7 +35,7 @@ pub(crate) struct ElementData {
     pub qualified_name: QualifiedName,
     /// Element attributes
     pub attributes: BTreeMap<QualifiedName, String>,
-    /// Child elements
+    /// Child nodes
     pub children: Vec<XmlNode>,
     /// Parent element (None if root or detached)
     pub parent: Option<Element>,
@@ -156,8 +156,9 @@ impl Element {
     /// # Errors
     ///
     /// Returns [`crate::error::XmlError::InvalidOperation`] if the child belongs to a
-    /// different document, if the child is the same element as `self`, or if the child
-    /// already has a parent.
+    /// different document, if the child is the same element as `self`, if the child
+    /// already has a parent, or if `self` would appear in the subtree of `child` (which
+    /// would create a cycle).
     pub fn add_child_element(&self, child: Element) -> XmlResult<()> {
         if Arc::ptr_eq(&self.0, &child.0) {
             return Err(crate::error::XmlError::InvalidOperation(
@@ -174,9 +175,34 @@ impl Element {
                 "Child element already has a parent".to_string(),
             ));
         }
+        if child.is_ancestor(self) {
+            return Err(crate::error::XmlError::InvalidOperation(
+                "Cannot add an ancestor as a child (would create a cycle)".to_string(),
+            ));
+        }
         child.0.write().parent = Some(self.clone());
         self.0.write().children.push(XmlNode::Element(child));
         Ok(())
+    }
+
+    /// Check whether `self` appears in the parent chain of `other`.
+    pub fn is_ancestor(&self, other: &Element) -> bool {
+        let mut current = other.clone();
+        loop {
+            let parent = {
+                let inner = current.0.read();
+                inner.parent.clone()
+            };
+            if let Some(parent) = parent {
+                if Arc::ptr_eq(&self.0, &parent.0) {
+                    return true;
+                }
+                current = parent;
+            } else {
+                break;
+            }
+        }
+        false
     }
 
     /// Add a text node as a child of this element.
@@ -421,5 +447,66 @@ mod tests {
             child.get_namespace(None),
             Some(Namespace::without_prefix("http://second.com").unwrap())
         );
+    }
+
+    #[test]
+    fn test_add_child_prevents_cycle() {
+        // Adding a descendant as a child would create a cycle and must be rejected.
+        let doc = Document::empty();
+        let a = doc.create_element(QualifiedName::without_namespace("a").unwrap());
+        let b = doc.create_element(QualifiedName::without_namespace("b").unwrap());
+        let c = doc.create_element(QualifiedName::without_namespace("c").unwrap());
+
+        a.add_child_element(b.clone()).unwrap();
+        b.add_child_element(c.clone()).unwrap();
+
+        // Trying to add `a` as child of `c` would create a -> b -> c -> a cycle
+        let result = c.add_child_element(a.clone());
+        assert!(
+            result.is_err(),
+            "Adding an ancestor as a child must be rejected"
+        );
+    }
+
+    #[test]
+    fn test_is_ancestor_direct_parent() {
+        let doc = Document::empty();
+        let parent = doc.create_element(QualifiedName::without_namespace("parent").unwrap());
+        let child = doc.create_element(QualifiedName::without_namespace("child").unwrap());
+
+        parent.add_child_element(child.clone()).unwrap();
+
+        assert!(parent.is_ancestor(&child));
+    }
+
+    #[test]
+    fn test_is_ancestor_deep_tree() {
+        let doc = Document::empty();
+        let a = doc.create_element(QualifiedName::without_namespace("a").unwrap());
+        let b = doc.create_element(QualifiedName::without_namespace("b").unwrap());
+        let c = doc.create_element(QualifiedName::without_namespace("c").unwrap());
+
+        a.add_child_element(b.clone()).unwrap();
+        b.add_child_element(c.clone()).unwrap();
+
+        assert!(a.is_ancestor(&c));
+        assert!(a.is_ancestor(&b));
+    }
+
+    #[test]
+    fn test_is_ancestor_not_related() {
+        let doc = Document::empty();
+        let a = doc.create_element(QualifiedName::without_namespace("a").unwrap());
+        let b = doc.create_element(QualifiedName::without_namespace("b").unwrap());
+
+        assert!(!a.is_ancestor(&b));
+    }
+
+    #[test]
+    fn test_is_ancestor_same_element() {
+        let doc = Document::empty();
+        let a = doc.create_element(QualifiedName::without_namespace("a").unwrap());
+
+        assert!(!a.is_ancestor(&a));
     }
 }

@@ -6,7 +6,7 @@ use crate::QualifiedName;
 use crate::document::Document;
 use crate::error::XmlResult;
 use crate::namespace::Namespace;
-use crate::xml_spec::NCName;
+use crate::xml_spec::{CData, Comment, NCName, PiData, PiTarget, Text};
 
 /// A child node of an [`Element`].
 ///
@@ -17,13 +17,13 @@ pub enum XmlNode {
     /// A child element node.
     Element(Element),
     /// A text node.
-    Text(String),
+    Text(Text),
     /// A comment node.
-    Comment(String),
+    Comment(Comment),
     /// A CDATA section node.
-    CData(String),
+    CData(CData),
     /// A processing instruction node (target, data).
-    ProcessingInstruction(String, String),
+    ProcessingInstruction(PiTarget, PiData),
 }
 
 /// Internal representation of an XML element node
@@ -84,11 +84,31 @@ impl Element {
     ///
     /// If the namespace has no prefix, this declares the default namespace.
     /// For empty default declarations (xmlns=""), use [`Element::undeclare_default_namespace`].
-    pub fn declare_namespace(&self, namespace: Namespace) {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::XmlError::InvalidOperation`] if the prefix is already declared on this element
+    /// with a different namespace URI. Re-declarations are not permitted.
+    pub fn declare_namespace(&self, namespace: Namespace) -> XmlResult<()> {
+        let prefix = namespace.prefix().cloned();
+        let existing = {
+            let inner = self.0.read();
+            inner.namespace_declarations.get(&prefix).cloned()
+        };
+        // Check if this prefix is already declared with a different URI
+        if let Some(Some(existing_ns)) = existing
+            && !existing_ns.is_equal_ns(&namespace)
+        {
+            return Err(crate::error::XmlError::InvalidOperation(format!(
+                "Namespace prefix '{}' is already declared with a different URI",
+                prefix.as_ref().map(|p| p.as_str()).unwrap_or("(default)")
+            )));
+        }
         self.0
             .write()
             .namespace_declarations
-            .insert(namespace.prefix().cloned(), Some(namespace));
+            .insert(prefix, Some(namespace));
+        Ok(())
     }
 
     /// Undeclare the default namespace on this element (xmlns="").
@@ -206,26 +226,53 @@ impl Element {
     }
 
     /// Add a text node as a child of this element.
-    pub fn add_text(&self, text: String) {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::XmlError::InvalidXml`] if the text contains illegal XML characters
+    /// (e.g., control characters or surrogate code points).
+    pub fn add_text(&self, text: String) -> XmlResult<()> {
+        let text = Text::try_from(text)?;
         self.0.write().children.push(XmlNode::Text(text));
+        Ok(())
     }
 
     /// Add a comment node as a child of this element.
-    pub fn add_comment(&self, comment: String) {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::XmlError::InvalidXml`] if the comment contains `--` or ends with `-`.
+    pub fn add_comment(&self, comment: String) -> XmlResult<()> {
+        let comment = Comment::try_from(comment)?;
         self.0.write().children.push(XmlNode::Comment(comment));
+        Ok(())
     }
 
     /// Add a CDATA section as a child of this element.
-    pub fn add_cdata(&self, cdata: String) {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::XmlError::InvalidXml`] if the CDATA content contains `]]>`.
+    pub fn add_cdata(&self, cdata: String) -> XmlResult<()> {
+        let cdata = CData::try_from(cdata)?;
         self.0.write().children.push(XmlNode::CData(cdata));
+        Ok(())
     }
 
     /// Add a processing instruction as a child of this element.
-    pub fn add_processing_instruction(&self, target: String, data: String) {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::XmlError::InvalidXml`] if the target is not a valid XML Name or matches
+    /// `xml` case-insensitively, or if the content contains `?>`.
+    pub fn add_processing_instruction(&self, target: String, data: String) -> XmlResult<()> {
+        let target = PiTarget::try_from(target)?;
+        let data = PiData::try_from(data)?;
         self.0
             .write()
             .children
             .push(XmlNode::ProcessingInstruction(target, data));
+        Ok(())
     }
 
     /// Get all child nodes of this element.
@@ -250,7 +297,7 @@ impl Element {
     }
 
     /// Get only the text children of this element.
-    pub fn text_children(&self) -> Vec<String> {
+    pub fn text_children(&self) -> Vec<Text> {
         self.0
             .read()
             .children
@@ -266,7 +313,7 @@ impl Element {
     }
 
     /// Get only the comment children of this element.
-    pub fn comment_children(&self) -> Vec<String> {
+    pub fn comment_children(&self) -> Vec<Comment> {
         self.0
             .read()
             .children
@@ -282,7 +329,7 @@ impl Element {
     }
 
     /// Get only the CDATA children of this element.
-    pub fn cdata_children(&self) -> Vec<String> {
+    pub fn cdata_children(&self) -> Vec<CData> {
         self.0
             .read()
             .children
@@ -298,7 +345,7 @@ impl Element {
     }
 
     /// Get only the processing instruction children of this element.
-    pub fn processing_instruction_children(&self) -> Vec<(String, String)> {
+    pub fn processing_instruction_children(&self) -> Vec<(PiTarget, PiData)> {
         self.0
             .read()
             .children
@@ -354,7 +401,9 @@ mod tests {
         // inheritance of the default namespace from ancestors.
         let doc = Document::empty();
         let parent = doc.create_element(QualifiedName::without_namespace("parent").unwrap());
-        parent.declare_namespace(Namespace::without_prefix("http://default.com").unwrap());
+        parent
+            .declare_namespace(Namespace::without_prefix("http://default.com").unwrap())
+            .unwrap();
 
         let child = doc.create_element(QualifiedName::without_namespace("child").unwrap());
         child.undeclare_default_namespace();
@@ -381,7 +430,9 @@ mod tests {
         // Prefixed namespace resolution should still walk up the parent chain.
         let doc = Document::empty();
         let parent = doc.create_element(QualifiedName::without_namespace("parent").unwrap());
-        parent.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
+        parent
+            .declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap())
+            .unwrap();
 
         let child = doc.create_element(QualifiedName::without_namespace("child").unwrap());
         parent.add_child_element(child.clone()).unwrap();
@@ -397,7 +448,9 @@ mod tests {
         // Undeclaring the default namespace should not interfere with prefixed namespace resolution.
         let doc = Document::empty();
         let parent = doc.create_element(QualifiedName::without_namespace("parent").unwrap());
-        parent.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
+        parent
+            .declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap())
+            .unwrap();
 
         let child = doc.create_element(QualifiedName::without_namespace("child").unwrap());
         child.undeclare_default_namespace();
@@ -435,11 +488,14 @@ mod tests {
         // Undeclaring then re-declaring the default namespace on the same element works.
         let doc = Document::empty();
         let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
-        root.declare_namespace(Namespace::without_prefix("http://first.com").unwrap());
+        root.declare_namespace(Namespace::without_prefix("http://first.com").unwrap())
+            .unwrap();
 
         let child = doc.create_element(QualifiedName::without_namespace("child").unwrap());
         child.undeclare_default_namespace();
-        child.declare_namespace(Namespace::without_prefix("http://second.com").unwrap());
+        child
+            .declare_namespace(Namespace::without_prefix("http://second.com").unwrap())
+            .unwrap();
         root.add_child_element(child.clone()).unwrap();
 
         // Child sees its own re-declared default namespace, not parent's.
@@ -508,5 +564,93 @@ mod tests {
         let a = doc.create_element(QualifiedName::without_namespace("a").unwrap());
 
         assert!(!a.is_ancestor(&a));
+    }
+
+    #[test]
+    fn test_namespace_redeclaration_rejected() {
+        // Re-declaring the same prefix with a different URI should be an error.
+        let doc = Document::empty();
+        let el = doc.create_element(QualifiedName::without_namespace("el").unwrap());
+        el.declare_namespace(Namespace::prefixed("http://first.com", "ex").unwrap())
+            .unwrap();
+        let result = el.declare_namespace(Namespace::prefixed("http://second.com", "ex").unwrap());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("already declared"));
+    }
+
+    #[test]
+    fn test_namespace_redeclaration_same_uri_ok() {
+        // Re-declaring the same prefix with the same URI should be allowed.
+        let doc = Document::empty();
+        let el = doc.create_element(QualifiedName::without_namespace("el").unwrap());
+        let ns = Namespace::prefixed("http://example.com", "ex").unwrap();
+        el.declare_namespace(ns.clone()).unwrap();
+        let result = el.declare_namespace(ns.clone());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_add_text_validation() {
+        // Valid text should work
+        let doc = Document::empty();
+        let el = doc.create_element(QualifiedName::without_namespace("el").unwrap());
+        el.add_text("Hello, World!".to_string()).unwrap();
+        assert_eq!(el.text_children().len(), 1);
+
+        // Text with control chars should fail
+        let result = el.add_text("control \u{01}".to_string());
+        assert!(result.is_err());
+
+        // Text with BEL char (U+0007) should fail
+        let result = el.add_text("bell \u{07}".to_string());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_add_comment_validation() {
+        let doc = Document::empty();
+        let el = doc.create_element(QualifiedName::without_namespace("el").unwrap());
+
+        // Valid comment
+        el.add_comment(" This is valid ".to_string()).unwrap();
+
+        // Double hyphen should fail
+        let result = el.add_comment("has -- double".to_string());
+        assert!(result.is_err());
+
+        // Trailing hyphen should fail
+        let result = el.add_comment("ends with -".to_string());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_add_cdata_validation() {
+        let doc = Document::empty();
+        let el = doc.create_element(QualifiedName::without_namespace("el").unwrap());
+
+        // Valid CDATA
+        el.add_cdata("safe content".to_string()).unwrap();
+
+        // ]]> should fail
+        let result = el.add_cdata("contains ]]> end".to_string());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_add_pi_validation() {
+        let doc = Document::empty();
+        let el = doc.create_element(QualifiedName::without_namespace("el").unwrap());
+
+        // Valid PI
+        el.add_processing_instruction("target".to_string(), "data".to_string())
+            .unwrap();
+
+        // Case-insensitive xml target should fail
+        let result = el.add_processing_instruction("xml".to_string(), "data".to_string());
+        assert!(result.is_err());
+
+        // PI data with ?> should fail
+        let result = el.add_processing_instruction("target".to_string(), "has ?>".to_string());
+        assert!(result.is_err());
     }
 }

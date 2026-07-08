@@ -69,7 +69,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                     let text = e
                         .xml10_content()
                         .map_err(|e| XmlError::InvalidXml(format!("Invalid text content: {e}")))?;
-                    current.add_text(text.to_string());
+                    current.add_text(text.to_string())?;
                 }
             }
             Ok(Event::Eof) => break,
@@ -78,7 +78,7 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                     let comment = std::str::from_utf8(&e).map_err(|e| {
                         XmlError::InvalidXml(format!("Invalid UTF-8 in comment: {e}"))
                     })?;
-                    current.add_comment(comment.to_string());
+                    current.add_comment(comment.to_string())?;
                 }
             }
             Ok(Event::Decl(_)) => {}
@@ -93,14 +93,14 @@ pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
                     })?;
                     // Remove leading and trailing whitespace from content
                     let data = content.trim();
-                    current.add_processing_instruction(target.to_string(), data.to_string());
+                    current.add_processing_instruction(target.to_string(), data.to_string())?;
                 }
             }
             Ok(Event::CData(e)) => {
                 if let Some(current) = stack.last() {
                     let cdata = std::str::from_utf8(&e)
                         .map_err(|e| XmlError::InvalidXml(format!("Invalid CDATA content: {e}")))?;
-                    current.add_cdata(cdata.to_string());
+                    current.add_cdata(cdata.to_string())?;
                 }
             }
             Ok(Event::DocType(_)) => {}
@@ -156,18 +156,19 @@ fn parse_element(
     for (prefix, uri) in namespace_declarations {
         match prefix {
             Some(prefix_ncname) => {
-                element.declare_namespace(Namespace::prefixed(&uri, &prefix_ncname)?);
+                element.declare_namespace(Namespace::prefixed(&uri, &prefix_ncname)?)?;
             }
             None => {
                 if uri.is_empty() {
                     element.undeclare_default_namespace();
                 } else {
-                    element.declare_namespace(Namespace::without_prefix(&uri)?);
+                    element.declare_namespace(Namespace::without_prefix(&uri)?)?;
                 }
             }
         }
     }
     // 6. Add all attributes, resolving their qualified names using the provided ns_map
+    //    Check for duplicate expanded names (NSC: Attributes Unique)
     let mut attributes = BTreeMap::new();
     for attr in e.attributes() {
         let attr = attr.map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {e}")))?;
@@ -185,6 +186,12 @@ fn parse_element(
                 return Err(e);
             }
         };
+        // Check for duplicate expanded names
+        if attributes.contains_key(&qattr) {
+            return Err(XmlError::InvalidXml(format!(
+                "Duplicate attribute with expanded name '{qattr}'"
+            )));
+        }
         attributes.insert(qattr, value.to_string());
     }
     element.set_attributes(attributes);
@@ -192,8 +199,11 @@ fn parse_element(
 }
 
 /// Extract namespace declarations from attributes
+/// Returns an error if the same prefix is declared multiple times on the same element.
 fn extract_namespace_declarations(e: &BytesStart) -> XmlResult<Vec<(Option<NCName>, String)>> {
     let mut namespace_declarations = Vec::new();
+    let mut seen_prefixes: std::collections::HashSet<Option<NCName>> =
+        std::collections::HashSet::new();
     for attr in e.attributes() {
         let attr = attr.map_err(|e| XmlError::InvalidXml(format!("Invalid attribute: {e}")))?;
         let key = std::str::from_utf8(attr.key.into_inner())
@@ -209,9 +219,21 @@ fn extract_namespace_declarations(e: &BytesStart) -> XmlResult<Vec<(Option<NCNam
                 )));
             }
             let prefix_ncname = NCName::try_from(prefix_str)?;
+            // Check for duplicate prefix declarations on the same element
+            if !seen_prefixes.insert(Some(prefix_ncname.clone())) {
+                return Err(XmlError::InvalidXml(format!(
+                    "Duplicate namespace declaration for prefix '{prefix_str}' on the same element"
+                )));
+            }
             namespace_declarations.push((Some(prefix_ncname), value.to_string()));
         } else if key == "xmlns" {
             // Empty default namespace declaration is allowed (removes the default ns from scope)
+            // Check for duplicate default namespace declarations
+            if !seen_prefixes.insert(None) {
+                return Err(XmlError::InvalidXml(
+                    "Duplicate default namespace declaration on the same element".to_string(),
+                ));
+            }
             namespace_declarations.push((None, value.to_string()));
         }
     }
@@ -303,7 +325,7 @@ fn write_element<W: Write>(writer: &mut Writer<W>, element: &Element) -> XmlResu
                 writer.write_event(Event::Comment(comment_event))?;
             }
             crate::element::XmlNode::CData(ref cdata) => {
-                let cdata_event = BytesCData::new(cdata);
+                let cdata_event = BytesCData::new(cdata.as_str());
                 writer.write_event(Event::CData(cdata_event))?;
             }
             crate::element::XmlNode::ProcessingInstruction(ref target, ref data) => {
@@ -329,7 +351,7 @@ mod tests {
     use super::*;
     use crate::Document;
     use crate::Namespace;
-    use crate::xml_spec::nc_name;
+    use crate::xml_spec::{PiData, PiTarget, nc_name};
 
     #[test]
     fn test_parse_and_write_simple_xml() {
@@ -380,12 +402,12 @@ mod tests {
 
         let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
         let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns).unwrap());
-        root.declare_namespace(html_ns.clone());
+        root.declare_namespace(html_ns.clone()).unwrap();
         doc.set_root(root.clone()).unwrap();
 
         let head = doc.create_element(QualifiedName::without_namespace("head").unwrap());
         let title = doc.create_element(QualifiedName::without_namespace("title").unwrap());
-        title.add_text("Test Page".to_string());
+        title.add_text("Test Page".to_string()).unwrap();
         head.add_child_element(title).unwrap();
         root.add_child_element(head).unwrap();
 
@@ -481,14 +503,16 @@ mod tests {
         let mut actual: Vec<String> = vec![];
         for node in children {
             match node {
-                crate::element::XmlNode::Text(t) => actual.push(format!("text:{:?}", t)),
+                crate::element::XmlNode::Text(t) => actual.push(format!("text:{:?}", t.as_str())),
                 crate::element::XmlNode::Element(e) => {
                     actual.push(format!("element:{}", e.qualified_name().local_name()))
                 }
-                crate::element::XmlNode::Comment(c) => actual.push(format!("comment:{:?}", c)),
-                crate::element::XmlNode::CData(c) => actual.push(format!("cdata:{:?}", c)),
+                crate::element::XmlNode::Comment(c) => {
+                    actual.push(format!("comment:{:?}", c.as_str()))
+                }
+                crate::element::XmlNode::CData(c) => actual.push(format!("cdata:{:?}", c.as_str())),
                 crate::element::XmlNode::ProcessingInstruction(target, data) => {
-                    actual.push(format!("pi:{:?}:{:?}", target, data))
+                    actual.push(format!("pi:{:?}:{:?}", target.as_str(), data.as_str()))
                 }
             }
         }
@@ -594,9 +618,9 @@ mod tests {
         // Check that comments are parsed
         let comments = root.comment_children();
         assert_eq!(comments.len(), 3);
-        assert_eq!(comments[0], " This is a comment ");
-        assert_eq!(comments[1], " Another comment ");
-        assert_eq!(comments[2], " Final comment ");
+        assert_eq!(comments[0].as_str(), " This is a comment ");
+        assert_eq!(comments[1].as_str(), " Another comment ");
+        assert_eq!(comments[2].as_str(), " Final comment ");
 
         // Check that elements are still parsed correctly
         let elements = root.element_children();
@@ -611,9 +635,9 @@ mod tests {
 
         let comments2 = root2.comment_children();
         assert_eq!(comments2.len(), 3);
-        assert_eq!(comments2[0], " This is a comment ");
-        assert_eq!(comments2[1], " Another comment ");
-        assert_eq!(comments2[2], " Final comment ");
+        assert_eq!(comments2[0].as_str(), " This is a comment ");
+        assert_eq!(comments2[1].as_str(), " Another comment ");
+        assert_eq!(comments2[2].as_str(), " Final comment ");
     }
 
     #[test]
@@ -623,13 +647,15 @@ mod tests {
         doc.set_root(root.clone()).unwrap();
 
         // Add comments programmatically
-        root.add_comment(" This is a test comment ".to_string());
-        root.add_comment(" Another test comment ".to_string());
+        root.add_comment(" This is a test comment ".to_string())
+            .unwrap();
+        root.add_comment(" Another test comment ".to_string())
+            .unwrap();
 
         let comments = root.comment_children();
         assert_eq!(comments.len(), 2);
-        assert_eq!(comments[0], " This is a test comment ");
-        assert_eq!(comments[1], " Another test comment ");
+        assert_eq!(comments[0].as_str(), " This is a test comment ");
+        assert_eq!(comments[1].as_str(), " Another test comment ");
 
         // Test serialization
         let output = write_string(&doc).unwrap();
@@ -653,10 +679,13 @@ mod tests {
         let cdata_sections = root.cdata_children();
         assert_eq!(cdata_sections.len(), 2);
         assert_eq!(
-            cdata_sections[0],
+            cdata_sections[0].as_str(),
             "This is CDATA content with <tags> and &entities;"
         );
-        assert_eq!(cdata_sections[1], "More CDATA with special chars: <>&\"'");
+        assert_eq!(
+            cdata_sections[1].as_str(),
+            "More CDATA with special chars: <>&\"'"
+        );
 
         // Check that elements are still parsed correctly
         let elements = root.element_children();
@@ -672,10 +701,13 @@ mod tests {
         let cdata_sections2 = root2.cdata_children();
         assert_eq!(cdata_sections2.len(), 2);
         assert_eq!(
-            cdata_sections2[0],
+            cdata_sections2[0].as_str(),
             "This is CDATA content with <tags> and &entities;"
         );
-        assert_eq!(cdata_sections2[1], "More CDATA with special chars: <>&\"'");
+        assert_eq!(
+            cdata_sections2[1].as_str(),
+            "More CDATA with special chars: <>&\"'"
+        );
     }
 
     #[test]
@@ -685,16 +717,21 @@ mod tests {
         doc.set_root(root.clone()).unwrap();
 
         // Add CDATA programmatically
-        root.add_cdata("This is CDATA content with <tags> and &entities;".to_string());
-        root.add_cdata("More CDATA with special chars: <>&\"'".to_string());
+        root.add_cdata("This is CDATA content with <tags> and &entities;".to_string())
+            .unwrap();
+        root.add_cdata("More CDATA with special chars: <>&\"'".to_string())
+            .unwrap();
 
         let cdata_sections = root.cdata_children();
         assert_eq!(cdata_sections.len(), 2);
         assert_eq!(
-            cdata_sections[0],
+            cdata_sections[0].as_str(),
             "This is CDATA content with <tags> and &entities;"
         );
-        assert_eq!(cdata_sections[1], "More CDATA with special chars: <>&\"'");
+        assert_eq!(
+            cdata_sections[1].as_str(),
+            "More CDATA with special chars: <>&\"'"
+        );
 
         // Test serialization
         let output = write_string(&doc).unwrap();
@@ -712,14 +749,16 @@ mod tests {
         let mut actual: Vec<String> = vec![];
         for node in children {
             match node {
-                crate::element::XmlNode::Text(t) => actual.push(format!("text:{:?}", t)),
+                crate::element::XmlNode::Text(t) => actual.push(format!("text:{:?}", t.as_str())),
                 crate::element::XmlNode::Element(e) => {
                     actual.push(format!("element:{}", e.qualified_name().local_name()))
                 }
-                crate::element::XmlNode::Comment(c) => actual.push(format!("comment:{:?}", c)),
-                crate::element::XmlNode::CData(c) => actual.push(format!("cdata:{:?}", c)),
+                crate::element::XmlNode::Comment(c) => {
+                    actual.push(format!("comment:{:?}", c.as_str()))
+                }
+                crate::element::XmlNode::CData(c) => actual.push(format!("cdata:{:?}", c.as_str())),
                 crate::element::XmlNode::ProcessingInstruction(target, data) => {
-                    actual.push(format!("pi:{:?}:{:?}", target, data))
+                    actual.push(format!("pi:{:?}:{:?}", target.as_str(), data.as_str()))
                 }
             }
         }
@@ -756,15 +795,24 @@ mod tests {
         assert_eq!(
             pis[0],
             (
-                "xml-stylesheet".to_string(),
-                "type=\"text/css\" href=\"style.css\"".to_string()
+                PiTarget::try_from("xml-stylesheet").unwrap(),
+                PiData::try_from("type=\"text/css\" href=\"style.css\"").unwrap()
             )
         );
         assert_eq!(
             pis[1],
-            ("php".to_string(), "echo \"Hello, World!\";".to_string())
+            (
+                PiTarget::try_from("php").unwrap(),
+                PiData::try_from("echo \"Hello, World!\";").unwrap()
+            )
         );
-        assert_eq!(pis[2], ("target".to_string(), "data=\"value\"".to_string()));
+        assert_eq!(
+            pis[2],
+            (
+                PiTarget::try_from("target").unwrap(),
+                PiData::try_from("data=\"value\"").unwrap()
+            )
+        );
 
         // Check that elements are still parsed correctly
         let elements = root.element_children();
@@ -783,17 +831,23 @@ mod tests {
         assert_eq!(
             pis2[0],
             (
-                "xml-stylesheet".to_string(),
-                "type=\"text/css\" href=\"style.css\"".to_string()
+                PiTarget::try_from("xml-stylesheet").unwrap(),
+                PiData::try_from("type=\"text/css\" href=\"style.css\"").unwrap()
             )
         );
         assert_eq!(
             pis2[1],
-            ("php".to_string(), "echo \"Hello, World!\";".to_string())
+            (
+                PiTarget::try_from("php").unwrap(),
+                PiData::try_from("echo \"Hello, World!\";").unwrap()
+            )
         );
         assert_eq!(
             pis2[2],
-            ("target".to_string(), "data=\"value\"".to_string())
+            (
+                PiTarget::try_from("target").unwrap(),
+                PiData::try_from("data=\"value\"").unwrap()
+            )
         );
     }
 
@@ -807,21 +861,26 @@ mod tests {
         root.add_processing_instruction(
             "xml-stylesheet".to_string(),
             "type=\"text/css\" href=\"style.css\"".to_string(),
-        );
-        root.add_processing_instruction("php".to_string(), "echo \"Hello, World!\";".to_string());
+        )
+        .unwrap();
+        root.add_processing_instruction("php".to_string(), "echo \"Hello, World!\";".to_string())
+            .unwrap();
 
         let pis = root.processing_instruction_children();
         assert_eq!(pis.len(), 2);
         assert_eq!(
             pis[0],
             (
-                "xml-stylesheet".to_string(),
-                "type=\"text/css\" href=\"style.css\"".to_string()
+                PiTarget::try_from("xml-stylesheet").unwrap(),
+                PiData::try_from("type=\"text/css\" href=\"style.css\"").unwrap()
             )
         );
         assert_eq!(
             pis[1],
-            ("php".to_string(), "echo \"Hello, World!\";".to_string())
+            (
+                PiTarget::try_from("php").unwrap(),
+                PiData::try_from("echo \"Hello, World!\";").unwrap()
+            )
         );
 
         // Test serialization
@@ -841,14 +900,16 @@ mod tests {
         let mut actual: Vec<String> = vec![];
         for node in children {
             match node {
-                crate::element::XmlNode::Text(t) => actual.push(format!("text:{:?}", t)),
+                crate::element::XmlNode::Text(t) => actual.push(format!("text:{:?}", t.as_str())),
                 crate::element::XmlNode::Element(e) => {
                     actual.push(format!("element:{}", e.qualified_name().local_name()))
                 }
-                crate::element::XmlNode::Comment(c) => actual.push(format!("comment:{:?}", c)),
-                crate::element::XmlNode::CData(c) => actual.push(format!("cdata:{:?}", c)),
+                crate::element::XmlNode::Comment(c) => {
+                    actual.push(format!("comment:{:?}", c.as_str()))
+                }
+                crate::element::XmlNode::CData(c) => actual.push(format!("cdata:{:?}", c.as_str())),
                 crate::element::XmlNode::ProcessingInstruction(target, data) => {
-                    actual.push(format!("pi:{:?}:{:?}", target, data))
+                    actual.push(format!("pi:{:?}:{:?}", target.as_str(), data.as_str()))
                 }
             }
         }
@@ -1026,5 +1087,61 @@ mod tests {
 
         let child = root.element_children()[0].clone();
         assert!(child.qualified_name().namespace().is_none());
+    }
+
+    #[test]
+    fn test_duplicate_namespace_prefix_rejected() {
+        // Duplicate namespace declarations on the same element should be rejected.
+        // quick-xml detects duplicate attributes before we get here,
+        // so we just verify that parsing fails.
+        let xml = r#"<root xmlns:ex="http://first.com" xmlns:ex="http://second.com">
+    <child/>
+</root>"#;
+
+        let result = parse_string(xml);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("duplicated"),
+            "Error should mention duplicate, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_duplicate_default_namespace_rejected() {
+        // Duplicate default namespace declarations on the same element should be rejected.
+        // quick-xml detects duplicate attributes before we get here,
+        // so we just verify that parsing fails.
+        let xml = r#"<root xmlns="http://first.com" xmlns="http://second.com">
+    <child/>
+</root>"#;
+
+        let result = parse_string(xml);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("duplicated"),
+            "Error should mention duplicate, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_duplicate_expanded_name_attributes_rejected() {
+        // Two attributes with the same expanded name (same local part + same namespace URI)
+        // should be rejected per NSC: Attributes Unique.
+        let xml = r#"<root xmlns:n1="http://same-ns" xmlns:n2="http://same-ns">
+    <child n1:id="1" n2:id="2"/>
+</root>"#;
+
+        let result = parse_string(xml);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Duplicate attribute"),
+            "Error should mention duplicate attribute, got: {}",
+            err
+        );
     }
 }

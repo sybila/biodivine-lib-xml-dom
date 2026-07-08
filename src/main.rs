@@ -12,15 +12,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns)?);
 
     // Declare namespaces on the root element
-    root.declare_namespace(html_ns.clone());
+    root.declare_namespace(html_ns.clone())?;
     let svg_ns = Namespace::prefixed("http://www.w3.org/2000/svg", "svg")?;
-    root.declare_namespace(svg_ns.clone());
+    root.declare_namespace(svg_ns.clone())?;
 
     doc.set_root(root.clone())?;
 
     let head = doc.create_element(QualifiedName::without_namespace("head")?);
     let title = doc.create_element(QualifiedName::without_namespace("title")?);
-    title.add_text("My XML Document".to_string());
+    title.add_text("My XML Document".to_string())?;
     head.add_child_element(title)?;
     root.add_child_element(head.clone())?;
 
@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "example".to_string(),
     );
     p.add_attribute(QualifiedName::without_namespace("id")?, "intro".to_string());
-    p.add_text("This is an example XML document created with our DOM library.".to_string());
+    p.add_text("This is an example XML document created with our DOM library.".to_string())?;
     body.add_child_element(p)?;
     root.add_child_element(body.clone())?;
 
@@ -96,7 +96,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .iter()
             .find(|e| e.qualified_name().local_name() == "title")
             .unwrap();
-        println!("    Title: {}", title.text_children().join(""));
+        println!(
+            "    Title: {}",
+            title
+                .text_children()
+                .iter()
+                .map(|t| t.as_str())
+                .collect::<Vec<_>>()
+                .join("")
+        );
     }
 
     // Example 3: Working with comments
@@ -158,15 +166,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let new_root = new_doc.create_element(QualifiedName::without_namespace("root")?);
     new_doc.set_root(new_root.clone())?;
 
-    new_root.add_comment(" This is a programmatically added comment ".to_string());
-    new_root.add_text("Some text content".to_string());
+    new_root.add_comment(" This is a programmatically added comment ".to_string())?;
+    new_root.add_text("Some text content".to_string())?;
 
     let child = new_doc.create_element(QualifiedName::without_namespace("child")?);
-    child.add_comment(" Comment inside child element ".to_string());
-    child.add_text("Child content".to_string());
+    child.add_comment(" Comment inside child element ".to_string())?;
+    child.add_text("Child content".to_string())?;
     new_root.add_child_element(child)?;
 
-    new_root.add_comment(" Final comment ".to_string());
+    new_root.add_comment(" Final comment ".to_string())?;
 
     let new_xml = write_string(&new_doc)?;
     println!("Generated XML with comments:");

@@ -154,7 +154,7 @@ impl QualifiedName {
     /// use biodivine_lib_xml_dom::{Document, QualifiedName, Namespace};
     /// let doc = Document::empty();
     /// let el = doc.create_element(QualifiedName::without_namespace("foo").unwrap());
-    /// el.declare_namespace(Namespace::without_prefix("http://default.com").unwrap());
+    /// el.declare_namespace(Namespace::without_prefix("http://default.com").unwrap()).unwrap();
     /// let qn = QualifiedName::resolve_element(&el, "bar").unwrap();
     /// assert_eq!(qn.local_name(), "bar");
     /// assert_eq!(qn.namespace().unwrap().uri(), "http://default.com");
@@ -185,7 +185,7 @@ impl QualifiedName {
     /// use biodivine_lib_xml_dom::{Document, QualifiedName, Namespace};
     /// let doc = Document::empty();
     /// let el = doc.create_element(QualifiedName::without_namespace("foo").unwrap());
-    /// el.declare_namespace(Namespace::without_prefix("http://default.com").unwrap());
+    /// el.declare_namespace(Namespace::without_prefix("http://default.com").unwrap()).unwrap();
     /// // Unprefixed attributes ignore the default namespace
     /// let qn = QualifiedName::resolve_attribute(&el, "bar").unwrap();
     /// assert_eq!(qn.local_name(), "bar");
@@ -472,7 +472,8 @@ mod tests {
     fn test_resolve_no_prefix() {
         let doc = Document::empty();
         let el = doc.create_element(q_name("foo").unwrap());
-        el.declare_namespace(Namespace::without_prefix("http://default.com").unwrap());
+        el.declare_namespace(Namespace::without_prefix("http://default.com").unwrap())
+            .unwrap();
         let qn = QualifiedName::resolve_element(&el, "bar").unwrap();
         assert_eq!(qn.local_name(), "bar");
         assert_eq!(qn.namespace().unwrap().uri(), "http://default.com");
@@ -482,7 +483,8 @@ mod tests {
     fn test_resolve_with_prefix() {
         let doc = Document::empty();
         let el = doc.create_element(q_name("foo").unwrap());
-        el.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
+        el.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap())
+            .unwrap();
         let qn = QualifiedName::resolve_element(&el, "ex:bar").unwrap();
         assert_eq!(qn.local_name(), "bar");
         assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
@@ -494,7 +496,9 @@ mod tests {
         // Test that a namespace declared on a parent element is used for resolution.
         let doc = Document::empty();
         let parent = doc.create_element(q_name("parent").unwrap());
-        parent.declare_namespace(Namespace::prefixed("http://parent.com", "ex").unwrap());
+        parent
+            .declare_namespace(Namespace::prefixed("http://parent.com", "ex").unwrap())
+            .unwrap();
         let child = doc.create_element(q_name("child").unwrap());
         // Attach child to parent
         parent.add_child_element(child.clone()).unwrap();
@@ -547,7 +551,8 @@ mod tests {
         // Unprefixed attributes should not inherit the default namespace
         let doc = Document::empty();
         let el = doc.create_element(q_name("foo").unwrap());
-        el.declare_namespace(Namespace::without_prefix("http://default.com").unwrap());
+        el.declare_namespace(Namespace::without_prefix("http://default.com").unwrap())
+            .unwrap();
         let qn = QualifiedName::resolve_attribute(&el, "bar").unwrap();
         assert_eq!(qn.local_name(), "bar");
         assert!(qn.namespace().is_none());
@@ -558,7 +563,8 @@ mod tests {
         // Prefixed attributes should resolve normally
         let doc = Document::empty();
         let el = doc.create_element(q_name("foo").unwrap());
-        el.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
+        el.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap())
+            .unwrap();
         let qn = QualifiedName::resolve_attribute(&el, "ex:bar").unwrap();
         assert_eq!(qn.local_name(), "bar");
         assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");

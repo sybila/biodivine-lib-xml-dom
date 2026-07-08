@@ -115,7 +115,8 @@ mod qualified_name;
 /// verify compliance against the specification rule files in `specification/rules/`.
 ///
 /// Most of the validation rules are only internal, but we do export some utility types (e.g.,
-/// [`xml_spec::NCName`]) that are part of the public API.
+/// [`xml_spec::NCName`], [`xml_spec::Text`], [`xml_spec::Comment`], [`xml_spec::CData`],
+/// [`xml_spec::PiTarget`], [`xml_spec::PiData`]) that are part of the public API.
 ///
 // Note: Types from this module are not re-exported because we want this to be explicitly separate
 // from the main library implementation.
@@ -175,7 +176,8 @@ mod tests {
     fn test_namespace_declaration() {
         let doc = Document::empty();
         let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
-        root.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
+        root.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap())
+            .unwrap();
 
         assert_eq!(
             root.get_namespace(Some(&nc_name("ex"))),
@@ -187,7 +189,8 @@ mod tests {
     fn test_qualified_name_resolution() {
         let doc = Document::empty();
         let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
-        root.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
+        root.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap())
+            .unwrap();
 
         let resolved = root.resolve_qualified_name("ex:test").unwrap();
         assert_eq!(resolved.local_name(), "test");

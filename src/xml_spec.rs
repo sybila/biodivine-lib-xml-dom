@@ -2,6 +2,24 @@ use crate::error::XmlError;
 use std::fmt;
 use std::ops::Deref;
 
+/// Helper to implement `TryFrom<&str>` and `TryFrom<String>` for wrapper types.
+///
+/// Takes a validation closure, a display name for error messages, and the raw string.
+/// Returns `Ok(wrapper)` if valid, or `Err(XmlError::InvalidXml(...))` otherwise.
+fn try_from_str<F, W>(s: &str, display_name: &str, validate: F) -> Result<W, XmlError>
+where
+    F: FnOnce(&str) -> bool,
+    W: From<String>,
+{
+    if validate(s) {
+        Ok(W::from(s.to_string()))
+    } else {
+        Err(XmlError::InvalidXml(format!(
+            "'{s}' is not a valid {display_name}"
+        )))
+    }
+}
+
 /// The `xml` prefix is by definition bound to this namespace.
 /// It may, but need not, be declared, and must not be undeclared or bound to any other namespace.
 /// Other prefixes must not be bound to this namespace, and it must not be declared as the default namespace.
@@ -126,6 +144,371 @@ impl TryFrom<String> for NCName {
     }
 }
 
+/// Represents a valid XML character data string.
+///
+/// A `Text` contains only characters legal in XML documents per the `Char` production:
+/// `#x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]`.
+/// This excludes control characters (except tab, LF, CR) and surrogate code points.
+///
+/// Validity is enforced at construction time via [`TryFrom`].
+///
+/// # Example
+///
+/// ```rust
+/// use biodivine_lib_xml_dom::xml_spec::Text;
+/// use std::convert::TryInto;
+///
+/// let text: Text = "Hello, World!".try_into().unwrap();
+/// assert_eq!(text.as_str(), "Hello, World!");
+///
+/// // Control characters are rejected
+/// let invalid: Result<Text, _> = "control \u{01}".try_into();
+/// assert!(invalid.is_err());
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Text(String);
+
+impl Text {
+    /// Returns the text as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Deref for Text {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<str> for Text {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for Text {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl TryFrom<&str> for Text {
+    type Error = XmlError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        try_from_str(s, "XML text", is_valid_text).map(Text)
+    }
+}
+
+impl TryFrom<String> for Text {
+    type Error = XmlError;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        try_from_str(&s, "XML text", is_valid_text).map(Text)
+    }
+}
+
+/// Check if a string contains only legal XML characters (Char production).
+fn is_valid_text(s: &str) -> bool {
+    s.chars().all(is_legal_char)
+}
+
+/// Check if a char is a legal XML character per the Char production.
+/// Char ::= #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+fn is_legal_char(c: char) -> bool {
+    let cp = c as u32;
+    matches!(cp, 0x9 | 0xA | 0xD | 0x20..=0xD7FF | 0xE000..=0xFFFD | 0x10000..=0x10FFFF)
+}
+
+/// Represents a valid CDATA section content.
+///
+/// CDATA section content must not contain the string `]]>`, which terminates the section.
+/// No other restrictions apply — all legal XML characters are permitted.
+///
+/// Validity is enforced at construction time via [`TryFrom`].
+///
+/// # Example
+///
+/// ```rust
+/// use biodivine_lib_xml_dom::xml_spec::CData;
+/// use std::convert::TryInto;
+///
+/// let cdata: CData = "This is safe content".try_into().unwrap();
+/// assert_eq!(cdata.as_str(), "This is safe content");
+///
+/// // Content containing ]]> is rejected
+/// let invalid: Result<CData, _> = "contains ]]> end".try_into();
+/// assert!(invalid.is_err());
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct CData(String);
+
+impl CData {
+    /// Returns the CDATA content as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Deref for CData {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<str> for CData {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for CData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl TryFrom<&str> for CData {
+    type Error = XmlError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        try_from_str(s, "CDATA content", |s| !s.contains("]]>")).map(CData)
+    }
+}
+
+impl TryFrom<String> for CData {
+    type Error = XmlError;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        try_from_str(&s, "CDATA content", |s| !s.contains("]]>")).map(CData)
+    }
+}
+
+/// Represents a valid XML comment content.
+///
+/// Per XML 1.0 §2.5, comment content must not contain the string `--` (double-hyphen),
+/// and must not end with a single hyphen `-` (since the comment closes with `-->`).
+///
+/// Validity is enforced at construction time via [`TryFrom`].
+///
+/// # Example
+///
+/// ```rust
+/// use biodivine_lib_xml_dom::xml_spec::Comment;
+/// use std::convert::TryInto;
+///
+/// let comment: Comment = " This is valid ".try_into().unwrap();
+/// assert_eq!(comment.as_str(), " This is valid ");
+///
+/// // Double hyphen is rejected
+/// let invalid: Result<Comment, _> = "has -- double hyphen".try_into();
+/// assert!(invalid.is_err());
+///
+/// // Trailing hyphen is rejected
+/// let invalid2: Result<Comment, _> = "ends with -".try_into();
+/// assert!(invalid2.is_err());
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Comment(String);
+
+impl Comment {
+    /// Returns the comment content as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Deref for Comment {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<str> for Comment {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for Comment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl TryFrom<&str> for Comment {
+    type Error = XmlError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        try_from_str(s, "XML comment", |s| !s.contains("--") && !s.ends_with('-')).map(Comment)
+    }
+}
+
+impl TryFrom<String> for Comment {
+    type Error = XmlError;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        try_from_str(&s, "XML comment", |s| {
+            !s.contains("--") && !s.ends_with('-')
+        })
+        .map(Comment)
+    }
+}
+
+/// Represents a valid processing instruction target.
+///
+/// A PI target must be a valid XML `Name` (not an NCName — colons are allowed)
+/// and must not match `xml` case-insensitively.
+///
+/// Validity is enforced at construction time via [`TryFrom`].
+///
+/// # Example
+///
+/// ```rust
+/// use biodivine_lib_xml_dom::xml_spec::PiTarget;
+/// use std::convert::TryInto;
+///
+/// let target: PiTarget = "xml-stylesheet".try_into().unwrap();
+/// assert_eq!(target.as_str(), "xml-stylesheet");
+///
+/// // Case-insensitive xml is rejected
+/// let invalid: Result<PiTarget, _> = "xml".try_into();
+/// assert!(invalid.is_err());
+/// let invalid2: Result<PiTarget, _> = "XML".try_into();
+/// assert!(invalid2.is_err());
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct PiTarget(String);
+
+impl PiTarget {
+    /// Returns the PI target as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Deref for PiTarget {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<str> for PiTarget {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for PiTarget {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl TryFrom<&str> for PiTarget {
+    type Error = XmlError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        try_from_str(s, "PI target", |s| {
+            is_valid_name(s) && !s.eq_ignore_ascii_case("xml")
+        })
+        .map(PiTarget)
+    }
+}
+
+impl TryFrom<String> for PiTarget {
+    type Error = XmlError;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        try_from_str(&s, "PI target", |s| {
+            is_valid_name(s) && !s.eq_ignore_ascii_case("xml")
+        })
+        .map(PiTarget)
+    }
+}
+
+/// Represents a valid processing instruction content.
+///
+/// PI content must not contain the string `?>`, which terminates the PI.
+///
+/// Validity is enforced at construction time via [`TryFrom`].
+///
+/// # Example
+///
+/// ```rust
+/// use biodivine_lib_xml_dom::xml_spec::PiData;
+/// use std::convert::TryInto;
+///
+/// let data: PiData = "type=\"text/css\" href=\"style.css\"".try_into().unwrap();
+/// assert_eq!(data.as_str(), "type=\"text/css\" href=\"style.css\"");
+///
+/// // Content containing ?> is rejected
+/// let invalid: Result<PiData, _> = "has ?> in it".try_into();
+/// assert!(invalid.is_err());
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct PiData(String);
+
+impl PiData {
+    /// Returns the PI content as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Deref for PiData {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<str> for PiData {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for PiData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl TryFrom<&str> for PiData {
+    type Error = XmlError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        try_from_str(s, "PI content", |s| !s.contains("?>")).map(PiData)
+    }
+}
+
+impl TryFrom<String> for PiData {
+    type Error = XmlError;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        try_from_str(&s, "PI content", |s| !s.contains("?>")).map(PiData)
+    }
+}
+
+/// Check if a string is a valid XML Name (for PI targets, element names, etc.).
+///
+/// Name = NameStartChar NameChar*
+/// Unlike NCName, XML Names may contain colons.
+fn is_valid_name(s: &str) -> bool {
+    is_valid_name_with_colon(s, true)
+}
+
 /// Check if a string is a valid XML NCName (for namespace prefixes).
 ///
 /// NCName = Name - (Char* ':' Char*), where Name uses NameStartChar and NameChar
@@ -134,23 +517,33 @@ impl TryFrom<String> for NCName {
 /// Note: This function is private in `xml_spec`, because instead of performing manual checks,
 /// we should be using [`NCName`] struct instead.
 fn is_valid_ncname(s: &str) -> bool {
+    is_valid_name_with_colon(s, false)
+}
+
+/// Core name validation with a parameter for whether colons are allowed.
+///
+/// When `allow_colon` is `true`, `:` is permitted as both a start char and a name char
+/// (full XML Name). When `false`, `:` is forbidden (NCName).
+fn is_valid_name_with_colon(s: &str, allow_colon: bool) -> bool {
     if s.is_empty() {
         return false;
     }
     let mut chars = s.chars();
     if let Some(first) = chars.next()
-        && !is_ncname_start_char(first)
+        && !is_name_start_char(first, allow_colon)
     {
         return false;
     }
-    chars.all(is_ncname_char)
+    chars.all(|c| is_name_char(c, allow_colon))
 }
 
-/// Check if a char is valid as the first character of an NCName.
-/// Based on XML 1.0 NameStartChar minus ':'.
-fn is_ncname_start_char(c: char) -> bool {
+/// Check if a char is valid as the first character of an XML Name or NCName.
+///
+/// When `allow_colon` is `true`, `:` is permitted (Name). When `false`, it is not (NCName).
+fn is_name_start_char(c: char, allow_colon: bool) -> bool {
     let cp = c as u32;
-    c == '_'
+    (allow_colon && c == ':')
+        || c == '_'
         || matches!(cp, 65..=90 | 97..=122)
         || matches!(cp, 0xC0..=0xD6 | 0xD8..=0xF6 | 0xF8..=0x2FF)
         || matches!(cp, 0x370..=0x37D | 0x37F..=0x1FFF)
@@ -160,11 +553,12 @@ fn is_ncname_start_char(c: char) -> bool {
         || matches!(cp, 0x10000..=0xEFFFF)
 }
 
-/// Check if a char is valid within an NCName (non-first position).
-/// Based on XML 1.0 NameChar minus ':'.
-fn is_ncname_char(c: char) -> bool {
+/// Check if a char is valid within an XML Name or NCName (non-first position).
+///
+/// When `allow_colon` is `true`, `:` is permitted (Name). When `false`, it is not (NCName).
+fn is_name_char(c: char, allow_colon: bool) -> bool {
     let cp = c as u32;
-    is_ncname_start_char(c)
+    is_name_start_char(c, allow_colon)
         || c == '-'
         || c == '.'
         || matches!(cp, 48..=57 | 0xB7 | 0x0300..=0x036F | 0x203F..=0x2040)
@@ -536,5 +930,114 @@ mod tests {
 
         // Invalid: xmlns prefix
         assert!(validate_resolved_prefix("xmlns", Some("http://example.com")).is_err());
+    }
+
+    #[test]
+    fn test_text_wrapper() {
+        // rule: rule.well-formedness.legal-characters.md
+        verify_rule_exists("rule.well-formedness.legal-characters.md");
+        // Valid text
+        let text: Text = "Hello, World!".try_into().unwrap();
+        assert_eq!(text.as_str(), "Hello, World!");
+
+        // Tab, LF, CR are allowed
+        let text: Text = "line1\nline2\ttab\r\ncr".try_into().unwrap();
+        assert_eq!(text.as_str(), "line1\nline2\ttab\r\ncr");
+
+        // Surrogates are rejected (U+D800 and U+DFFF are surrogates)
+        // We can't write surrogates directly in Rust strings, so we test via
+        // the is_legal_char function through invalid UTF-8 byte sequences
+        // that would decode to surrogates if they were valid UTF-8.
+        // Instead, we verify control chars and other illegal ranges.
+        assert!(Text::try_from("control \u{01}").is_err());
+        assert!(Text::try_from("control \u{1F}").is_err());
+
+        // Unicode in legal range
+        let text: Text = "\u{00C0}\u{4E00}\u{0628}".try_into().unwrap();
+        assert_eq!(text.as_str(), "\u{00C0}\u{4E00}\u{0628}");
+    }
+
+    #[test]
+    fn test_cdata_wrapper() {
+        // rule: rule.document-structure.cdata-section-must-not-contain-cdend.md
+        verify_rule_exists("rule.document-structure.cdata-section-must-not-contain-cdend.md");
+        // Valid CDATA
+        let cdata: CData = "This is safe content".try_into().unwrap();
+        assert_eq!(cdata.as_str(), "This is safe content");
+
+        // CDATA with special chars is fine
+        let cdata: CData = "contains < > & \" ' chars".try_into().unwrap();
+        assert_eq!(cdata.as_str(), "contains < > & \" ' chars");
+
+        // ]]> is rejected
+        assert!(CData::try_from("contains ]]> end").is_err());
+        assert!(CData::try_from("]]> at start").is_err());
+    }
+
+    #[test]
+    fn test_comment_wrapper() {
+        // rule: rule.well-formedness.comment-no-double-hyphen.md
+        verify_rule_exists("rule.well-formedness.comment-no-double-hyphen.md");
+        // rule: rule.well-formedness.comment-no-triple-hyphen.md
+        verify_rule_exists("rule.well-formedness.comment-no-triple-hyphen.md");
+        // Valid comment
+        let comment: Comment = " This is valid ".try_into().unwrap();
+        assert_eq!(comment.as_str(), " This is valid ");
+
+        // Single hyphen is fine
+        let comment: Comment = "a-b".try_into().unwrap();
+        assert_eq!(comment.as_str(), "a-b");
+
+        // Double hyphen is rejected
+        assert!(Comment::try_from("has -- double").is_err());
+
+        // Trailing hyphen is rejected
+        assert!(Comment::try_from("ends with -").is_err());
+
+        // Triple hyphen is rejected (contains --)
+        assert!(Comment::try_from("has --- triple").is_err());
+    }
+
+    #[test]
+    fn test_pi_target_wrapper() {
+        // rule: rule.well-formedness.pi-target-is-name.md
+        verify_rule_exists("rule.well-formedness.pi-target-is-name.md");
+        // rule: rule.well-formedness.pi-target-not-xml.md
+        verify_rule_exists("rule.well-formedness.pi-target-not-xml.md");
+        // Valid PI targets
+        let target: PiTarget = "xml-stylesheet".try_into().unwrap();
+        assert_eq!(target.as_str(), "xml-stylesheet");
+
+        let target: PiTarget = "mytarget".try_into().unwrap();
+        assert_eq!(target.as_str(), "mytarget");
+
+        // PI target with colon is valid (Name, not NCName)
+        let target: PiTarget = "my:target".try_into().unwrap();
+        assert_eq!(target.as_str(), "my:target");
+
+        // Case-insensitive xml is rejected
+        assert!(PiTarget::try_from("xml").is_err());
+        assert!(PiTarget::try_from("XML").is_err());
+        assert!(PiTarget::try_from("Xml").is_err());
+        assert!(PiTarget::try_from("xMl").is_err());
+
+        // Invalid name (starts with digit)
+        assert!(PiTarget::try_from("1invalid").is_err());
+    }
+
+    #[test]
+    fn test_pi_data_wrapper() {
+        // rule: rule.well-formedness.pi-no-contains-close.md
+        verify_rule_exists("rule.well-formedness.pi-no-contains-close.md");
+        // Valid PI data
+        let data: PiData = r#"type="text/css" href="style.css""#.try_into().unwrap();
+        assert_eq!(data.as_str(), r#"type="text/css" href="style.css""#);
+
+        let data: PiData = r#"echo "Hello, World!";"#.try_into().unwrap();
+        assert_eq!(data.as_str(), r#"echo "Hello, World!";"#);
+
+        // ?> is rejected
+        assert!(PiData::try_from("has ?> in it").is_err());
+        assert!(PiData::try_from("?> at start").is_err());
     }
 }

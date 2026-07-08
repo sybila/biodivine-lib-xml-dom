@@ -4,6 +4,7 @@
  - In the `specification` folder, you can find the HTML specification of XML and XML namespaces. Whenever you are making decisions that can impact document semantics, you should consult these specifications to make sure the code follows the specification.
  - We are currently only targeting XML 1.0 with UTF-8 encoding. We are not doing any DOCTYPE validation. Documents with doctype are still read, but the doctype rules are not checked.
  - Code that is primarily implementing XML specification logic should be placed as separate utility functions with unit tests into the `xml_spec` module.
+ - When using `codebase-memory-mcp`, you should always start by calling `codebase-memory-mcp_list_projects` tool. Never assume you can guess the name of the project directly.
 
 ## Additional instructions
 

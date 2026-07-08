@@ -46,7 +46,7 @@
 //! let doc = Document::empty();
 //! let html_ns = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
 //! let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns).unwrap());
-//! root.declare_namespace(&nc_name("html"), html_ns.clone());
+//! root.declare_namespace(html_ns.clone());
 //! doc.set_root(root.clone()).unwrap();
 //! let body = doc.create_element(QualifiedName::without_namespace("body").unwrap());
 //! body.add_attribute(QualifiedName::without_namespace("class").unwrap(), "main".to_string());
@@ -65,7 +65,7 @@
 //!
 //! let doc = parse_string(xml).unwrap();
 //! let root = doc.root().unwrap();
-//! assert_eq!(root.local_name(), "root");
+//! assert_eq!(root.qualified_name().local_name(), "root");
 //! ```
 //!
 //! ## Working with Comments
@@ -123,7 +123,7 @@ pub mod xml_spec;
 
 // Re-export public API
 pub use document::Document;
-pub use element::Element;
+pub use element::{Element, XmlNode};
 pub use error::{XmlError, XmlResult};
 pub use io::{parse_file, parse_reader, parse_string, write_file, write_string, write_writer};
 pub use namespace::Namespace;
@@ -144,8 +144,8 @@ mod tests {
     fn test_create_element() {
         let doc = Document::empty();
         let element = doc.create_element(QualifiedName::without_namespace("test").unwrap());
-        assert_eq!(element.local_name(), "test");
-        assert!(element.namespace().is_none());
+        assert_eq!(element.qualified_name().local_name(), "test");
+        assert!(element.qualified_name().namespace().is_none());
     }
 
     #[test]
@@ -155,15 +155,16 @@ mod tests {
         let child = doc.create_element(QualifiedName::without_namespace("child").unwrap());
 
         parent.add_child_element(child.clone()).unwrap();
+        doc.set_root(parent.clone()).unwrap();
 
         let children = parent.children();
         assert_eq!(children.len(), 1);
         match &children[0] {
-            element::XmlNode::Element(e) => assert_eq!(e.local_name(), "child"),
-            element::XmlNode::Text(_) => panic!("Expected element child, got text"),
-            element::XmlNode::Comment(_) => panic!("Expected element child, got comment"),
-            element::XmlNode::CData(_) => panic!("Expected element child, got cdata"),
-            element::XmlNode::ProcessingInstruction(_, _) => {
+            XmlNode::Element(e) => assert_eq!(e.qualified_name().local_name(), "child"),
+            XmlNode::Text(_) => panic!("Expected element child, got text"),
+            XmlNode::Comment(_) => panic!("Expected element child, got comment"),
+            XmlNode::CData(_) => panic!("Expected element child, got cdata"),
+            XmlNode::ProcessingInstruction(_, _) => {
                 panic!("Expected element child, got processing instruction")
             }
         }
@@ -174,10 +175,7 @@ mod tests {
     fn test_namespace_declaration() {
         let doc = Document::empty();
         let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
-        root.declare_namespace(
-            &nc_name("ex"),
-            Namespace::prefixed("http://example.com", "ex").unwrap(),
-        );
+        root.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
 
         assert_eq!(
             root.get_namespace(Some(&nc_name("ex"))),
@@ -189,10 +187,7 @@ mod tests {
     fn test_qualified_name_resolution() {
         let doc = Document::empty();
         let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
-        root.declare_namespace(
-            &nc_name("ex"),
-            Namespace::prefixed("http://example.com", "ex").unwrap(),
-        );
+        root.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
 
         let resolved = root.resolve_qualified_name("ex:test").unwrap();
         assert_eq!(resolved.local_name(), "test");

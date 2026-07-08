@@ -1,4 +1,3 @@
-use biodivine_lib_xml_dom::xml_spec::nc_name;
 use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName, parse_string, write_string};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -13,9 +12,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = doc.create_element(QualifiedName::with_namespace("html", &html_ns)?);
 
     // Declare namespaces on the root element
-    root.declare_namespace(&nc_name("html"), html_ns.clone());
+    root.declare_namespace(html_ns.clone());
     let svg_ns = Namespace::prefixed("http://www.w3.org/2000/svg", "svg")?;
-    root.declare_namespace(&nc_name("svg"), svg_ns.clone());
+    root.declare_namespace(svg_ns.clone());
 
     doc.set_root(root.clone())?;
 
@@ -83,14 +82,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = parsed_doc
         .root()
         .ok_or("Parsed document has no root element")?;
-    println!("Parsed document root: {}", root.local_name());
+    println!(
+        "Parsed document root: {}",
+        root.qualified_name().local_name()
+    );
     let books: Vec<_> = root.element_children();
     println!("Number of books: {}", books.len());
 
     for book in books {
-        println!("  - Book: {}", book.local_name());
+        println!("  - Book: {}", book.qualified_name().local_name());
         let children = book.element_children();
-        let title = children.iter().find(|e| e.local_name() == "title").unwrap();
+        let title = children
+            .iter()
+            .find(|e| e.qualified_name().local_name() == "title")
+            .unwrap();
         println!("    Title: {}", title.text_children().join(""));
     }
 
@@ -121,7 +126,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let comment_root = comment_doc.root().unwrap();
 
     println!("Parsed document with comments:");
-    println!("Root element: {}", comment_root.local_name());
+    println!(
+        "Root element: {}",
+        comment_root.qualified_name().local_name()
+    );
 
     // Get all comments
     let comments = comment_root.comment_children();
@@ -131,7 +139,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let header_children = comment_root.element_children();
     let header = header_children
         .iter()
-        .find(|e| e.local_name() == "header")
+        .find(|e| e.qualified_name().local_name() == "header")
         .unwrap();
     let header_comments = header.comment_children();
     println!("Comments in header: {header_comments:?}");
@@ -139,7 +147,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let content_children = comment_root.element_children();
     let content = content_children
         .iter()
-        .find(|e| e.local_name() == "content")
+        .find(|e| e.qualified_name().local_name() == "content")
         .unwrap();
     let content_comments = content.comment_children();
     println!("Comments in content: {content_comments:?}");

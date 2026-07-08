@@ -187,8 +187,8 @@ mod tests {
         let element =
             doc.create_element(QualifiedName::with_namespace("test", &namespace).unwrap());
 
-        assert_eq!(element.local_name(), "test");
-        assert_eq!(element.namespace(), Some(namespace));
+        assert_eq!(element.qualified_name().local_name(), "test");
+        assert_eq!(element.qualified_name().namespace(), Some(&namespace));
         assert_eq!(element.qualified_name().to_string(), "ex:test");
     }
 

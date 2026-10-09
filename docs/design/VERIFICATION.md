@@ -70,6 +70,12 @@ Clippy runs with `-D warnings`, so "0 warnings" is a gate rather than a snapshot
 | `cargo +1.95.0 test --workspace` (CI pin) | 250 |
 | `pytest` (Python bindings) | 41 |
 
+The suites break down as: 84 lib tests in debug (83 in release - one test asserts the debug-only
+re-entrancy guard, which compiles away), 13 `errors`, 15 `cloning`, 5 `concurrency`, 9 `element`,
+35 `io`, 7 `properties` (`proptest`: 256-case round-trip and validation properties, 512-case
+no-panic properties over arbitrary bytes, strings and mutations of well-formed documents),
+28 `structure`, 21 `validation`, 6 in-process binding tests and 27 doctests.
+
 ## Requirement by requirement
 
 Statuses are deliberately narrow: "satisfied" means the acceptance criterion has a test or a gate

@@ -70,7 +70,7 @@ def check_commit_counts() -> None:
 def check_verification_numbers() -> None:
     text = VERIFICATION.read_text(encoding="utf-8")
     gate_table = text[text.index("| command | exit |"):text.index("## Test counts")]
-    count_table = text[text.index("## Test counts"):text.index("The suites break down")]
+    count_table = text[text.index("## Test counts"):text.index("## Requirement by requirement")]
     rows = len(re.findall(r"^\| `.+` \| \d+ \|$", gate_table, re.M))
     stated = re.search(r"All (\d+) gates passed", text)
     transcript = text[text.index("## Transcript"):]

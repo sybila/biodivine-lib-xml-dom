@@ -1,23 +1,120 @@
 use crate::error::XmlError;
-use std::fmt;
-use std::ops::Deref;
+use std::sync::Arc;
 
-/// Helper to implement `TryFrom<&str>` and `TryFrom<String>` for wrapper types.
+/// Validates `s` and returns it as an `Arc<str>`, or an [`XmlError::InvalidXml`] naming the
+/// expected content type.
 ///
-/// Takes a validation closure, a display name for error messages, and the raw string.
-/// Returns `Ok(wrapper)` if valid, or `Err(XmlError::InvalidXml(...))` otherwise.
-fn try_from_str<F, W>(s: &str, display_name: &str, validate: F) -> Result<W, XmlError>
+/// This is the single place where the "not a valid X" error message is produced, so all
+/// [`validated_string_newtype!`] types report failures consistently.
+///
+/// # Errors
+///
+/// Returns [`XmlError::InvalidXml`] if `validate` rejects `s`.
+fn validated_string<F>(s: &str, display_name: &str, validate: F) -> Result<Arc<str>, XmlError>
 where
     F: FnOnce(&str) -> bool,
-    W: From<String>,
 {
     if validate(s) {
-        Ok(W::from(s.to_string()))
+        Ok(Arc::from(s))
     } else {
         Err(XmlError::InvalidXml(format!(
             "'{s}' is not a valid {display_name}"
         )))
     }
+}
+
+/// Declares a validated, immutable, `Arc`-backed string newtype.
+///
+/// The generated type stores its content in an `Arc<str>`, so cloning it (and cloning anything
+/// that stores one, such as an attribute value or a text node) is a pointer bump rather than a
+/// copy. Equality, ordering and hashing are value-based because `Arc<T>` forwards them to `T`;
+/// nothing in the public API exposes the pointer identity. This also satisfies requirement (1)'s
+/// "keep the Arc-based scheme for deduplication" for repetitive content.
+///
+/// `validate` is called with the raw string; the first failing argument produces
+/// [`XmlError::InvalidXml`] with the message `'<value>' is not a valid <display_name>`.
+///
+/// The type is deliberately only constructible through [`TryFrom`], so a value of this type is
+/// always valid (requirement (4)(1): low-level integrity enforced by construction).
+macro_rules! validated_string_newtype {
+    (
+        $(#[$meta:meta])*
+        $name:ident,
+        display_name = $display_name:literal,
+        validate = $validate:expr,
+        as_str_docs { $(#[$as_str_meta:meta])* }
+    ) => {
+        $(#[$meta])*
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        pub struct $name(Arc<str>);
+
+        impl $name {
+            $(#[$as_str_meta])*
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl ::core::ops::Deref for $name {
+            type Target = str;
+
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
+        impl AsRef<str> for $name {
+            fn as_ref(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl ::core::fmt::Display for $name {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+
+        impl PartialEq<str> for $name {
+            fn eq(&self, other: &str) -> bool {
+                self.as_str() == other
+            }
+        }
+
+        impl PartialEq<&str> for $name {
+            fn eq(&self, other: &&str) -> bool {
+                self.as_str() == *other
+            }
+        }
+
+        impl PartialEq<String> for $name {
+            fn eq(&self, other: &String) -> bool {
+                self.as_str() == *other
+            }
+        }
+
+        impl<'a> From<&'a $name> for ::std::borrow::Cow<'a, str> {
+            fn from(value: &'a $name) -> Self {
+                ::std::borrow::Cow::Borrowed(value.as_str())
+            }
+        }
+
+        impl TryFrom<&str> for $name {
+            type Error = XmlError;
+
+            fn try_from(s: &str) -> Result<Self, Self::Error> {
+                validated_string(s, $display_name, $validate).map($name)
+            }
+        }
+
+        impl TryFrom<String> for $name {
+            type Error = XmlError;
+
+            fn try_from(s: String) -> Result<Self, Self::Error> {
+                Self::try_from(s.as_str())
+            }
+        }
+    };
 }
 
 /// The `xml` prefix is by definition bound to this namespace.
@@ -30,184 +127,78 @@ pub(crate) const RESERVED_XML_URI: &str = "http://www.w3.org/XML/1998/namespace"
 /// to this namespace, and it must not be declared as the default namespace.
 pub(crate) const RESERVED_XMLNS_URI: &str = "http://www.w3.org/2000/xmlns/";
 
-/// Represents a valid XML NCName (Name without colons).
-///
-/// An NCName is an XML Name that does not contain a colon (`:`). It is used for both
-/// namespace prefixes and the local part of a qualified name (QName).
-///
-/// This type guarantees that the contained string is a valid NCName per the XML 1.0
-/// Fifth Edition specification. Validity is enforced at construction time via
-/// [`TryFrom`] — once constructed, the value is guaranteed valid.
-///
-/// # Example
-///
-/// ```rust
-/// use biodivine_lib_xml_dom::xml_spec::NCName;
-/// use std::convert::TryInto;
-///
-/// let name: NCName = "myElement".try_into().unwrap();
-/// assert_eq!(name.as_str(), "myElement");
-/// assert_eq!(name.as_ref(), "myElement");
-/// assert_eq!(name.to_string(), "myElement");
-///
-/// // Invalid NCNames are rejected
-/// let invalid1: Result<NCName, _> = "<tag>".try_into();
-/// assert!(invalid1.is_err());
-/// let invalid2: Result<NCName, _> = "123".try_into();
-/// assert!(invalid2.is_err());
-/// let invalid3: Result<NCName, _> = "a:b".try_into();
-/// assert!(invalid3.is_err());
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct NCName(String);
-
-impl NCName {
-    /// Returns the NCName as a string slice.
+validated_string_newtype! {
+    /// Represents a valid XML NCName (Name without colons).
+    ///
+    /// An NCName is an XML Name that does not contain a colon (`:`). It is used for both
+    /// namespace prefixes and the local part of a qualified name (QName).
+    ///
+    /// This type guarantees that the contained string is a valid NCName per the XML 1.0
+    /// Fifth Edition specification. Validity is enforced at construction time via
+    /// [`TryFrom`] — once constructed, the value is guaranteed valid.
     ///
     /// # Example
     ///
     /// ```rust
     /// use biodivine_lib_xml_dom::xml_spec::NCName;
-    /// let name: NCName = "foo".try_into().unwrap();
-    /// assert_eq!(name.as_str(), "foo");
+    /// use std::convert::TryInto;
+    ///
+    /// let name: NCName = "myElement".try_into().unwrap();
+    /// assert_eq!(name.as_str(), "myElement");
+    /// assert_eq!(name.as_ref(), "myElement");
+    /// assert_eq!(name.to_string(), "myElement");
+    ///
+    /// // Invalid NCNames are rejected
+    /// let invalid1: Result<NCName, _> = "<tag>".try_into();
+    /// assert!(invalid1.is_err());
+    /// let invalid2: Result<NCName, _> = "123".try_into();
+    /// assert!(invalid2.is_err());
+    /// let invalid3: Result<NCName, _> = "a:b".try_into();
+    /// assert!(invalid3.is_err());
     /// ```
-    pub fn as_str(&self) -> &str {
-        &self.0
+    NCName,
+    display_name = "NCName",
+    validate = is_valid_ncname,
+    as_str_docs {
+        /// Returns the `NCName` as a string slice.
+        ///
+        /// # Example
+        ///
+        /// ```rust
+        /// use biodivine_lib_xml_dom::xml_spec::NCName;
+        /// let name: NCName = "foo".try_into().unwrap();
+        /// assert_eq!(name.as_str(), "foo");
+        /// ```
     }
 }
 
-impl Deref for NCName {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl AsRef<str> for NCName {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for NCName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl PartialEq<str> for NCName {
-    fn eq(&self, other: &str) -> bool {
-        self.0 == other
-    }
-}
-
-impl PartialEq<&str> for NCName {
-    fn eq(&self, other: &&str) -> bool {
-        self.0 == *other
-    }
-}
-
-impl PartialEq<String> for NCName {
-    fn eq(&self, other: &String) -> bool {
-        self.0 == *other
-    }
-}
-
-impl<'a> From<&'a NCName> for std::borrow::Cow<'a, str> {
-    fn from(ncname: &'a NCName) -> Self {
-        std::borrow::Cow::Borrowed(&ncname.0)
-    }
-}
-
-impl TryFrom<&str> for NCName {
-    type Error = XmlError;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        if is_valid_ncname(s) {
-            Ok(NCName(s.to_string()))
-        } else {
-            Err(XmlError::InvalidXml(format!("'{s}' is not a valid NCName")))
-        }
-    }
-}
-
-impl TryFrom<String> for NCName {
-    type Error = XmlError;
-
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        if is_valid_ncname(&s) {
-            Ok(NCName(s))
-        } else {
-            Err(XmlError::InvalidXml(format!("'{s}' is not a valid NCName")))
-        }
-    }
-}
-
-/// Represents a valid XML character data string.
-///
-/// A `Text` contains only characters legal in XML documents per the `Char` production:
-/// `#x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]`.
-/// This excludes control characters (except tab, LF, CR) and surrogate code points.
-///
-/// Validity is enforced at construction time via [`TryFrom`].
-///
-/// # Example
-///
-/// ```rust
-/// use biodivine_lib_xml_dom::xml_spec::Text;
-/// use std::convert::TryInto;
-///
-/// let text: Text = "Hello, World!".try_into().unwrap();
-/// assert_eq!(text.as_str(), "Hello, World!");
-///
-/// // Control characters are rejected
-/// let invalid: Result<Text, _> = "control \u{01}".try_into();
-/// assert!(invalid.is_err());
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Text(String);
-
-impl Text {
-    /// Returns the text as a string slice.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl Deref for Text {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl AsRef<str> for Text {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for Text {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl TryFrom<&str> for Text {
-    type Error = XmlError;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        try_from_str(s, "XML text", is_valid_text).map(Text)
-    }
-}
-
-impl TryFrom<String> for Text {
-    type Error = XmlError;
-
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        try_from_str(&s, "XML text", is_valid_text).map(Text)
+validated_string_newtype! {
+    /// Represents a valid XML character data string.
+    ///
+    /// A `Text` contains only characters legal in XML documents per the `Char` production:
+    /// `#x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]`.
+    /// This excludes control characters (except tab, LF, CR) and surrogate code points.
+    ///
+    /// Validity is enforced at construction time via [`TryFrom`].
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use biodivine_lib_xml_dom::xml_spec::Text;
+    /// use std::convert::TryInto;
+    ///
+    /// let text: Text = "Hello, World!".try_into().unwrap();
+    /// assert_eq!(text.as_str(), "Hello, World!");
+    ///
+    /// // Control characters are rejected
+    /// let invalid: Result<Text, _> = "control \u{01}".try_into();
+    /// assert!(invalid.is_err());
+    /// ```
+    Text,
+    display_name = "XML text",
+    validate = is_valid_text,
+    as_str_docs {
+        /// Returns the text as a string slice.
     }
 }
 
@@ -223,281 +214,124 @@ fn is_legal_char(c: char) -> bool {
     matches!(cp, 0x9 | 0xA | 0xD | 0x20..=0xD7FF | 0xE000..=0xFFFD | 0x10000..=0x10FFFF)
 }
 
-/// Represents a valid CDATA section content.
-///
-/// CDATA section content must not contain the string `]]>`, which terminates the section.
-/// No other restrictions apply — all legal XML characters are permitted.
-///
-/// Validity is enforced at construction time via [`TryFrom`].
-///
-/// # Example
-///
-/// ```rust
-/// use biodivine_lib_xml_dom::xml_spec::CData;
-/// use std::convert::TryInto;
-///
-/// let cdata: CData = "This is safe content".try_into().unwrap();
-/// assert_eq!(cdata.as_str(), "This is safe content");
-///
-/// // Content containing ]]> is rejected
-/// let invalid: Result<CData, _> = "contains ]]> end".try_into();
-/// assert!(invalid.is_err());
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct CData(String);
-
-impl CData {
-    /// Returns the CDATA content as a string slice.
-    pub fn as_str(&self) -> &str {
-        &self.0
+validated_string_newtype! {
+    /// Represents a valid CDATA section content.
+    ///
+    /// CDATA section content must not contain the string `]]>`, which terminates the section.
+    /// No other restrictions apply — all legal XML characters are permitted.
+    ///
+    /// Validity is enforced at construction time via [`TryFrom`].
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use biodivine_lib_xml_dom::xml_spec::CData;
+    /// use std::convert::TryInto;
+    ///
+    /// let cdata: CData = "This is safe content".try_into().unwrap();
+    /// assert_eq!(cdata.as_str(), "This is safe content");
+    ///
+    /// // Content containing ]]> is rejected
+    /// let invalid: Result<CData, _> = "contains ]]> end".try_into();
+    /// assert!(invalid.is_err());
+    /// ```
+    CData,
+    display_name = "CDATA content",
+    validate = |s| !s.contains("]]>"),
+    as_str_docs {
+        /// Returns the CDATA content as a string slice.
     }
 }
 
-impl Deref for CData {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
+validated_string_newtype! {
+    /// Represents a valid XML comment content.
+    ///
+    /// Per XML 1.0 §2.5, comment content must not contain the string `--` (double-hyphen),
+    /// and must not end with a single hyphen `-` (since the comment closes with `-->`).
+    ///
+    /// Validity is enforced at construction time via [`TryFrom`].
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use biodivine_lib_xml_dom::xml_spec::Comment;
+    /// use std::convert::TryInto;
+    ///
+    /// let comment: Comment = " This is valid ".try_into().unwrap();
+    /// assert_eq!(comment.as_str(), " This is valid ");
+    ///
+    /// // Double hyphen is rejected
+    /// let invalid: Result<Comment, _> = "has -- double hyphen".try_into();
+    /// assert!(invalid.is_err());
+    ///
+    /// // Trailing hyphen is rejected
+    /// let invalid2: Result<Comment, _> = "ends with -".try_into();
+    /// assert!(invalid2.is_err());
+    /// ```
+    Comment,
+    display_name = "XML comment",
+    validate = |s| !s.contains("--") && !s.ends_with('-'),
+    as_str_docs {
+        /// Returns the comment content as a string slice.
     }
 }
 
-impl AsRef<str> for CData {
-    fn as_ref(&self) -> &str {
-        &self.0
+validated_string_newtype! {
+    /// Represents a valid processing instruction target.
+    ///
+    /// A PI target must be a valid XML `Name` (not an NCName — colons are allowed)
+    /// and must not match `xml` case-insensitively.
+    ///
+    /// Validity is enforced at construction time via [`TryFrom`].
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use biodivine_lib_xml_dom::xml_spec::PiTarget;
+    /// use std::convert::TryInto;
+    ///
+    /// let target: PiTarget = "xml-stylesheet".try_into().unwrap();
+    /// assert_eq!(target.as_str(), "xml-stylesheet");
+    ///
+    /// // Case-insensitive xml is rejected
+    /// let invalid: Result<PiTarget, _> = "xml".try_into();
+    /// assert!(invalid.is_err());
+    /// let invalid2: Result<PiTarget, _> = "XML".try_into();
+    /// assert!(invalid2.is_err());
+    /// ```
+    PiTarget,
+    display_name = "PI target",
+    validate = |s| is_valid_name(s) && !s.eq_ignore_ascii_case("xml"),
+    as_str_docs {
+        /// Returns the PI target as a string slice.
     }
 }
 
-impl fmt::Display for CData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl TryFrom<&str> for CData {
-    type Error = XmlError;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        try_from_str(s, "CDATA content", |s| !s.contains("]]>")).map(CData)
-    }
-}
-
-impl TryFrom<String> for CData {
-    type Error = XmlError;
-
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        try_from_str(&s, "CDATA content", |s| !s.contains("]]>")).map(CData)
-    }
-}
-
-/// Represents a valid XML comment content.
-///
-/// Per XML 1.0 §2.5, comment content must not contain the string `--` (double-hyphen),
-/// and must not end with a single hyphen `-` (since the comment closes with `-->`).
-///
-/// Validity is enforced at construction time via [`TryFrom`].
-///
-/// # Example
-///
-/// ```rust
-/// use biodivine_lib_xml_dom::xml_spec::Comment;
-/// use std::convert::TryInto;
-///
-/// let comment: Comment = " This is valid ".try_into().unwrap();
-/// assert_eq!(comment.as_str(), " This is valid ");
-///
-/// // Double hyphen is rejected
-/// let invalid: Result<Comment, _> = "has -- double hyphen".try_into();
-/// assert!(invalid.is_err());
-///
-/// // Trailing hyphen is rejected
-/// let invalid2: Result<Comment, _> = "ends with -".try_into();
-/// assert!(invalid2.is_err());
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Comment(String);
-
-impl Comment {
-    /// Returns the comment content as a string slice.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl Deref for Comment {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl AsRef<str> for Comment {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for Comment {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl TryFrom<&str> for Comment {
-    type Error = XmlError;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        try_from_str(s, "XML comment", |s| !s.contains("--") && !s.ends_with('-')).map(Comment)
-    }
-}
-
-impl TryFrom<String> for Comment {
-    type Error = XmlError;
-
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        try_from_str(&s, "XML comment", |s| {
-            !s.contains("--") && !s.ends_with('-')
-        })
-        .map(Comment)
-    }
-}
-
-/// Represents a valid processing instruction target.
-///
-/// A PI target must be a valid XML `Name` (not an NCName — colons are allowed)
-/// and must not match `xml` case-insensitively.
-///
-/// Validity is enforced at construction time via [`TryFrom`].
-///
-/// # Example
-///
-/// ```rust
-/// use biodivine_lib_xml_dom::xml_spec::PiTarget;
-/// use std::convert::TryInto;
-///
-/// let target: PiTarget = "xml-stylesheet".try_into().unwrap();
-/// assert_eq!(target.as_str(), "xml-stylesheet");
-///
-/// // Case-insensitive xml is rejected
-/// let invalid: Result<PiTarget, _> = "xml".try_into();
-/// assert!(invalid.is_err());
-/// let invalid2: Result<PiTarget, _> = "XML".try_into();
-/// assert!(invalid2.is_err());
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct PiTarget(String);
-
-impl PiTarget {
-    /// Returns the PI target as a string slice.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl Deref for PiTarget {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl AsRef<str> for PiTarget {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for PiTarget {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl TryFrom<&str> for PiTarget {
-    type Error = XmlError;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        try_from_str(s, "PI target", |s| {
-            is_valid_name(s) && !s.eq_ignore_ascii_case("xml")
-        })
-        .map(PiTarget)
-    }
-}
-
-impl TryFrom<String> for PiTarget {
-    type Error = XmlError;
-
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        try_from_str(&s, "PI target", |s| {
-            is_valid_name(s) && !s.eq_ignore_ascii_case("xml")
-        })
-        .map(PiTarget)
-    }
-}
-
-/// Represents a valid processing instruction content.
-///
-/// PI content must not contain the string `?>`, which terminates the PI.
-///
-/// Validity is enforced at construction time via [`TryFrom`].
-///
-/// # Example
-///
-/// ```rust
-/// use biodivine_lib_xml_dom::xml_spec::PiData;
-/// use std::convert::TryInto;
-///
-/// let data: PiData = "type=\"text/css\" href=\"style.css\"".try_into().unwrap();
-/// assert_eq!(data.as_str(), "type=\"text/css\" href=\"style.css\"");
-///
-/// // Content containing ?> is rejected
-/// let invalid: Result<PiData, _> = "has ?> in it".try_into();
-/// assert!(invalid.is_err());
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct PiData(String);
-
-impl PiData {
-    /// Returns the PI content as a string slice.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl Deref for PiData {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl AsRef<str> for PiData {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for PiData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl TryFrom<&str> for PiData {
-    type Error = XmlError;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        try_from_str(s, "PI content", |s| !s.contains("?>")).map(PiData)
-    }
-}
-
-impl TryFrom<String> for PiData {
-    type Error = XmlError;
-
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        try_from_str(&s, "PI content", |s| !s.contains("?>")).map(PiData)
+validated_string_newtype! {
+    /// Represents a valid processing instruction content.
+    ///
+    /// PI content must not contain the string `?>`, which terminates the PI.
+    ///
+    /// Validity is enforced at construction time via [`TryFrom`].
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use biodivine_lib_xml_dom::xml_spec::PiData;
+    /// use std::convert::TryInto;
+    ///
+    /// let data: PiData = "type=\"text/css\" href=\"style.css\"".try_into().unwrap();
+    /// assert_eq!(data.as_str(), "type=\"text/css\" href=\"style.css\"");
+    ///
+    /// // Content containing ?> is rejected
+    /// let invalid: Result<PiData, _> = "has ?> in it".try_into();
+    /// assert!(invalid.is_err());
+    /// ```
+    PiData,
+    display_name = "PI content",
+    validate = |s| !s.contains("?>"),
+    as_str_docs {
+        /// Returns the PI content as a string slice.
     }
 }
 

@@ -1,5 +1,5 @@
 # Convenience entry points. Everything here is also runnable by hand; see README.md.
-.PHONY: help build test test-python lint docs python-extension examples
+.PHONY: help build test test-python lint docs verify python-extension examples
 
 help:
 	@echo "make build            build the Rust workspace"
@@ -9,6 +9,7 @@ help:
 	@echo "make examples         run every Rust example of the documentation book"
 	@echo "make lint             cargo fmt --check, cargo clippy, pytest"
 	@echo "make docs             build rustdoc, the Python API reference and the book"
+	@echo "make verify           run every gate and print each command with its exit code"
 
 build:
 	cargo build --workspace
@@ -34,3 +35,6 @@ lint:
 
 docs:
 	docs/build_docs.sh
+
+verify:
+	scripts/verify.sh

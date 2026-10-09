@@ -500,6 +500,10 @@ mod tests {
 
     /// The re-entrancy guard must catch a nested acquisition of the *same* document's lock:
     /// this is the operation that would deadlock.
+    ///
+    /// Debug-only, because the guard itself is: in release builds it compiles away, so there is
+    /// nothing to observe. `cargo test --release` found this the hard way.
+    #[cfg(debug_assertions)]
     #[test]
     #[should_panic(expected = "re-entrant access to the lock of one document")]
     fn re_entrant_access_to_the_same_document_panics_in_debug_builds() {

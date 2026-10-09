@@ -12,13 +12,16 @@ switches every example on the page.
 project = "biodivine-lib-xml-dom"
 copyright = "2026, Sybila"
 author = "Sybila"
-# Read from the crate manifest (via `[workspace.package]`), so the book and the code agree.
-_version = [
+# Read from the crate manifest (via `[workspace.package]`), so the book and the code agree. The
+# path is resolved relative to this file, so the build does not depend on the working directory.
+from pathlib import Path
+
+_manifest = (Path(__file__).resolve().parents[2] / "Cargo.toml").read_text(encoding="utf-8")
+version = [
     line.split("=", 1)[1].strip().strip('"')
-    for line in open("Cargo.toml").read().splitlines()
+    for line in _manifest.splitlines()
     if line.startswith("version")
 ][0]
-version = _version
 release = version
 
 extensions = [

@@ -1,0 +1,25 @@
+[package]
+name = "biodivine-lib-xml-dom-py-sys"
+version = "0.1.0"
+edition = "2024"
+description = "Thin PyO3 wrapper around biodivine-lib-xml-dom (the `_sys` layer)."
+license = "MIT"
+
+[lib]
+name = "biodivine_lib_xml_dom_sys"
+# `cdylib` for the Python extension module, `rlib` so that the crate's own tests can link it.
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# Enabled by maturin (see `[tool.maturin] features` in pyproject.toml) when building a wheel: it
+# tells PyO3 not to link against libpython, which is what an extension module must do. It must NOT
+# be on for `cargo test`, where the crate is linked into a test binary that *does* need libpython.
+extension-module = ["pyo3/extension-module"]
+
+[dependencies]
+biodivine-lib-xml-dom = { path = ".." }
+pyo3 = { version = "0.29", features = ["macros"] }
+
+[dev-dependencies]
+# `auto-initialize` is what lets `cargo test` start an interpreter in-process.
+pyo3 = { version = "0.29", features = ["auto-initialize"] }

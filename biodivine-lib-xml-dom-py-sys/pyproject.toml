@@ -1,0 +1,17 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "biodivine-lib-xml-dom"
+version = "0.1.0"
+description = "An XML DOM library with safe namespace handling and thread-safe documents."
+requires-python = ">=3.9"
+readme = "../README.md"
+
+[tool.maturin]
+# The native module is a *private* submodule of the pure-Python package, which is what makes the
+# three-layer architecture visible in the import path.
+module-name = "biodivine_lib_xml_dom._sys"
+python-source = "python"
+features = ["extension-module"]

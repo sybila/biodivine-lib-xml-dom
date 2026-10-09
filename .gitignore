@@ -1,2 +1,8 @@
 /target
 .idea
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+*.so
+target/wheels

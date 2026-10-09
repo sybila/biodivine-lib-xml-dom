@@ -3,6 +3,16 @@ name = "biodivine-lib-xml-dom"
 version = "0.1.0"
 edition = "2024"
 
+# The Python bindings live in a separate crate (requirement (6): the core crate contains no PyO3
+# code at all). The core crate stays the workspace *root package*, so `src/` and every existing
+# path and test are untouched by the split.
+[workspace]
+members = ["biodivine-lib-xml-dom-py-sys"]
+
+# Note: no `panic = "abort"` in any profile. PyO3 converts a Rust panic into a Python
+# `PanicException`, which is only possible while unwinding; `panic = "abort"` would turn a panic
+# inside the bindings into a process abort instead.
+
 [dev-dependencies]
 proptest = "1"
 

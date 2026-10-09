@@ -870,3 +870,45 @@ Recorded as the plan is executed; each entry says what changed and why.
 * **Validation is read-only and takes the lock once.** `Document::validate` goes through
   `read_arena`, so it cannot re-enter the lock, and a test asserts that the serialized document is
   unchanged by a validation run.
+
+### 15.5 G5 — Python bindings
+
+* **The workspace keeps the core crate as the root package** and adds `biodivine-lib-xml-dom-py-sys`
+  as a member, so `src/` and every existing test stayed where they were. The native module is a
+  *private* submodule of the pure-Python package (`module-name = "biodivine_lib_xml_dom._sys"` with
+  `python-source = "python"`), which is what makes the three-layer split visible in the import path.
+* **`extension-module` is enabled by maturin, not by default** (`[tool.maturin] features`), with a
+  `dev-dependency` on `pyo3` using `auto-initialize`: that is the arrangement in which both
+  `cargo test` (which links libpython into the test binary) and `maturin develop` (whose wheel must
+  *not* link it) work from one manifest. Verified by building and importing a scratch extension
+  before writing any binding.
+* **The full item-by-item mirroring audit is `docs/design/BINDINGS.md`** (advisor condition C1): one
+  row per public Rust item group with its `_sys` binding, its Python name and a verdict, so the
+  "does not make sense to mirror" set is explicit. Its notable entries: the panicking twins of the
+  `_checked` operations are dropped (Python has no panics, so the checked behaviour is the only
+  one); `NodeContent` is not mirrored because `Node.kind()` plus the typed accessors express the
+  same thing without a discriminator dance; and the `xml_spec` newtypes are not mirrored because in
+  Python their role — validity enforced by construction — is played by the raising constructors.
+  Rust's `Deref<Target = Node>` for `Element` cannot be expressed for a native Python type, so
+  `_sys` offers `Element.node()` (the Rust method) and the pure-Python `Element` subclasses the
+  pure-Python `Node` so users get one object with both APIs.
+* **The GIL policy is stated and implemented** (advisor condition C2): parsing, serializing,
+  validation and the cross-document copies run under `Python::detach` with `Send`-only captures,
+  everything else holds the GIL. The policy table is in both the crate docs and
+  `BINDINGS.md` §3. No binding acquires two document locks, so the Rust deadlock-freedom argument
+  carries over unchanged; `tests-python` shares one document between four Python threads with a
+  30-second timeout so a hang fails the test.
+* **Boundary hygiene is checked rather than asserted** (advisor condition C3): no
+  `unwrap`/`expect`/`panic!` outside the test module of the py-sys crate; no profile sets
+  `panic = "abort"`, so a bug would surface as PyO3's `PanicException` instead of killing the
+  interpreter; each `#[pyclass]` has a `Send`/`Sync` justification in `BINDINGS.md` §5 backed by a
+  compile-time assertion in `src/tests.rs`, and `unsendable` is needed nowhere because every wrapped
+  Rust type is `Send + Sync`.
+* **The mirror is usable from Rust as well**: the `#[pymethods]` bodies are `pub`, so the crate's own
+  tests drive the same code paths Python does without building a wheel.
+* **Pins and recipe** (advisor condition C4): `pyo3 0.29.3`, `maturin 1.15.0`, `pytest 9.1.1`,
+  `python3-dev` for the CPython 3.11 headers. The recipe is in `BINDINGS.md` §7 and the transcripts
+  are in the goal result. `cargo tree -p biodivine-lib-xml-dom --edges normal` still lists only
+  `parking_lot`, `quick-xml` and `thiserror`.
+* **Deliberately not done here**: `abi3` (a packaging decision, recorded in `BINDINGS.md` §8) and the
+  Sphinx site / tutorial book (goal G6, which generates them from the docstrings added here).

@@ -9,8 +9,10 @@ scripts/verify.sh          # runs every gate below and prints each command with 
 ```
 
 The transcript below is from a run of `scripts/verify.sh` at commit `072b8ac` on the `rewrite` branch in
-this sandbox (the documentation edits made after that run - this file, `REPORT.md`, `CHANGELOG.md` -
-cannot affect a gate, and `make verify` reproduces every result below).
+this sandbox. The only edits made after that run are documentation (this file, `REPORT.md`,
+`CHANGELOG.md`, `docs/check_facts.py`), which cannot affect a gate; `make verify` reproduces every
+result below, and `docs/check_facts.py` is one of those gates precisely so that the numbers in this
+document are checked against the artefact rather than trusted.
 
 ## Environment
 

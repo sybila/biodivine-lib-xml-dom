@@ -49,7 +49,8 @@ make verify             # every gate, with each command's exit code   <-- start 
 evidence: it runs formatting, clippy (`-D warnings`), the workspace tests in debug and release, the
 declared MSRV toolchain and the CI-pinned one, the examples, rustdoc, the documentation checkers and
 builds, and pytest, printing each command with its exit code and failing if anything is red.
-`docs/design/VERIFICATION.md` is generated from a run of it.
+`docs/design/VERIFICATION.md` is generated from a run of it, and `docs/check_facts.py` (part of the
+same gate) checks the numbers that document states against the artefacts.
 
 ## Evidence index
 

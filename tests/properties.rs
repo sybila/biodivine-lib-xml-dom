@@ -48,14 +48,18 @@ fn sig_document(document: &Document) -> Sig {
 
 fn sig_element(element: &Element) -> Sig {
     let name = element.qualified_name();
+    // `prefix|uri|local`, spelled exactly like the attribute signature below, so that a serializer
+    // or parser that drops, renames or mangles an element's *local name* (the REVIEW D2 bug class)
+    // is caught by the round-trip property rather than passing unnoticed.
     let name = format!(
-        "{}|{}",
+        "{}|{}|{}",
         name.namespace()
             .and_then(|namespace| namespace.prefix_str())
             .unwrap_or(""),
         name.namespace()
             .map(|namespace| namespace.uri().to_string())
             .unwrap_or_default(),
+        name.local_name(),
     );
     let declarations: Vec<(String, String)> = element
         .namespace_declarations()
@@ -154,6 +158,8 @@ enum NameChoice {
 
 #[derive(Debug, Clone)]
 struct GenElement {
+    /// The element's local name; varied so that the signature is sensitive to it.
+    local: String,
     name: NameChoice,
     /// Which of `p0`, `p1`, the default namespace are (redundantly) declared on this element.
     redeclare: [bool; 3],
@@ -295,27 +301,40 @@ fn arb_element(budget: u32, default_in_scope: bool) -> BoxedStrategy<GenElement>
         .prop_map(|redeclare| [redeclare.0, redeclare.1, redeclare.2]);
 
     if budget == 0 {
-        (name, redeclare, attributes, Just(Vec::new()))
-            .prop_map(|(name, redeclare, attributes, children)| GenElement {
-                name,
-                redeclare,
-                attributes,
-                children,
-            })
+        (
+            arb_local_name(),
+            name,
+            redeclare,
+            attributes,
+            Just(Vec::new()),
+        )
+            .prop_map(
+                |(local, name, redeclare, attributes, children)| GenElement {
+                    local,
+                    name,
+                    redeclare,
+                    attributes,
+                    children,
+                },
+            )
             .boxed()
     } else {
         (
+            arb_local_name(),
             name,
             redeclare,
             attributes,
             prop::collection::vec(arb_node(budget - 1, default_in_scope), 0..3),
         )
-            .prop_map(|(name, redeclare, attributes, children)| GenElement {
-                name,
-                redeclare,
-                attributes,
-                children,
-            })
+            .prop_map(
+                |(local, name, redeclare, attributes, children)| GenElement {
+                    local,
+                    name,
+                    redeclare,
+                    attributes,
+                    children,
+                },
+            )
             .boxed()
     }
 }
@@ -402,7 +421,7 @@ fn build_element(
     in_default_scope: bool,
     is_root: bool,
 ) -> Element {
-    let element = document.create_element(qualified(&generated.name, "item"));
+    let element = document.create_element(qualified(&generated.name, &generated.local));
     if is_root {
         element.declare_namespace(Namespace::prefixed(NS_0, "p0").unwrap());
         element.declare_namespace(Namespace::prefixed(NS_1, "p1").unwrap());

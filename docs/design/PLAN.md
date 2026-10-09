@@ -792,6 +792,14 @@ Recorded as the plan is executed; each entry says what changed and why.
   are the UTF-16 halves of `utf-utf16-support` / `utf-8-utf-16-support`, which AGENTS.md puts out of
   scope. `tests/io.rs::rules_referenced_by_the_parser_and_serializer_exist` checks that every rule
   named in the parser/serializer documentation still has its summary file.
+* **The round-trip signature compares the full expanded name.** The canonical signature spells an
+  element name as `prefix|uri|local` (the same shape the attribute signature uses) and the document
+  generator produces varied local names, so the property is sensitive to element-name fidelity and
+  not just to namespaces. Verified by deliberate sabotage, twice: making the serializer append
+  `_corrupted` to a tag name makes the signature report `||a_corrupted` against `||a`, and
+  reproducing the pre-G3 behaviour of writing the *local name only* (REVIEW D2) makes it report
+  `||a` against `p0|http://example.com/ns0|a`. Both sabotages were reverted immediately; the
+  property passes again on the unmodified code.
 * **Deviations from §8.1.** `parse_*_into` variants were dropped: cross-document import already has a
   sanctioned, tested path (`deep_clone_into`), and an extra constructor that fills an existing
   document would either duplicate that logic or leave the target partially modified on error.

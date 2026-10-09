@@ -435,6 +435,83 @@ fn an_empty_default_declaration_removes_the_default_namespace() {
 }
 
 #[test]
+fn xml_lang_and_xml_space_round_trip_with_the_implicit_xml_prefix() {
+    // rule: rule.namespace-basics.xml-prefix-fixed-binding.md
+    // rule: rule.document-structure.xml-lang-must-be-bcp47-or-empty.md
+    // rule: rule.document-structure.xml-space-must-be-enumerated-default-preserve.md
+    rules::assert_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding.md");
+    rules::assert_rule_exists("rule.document-structure.xml-lang-must-be-bcp47-or-empty.md");
+    rules::assert_rule_exists(
+        "rule.document-structure.xml-space-must-be-enumerated-default-preserve.md",
+    );
+
+    let xml = r#"<a xml:lang="en-GB" xml:space="preserve"><b/></a>"#;
+    let document = parse_string(xml).unwrap();
+    let root = document.root().unwrap();
+
+    // The `xml` prefix is bound without any declaration (Namespaces 1.0 §3), so `xml:lang` is an
+    // attribute in the reserved XML namespace and the element stores no declaration for it.
+    let xml_lang = QualifiedName::with_namespace(
+        "lang",
+        &Namespace::prefixed("http://www.w3.org/XML/1998/namespace", "xml").unwrap(),
+    )
+    .unwrap();
+    let xml_space = QualifiedName::with_namespace(
+        "space",
+        &Namespace::prefixed("http://www.w3.org/XML/1998/namespace", "xml").unwrap(),
+    )
+    .unwrap();
+    assert!(root.namespace_declarations().is_empty());
+    assert_eq!(root.attribute(&xml_lang).unwrap().as_ref(), "en-GB");
+    assert_eq!(root.attribute(&xml_space).unwrap().as_ref(), "preserve");
+    // An unprefixed attribute called `lang` would be a *different* name with no namespace.
+    assert!(
+        root.attribute(&QualifiedName::without_namespace("lang").unwrap())
+            .is_none()
+    );
+    assert!(
+        root.resolve_attribute_name("xml:lang")
+            .unwrap()
+            .namespace()
+            .is_some(),
+        "`xml` must resolve without a declaration"
+    );
+
+    // The value predicates G4 will use accept these values ...
+    assert!(biodivine_lib_xml_dom::xml_spec::is_valid_language_tag(
+        "en-GB"
+    ));
+    assert!(biodivine_lib_xml_dom::xml_spec::is_valid_xml_space_value(
+        "preserve"
+    ));
+
+    // ... and the document round-trips byte for byte.
+    assert_eq!(write_string(&document).unwrap(), xml);
+    let reparsed = parse_string(&write_string(&document).unwrap()).unwrap();
+    assert_eq!(write_string(&reparsed).unwrap(), xml);
+
+    // A value that breaks the `xml:space` enumeration is *validity*, not well-formedness: the
+    // parser stores it (no DTD means no attribute types) and `is_valid_xml_space_value` rejects
+    // it, so the whole-document validation pass (G4) is what reports it.
+    let loose = parse_string(r#"<a xml:space="preserved"/>"#).unwrap();
+    assert_eq!(
+        loose
+            .root()
+            .unwrap()
+            .attribute(&xml_space)
+            .unwrap()
+            .as_ref(),
+        "preserved"
+    );
+    assert!(!biodivine_lib_xml_dom::xml_spec::is_valid_xml_space_value(
+        "preserved"
+    ));
+    assert!(!biodivine_lib_xml_dom::xml_spec::is_valid_language_tag(
+        "en_US_very_long_invalid"
+    ));
+}
+
+#[test]
 fn less_than_is_rejected_in_attribute_values() {
     // rule: rule.attributes.no-lt-in-values.md
     // rule: rule.elements-and-tags.no-less-than-in-attribute-values.md

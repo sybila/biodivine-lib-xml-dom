@@ -736,6 +736,23 @@ mod tests {
         assert!(declared.shares_data_with(&source_namespace));
     }
 
+    /// Creating many elements with the same name must not allocate a new name each time: the
+    /// document's interner keeps exactly one canonical allocation per distinct value.
+    #[test]
+    fn repeated_names_share_one_allocation() {
+        let document = Document::empty();
+        let first = document.create_element(QualifiedName::without_namespace("item").unwrap());
+        for _ in 0..1000 {
+            let other = document.create_element(QualifiedName::without_namespace("item").unwrap());
+            assert!(
+                first
+                    .qualified_name()
+                    .shares_data_with(&other.qualified_name())
+            );
+        }
+        assert_eq!(document.node_count(), 1001);
+    }
+
     /// Interned values are value-equal, so nothing in the API depends on which allocation won.
     #[test]
     fn interning_does_not_change_equality() {

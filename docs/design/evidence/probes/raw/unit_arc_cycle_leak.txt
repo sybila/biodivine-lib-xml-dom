@@ -1,0 +1,36 @@
+===================================================================
+PROBE        : unit_arc_cycle_leak.rs
+KIND         : unit
+REPO         : /sandbox/biodivine-lib-xml-dom
+COMMIT       : 76beb74 Merge pull request #1 from sybila/feat/daemontus/initial-implementation
+RUSTC        : rustc 1.99.0 (b940084d7 2026-09-28)
+CARGO        : cargo 1.99.0 (5f94df478 2026-08-27)
+DATE (UTC)   : 2026-10-09T12:30:58Z
+===================================================================
+$ cargo test --release --lib __probe -- --nocapture --test-threads=1
+
+   Compiling biodivine-lib-xml-dom v0.1.0 (/sandbox/biodivine-lib-xml-dom)
+error[E0616]: field `0` of struct `element::Element` is private
+  --> src/__probe.rs:32:34
+   |
+32 |         Arc::strong_count(&child.0),
+   |                                  ^ private field
+
+error[E0616]: field `0` of struct `element::Element` is private
+  --> src/__probe.rs:33:35
+   |
+33 |         Arc::strong_count(&parent.0)
+   |                                   ^ private field
+
+error[E0616]: field `0` of struct `element::Element` is private
+  --> src/__probe.rs:39:42
+   |
+39 |     let count = Arc::strong_count(&child.0);
+   |                                          ^ private field
+
+For more information about this error, try `rustc --explain E0616`.
+error: could not compile `biodivine-lib-xml-dom` (lib test) due to 3 previous errors
+
+-------------------------------------------------------------------
+PROBE_EXIT=101
+-------------------------------------------------------------------

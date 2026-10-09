@@ -1,0 +1,43 @@
+===================================================================
+PROBE        : it_entity_panic.rs
+KIND         : it
+REPO         : /sandbox/biodivine-lib-xml-dom
+COMMIT       : 76beb74 Merge pull request #1 from sybila/feat/daemontus/initial-implementation
+RUSTC        : rustc 1.99.0 (b940084d7 2026-09-28)
+CARGO        : cargo 1.99.0 (5f94df478 2026-08-27)
+DATE (UTC)   : 2026-10-09T12:30:58Z
+===================================================================
+$ cargo test --release --test __probe -- --nocapture --test-threads=1
+
+   Compiling biodivine-lib-xml-dom v0.1.0 (/sandbox/biodivine-lib-xml-dom)
+    Finished `release` profile [optimized] target(s) in 0.09s
+     Running tests/__probe.rs (target/release/deps/__probe-81ee3879435e3dd8)
+
+running 2 tests
+test parser_does_not_panic_on_predefined_entities ... !!! panic intercepted: panicked at src/io.rs:127:17:
+not implemented: Custom entities are currently not supported.
+
+thread 'parser_does_not_panic_on_predefined_entities' (12167) panicked at tests/__probe.rs:39:19:
+parser panicked instead of returning Ok(_) or Err(_)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test undeclared_entity_is_a_typed_error ... !!! panic intercepted: panicked at src/io.rs:127:17:
+not implemented: Custom entities are currently not supported.
+
+thread 'undeclared_entity_is_a_typed_error' (12168) panicked at tests/__probe.rs:57:19:
+parser panicked instead of returning a typed error
+FAILED
+
+failures:
+
+failures:
+    parser_does_not_panic_on_predefined_entities
+    undeclared_entity_is_a_typed_error
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test __probe`
+
+-------------------------------------------------------------------
+PROBE_EXIT=101
+-------------------------------------------------------------------

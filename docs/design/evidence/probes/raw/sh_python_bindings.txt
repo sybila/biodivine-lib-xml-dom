@@ -1,0 +1,26 @@
+===================================================================
+PROBE        : sh_python_bindings.sh
+KIND         : sh
+REPO         : /sandbox/biodivine-lib-xml-dom
+COMMIT       : 76beb74 Merge pull request #1 from sybila/feat/daemontus/initial-implementation
+RUSTC        : rustc 1.99.0 (b940084d7 2026-09-28)
+CARGO        : cargo 1.99.0 (5f94df478 2026-08-27)
+DATE (UTC)   : 2026-10-09T12:31:48Z
+===================================================================
+$ bash sh_python_bindings.sh
+
+--- grep -ri pyo3 (rust sources + manifests)
+  (none)
+--- cargo metadata workspace members
+  biodivine-lib-xml-dom
+--- look for a -py-sys crate or python package
+  (above should be empty)
+--- python packages installed in this environment matching the library
+  biodivine_lib_xml_dom_sys: None
+  biodivine_lib_xml_dom: None
+--- any Python source/test files in the repo
+  (above should be empty)
+
+-------------------------------------------------------------------
+PROBE_EXIT=0
+-------------------------------------------------------------------

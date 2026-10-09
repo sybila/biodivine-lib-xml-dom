@@ -1,0 +1,109 @@
+===================================================================
+PROBE        : cf_missing_api.rs
+KIND         : cf
+REPO         : /sandbox/biodivine-lib-xml-dom
+COMMIT       : 76beb74 Merge pull request #1 from sybila/feat/daemontus/initial-implementation
+RUSTC        : rustc 1.99.0 (b940084d7 2026-09-28)
+CARGO        : cargo 1.99.0 (5f94df478 2026-08-27)
+DATE (UTC)   : 2026-10-09T12:30:59Z
+===================================================================
+$ cargo test --release --no-run --test __probe   (expected: compile error)
+
+   Compiling biodivine-lib-xml-dom v0.1.0 (/sandbox/biodivine-lib-xml-dom)
+error[E0425]: cannot find type `Node` in crate `biodivine_lib_xml_dom`
+  --> tests/__probe.rs:21:39
+   |
+21 |     let _node: biodivine_lib_xml_dom::Node;
+   |                                       ^^^^ not found in `biodivine_lib_xml_dom`
+
+error[E0599]: no method named `deep_clone` found for reference `&biodivine_lib_xml_dom::Element` in the current scope
+  --> tests/__probe.rs:24:25
+   |
+24 |     let _deep = element.deep_clone();
+   |                         ^^^^^^^^^^
+   |
+help: there is a method `clone` with a similar name
+   |
+24 -     let _deep = element.deep_clone();
+24 +     let _deep = element.clone();
+   |
+
+error[E0599]: no method named `shallow_clone` found for reference `&biodivine_lib_xml_dom::Element` in the current scope
+  --> tests/__probe.rs:25:28
+   |
+25 |     let _shallow = element.shallow_clone();
+   |                            ^^^^^^^^^^^^^ method not found in `&biodivine_lib_xml_dom::Element`
+
+error[E0599]: no method named `deep_clone_into` found for reference `&biodivine_lib_xml_dom::Element` in the current scope
+  --> tests/__probe.rs:28:27
+   |
+28 |     let _copied = element.deep_clone_into(other);
+   |                           ^^^^^^^^^^^^^^^
+   |
+help: there is a method `clone_into` with a similar name
+   |
+28 -     let _copied = element.deep_clone_into(other);
+28 +     let _copied = element.clone_into(other);
+   |
+
+error[E0599]: no method named `remove` found for reference `&biodivine_lib_xml_dom::Element` in the current scope
+  --> tests/__probe.rs:31:28
+   |
+31 |     let _removed = element.remove();
+   |                            ^^^^^^ method not found in `&biodivine_lib_xml_dom::Element`
+
+error[E0599]: no method named `detach` found for reference `&biodivine_lib_xml_dom::Element` in the current scope
+  --> tests/__probe.rs:32:29
+   |
+32 |     let _detached = element.detach();
+   |                             ^^^^^^ method not found in `&biodivine_lib_xml_dom::Element`
+
+error[E0599]: no method named `replace_with` found for reference `&biodivine_lib_xml_dom::Element` in the current scope
+  --> tests/__probe.rs:33:29
+   |
+33 |     let _replaced = element.replace_with(element.clone());
+   |                             ^^^^^^^^^^^^ method not found in `&biodivine_lib_xml_dom::Element`
+
+error[E0599]: no method named `insert_child` found for reference `&biodivine_lib_xml_dom::Element` in the current scope
+  --> tests/__probe.rs:37:29
+   |
+37 |     let _inserted = element.insert_child(0, element.clone());
+   |                             ^^^^^^^^^^^^ method not found in `&biodivine_lib_xml_dom::Element`
+
+error[E0599]: no method named `namespaces_in_scope` found for reference `&biodivine_lib_xml_dom::Element` in the current scope
+  --> tests/__probe.rs:40:29
+   |
+40 |     let _in_scope = element.namespaces_in_scope();
+   |                             ^^^^^^^^^^^^^^^^^^^ method not found in `&biodivine_lib_xml_dom::Element`
+
+error[E0599]: no method named `remove_namespace_declaration` found for reference `&biodivine_lib_xml_dom::Element` in the current scope
+   --> tests/__probe.rs:41:33
+    |
+ 41 |     let _removed_decl = element.remove_namespace_declaration(None);
+    |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+help: there is a method `namespace_declarations` with a similar name, but with different arguments
+   --> src/element.rs:150:5
+    |
+150 |     pub fn namespace_declarations(&self) -> BTreeMap<Option<NCName>, Option<Namespace>> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0599]: no method named `validate` found for reference `&Document` in the current scope
+  --> tests/__probe.rs:44:23
+   |
+44 |     let _issues = doc.validate();
+   |                       ^^^^^^^^ method not found in `&Document`
+
+error[E0599]: no method named `belongs_to` found for reference `&biodivine_lib_xml_dom::Element` in the current scope
+  --> tests/__probe.rs:47:25
+   |
+47 |     let _same = element.belongs_to(other);
+   |                         ^^^^^^^^^^ method not found in `&biodivine_lib_xml_dom::Element`
+
+Some errors have detailed explanations: E0425, E0599.
+For more information about an error, try `rustc --explain E0425`.
+error: could not compile `biodivine-lib-xml-dom` (test "__probe") due to 12 previous errors
+
+-------------------------------------------------------------------
+PROBE_EXIT=101
+-------------------------------------------------------------------

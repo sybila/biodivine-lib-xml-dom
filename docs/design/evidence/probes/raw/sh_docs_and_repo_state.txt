@@ -1,0 +1,55 @@
+===================================================================
+PROBE        : sh_docs_and_repo_state.sh
+KIND         : sh
+REPO         : /sandbox/biodivine-lib-xml-dom
+COMMIT       : 76beb74 Merge pull request #1 from sybila/feat/daemontus/initial-implementation
+RUSTC        : rustc 1.99.0 (b940084d7 2026-09-28)
+CARGO        : cargo 1.99.0 (5f94df478 2026-08-27)
+DATE (UTC)   : 2026-10-09T12:31:55Z
+===================================================================
+$ bash sh_docs_and_repo_state.sh
+
+--- documentation book / Sphinx configuration
+  (above should be empty; requirement (7) asks for a docs book)
+--- rustdoc warning configuration / missing-docs lint
+  (above should be empty)
+--- rust-toolchain.toml / MSRV declaration
+  Cargo.toml:
+    [package]
+    name = "biodivine-lib-xml-dom"
+    version = "0.1.0"
+    edition = "2024"
+    
+    [dependencies]
+    parking_lot = "0.12"
+    quick-xml = "0.41"
+    thiserror = "2.0"
+    
+    [lints.clippy]
+    uninlined_format_args = "warn"  CI pins (from .github/workflows/build.yml):
+    .github/workflows/build.yml:      rust-version: "1.95.0"
+    .github/workflows/build.yml:      min-rust-version: "1.88.0"
+    .github/workflows/release.yml:      min-rust-version: "1.88.0"
+--- leftover artefacts in the crate root
+  -rw-rw-r-- 1 agent agent    0 Oct  9 12:07 output.xml
+  -rw-rw-r-- 1 agent agent 6461 Oct  9 12:07 src/main.rs
+  output.xml size: 0 bytes
+  src/main.rs line count: 184
+--- git branches
+  * master
+    remotes/origin/HEAD -> origin/master
+    remotes/origin/master
+  (requirement (8) asks for a `rewrite` branch; only master/remotes exist)
+--- git working tree
+  ?? docs/
+--- repository review tooling
+  .coderabbit.yaml
+  
+  .github:
+  .
+  ..
+  workflows
+
+-------------------------------------------------------------------
+PROBE_EXIT=0
+-------------------------------------------------------------------

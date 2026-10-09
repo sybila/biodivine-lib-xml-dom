@@ -1,0 +1,49 @@
+===================================================================
+PROBE        : unit_element_arc_cycle_leak.rs
+KIND         : unit
+REPO         : /sandbox/biodivine-lib-xml-dom
+COMMIT       : 76beb74 Merge pull request #1 from sybila/feat/daemontus/initial-implementation
+RUSTC        : rustc 1.99.0 (b940084d7 2026-09-28)
+CARGO        : cargo 1.99.0 (5f94df478 2026-08-27)
+DATE (UTC)   : 2026-10-09T12:31:43Z
+===================================================================
+$ cargo test --release --lib __probe -- --nocapture --test-threads=1
+
+   Compiling biodivine-lib-xml-dom v0.1.0 (/sandbox/biodivine-lib-xml-dom)
+warning: unused import: `super::*`
+  --> src/element/__probe.rs:18:5
+   |
+18 | use super::*;
+   |     ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `biodivine-lib-xml-dom` (lib test) generated 1 warning (run `cargo fix --lib -p biodivine-lib-xml-dom --tests` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 0.72s
+     Running unittests src/lib.rs (target/release/deps/biodivine_lib_xml_dom-fde1715c3ef41304)
+
+running 1 test
+test element::__probe::dropped_document_does_not_free_its_nodes ... before drop: strong_count(child) = 2, strong_count(parent) = 3
+after dropping the document and the parent handle:
+  strong_count(child) = 2
+  expected            1 (only the `child` handle above)
+
+thread 'element::__probe::dropped_document_does_not_free_its_nodes' (13602) panicked at src/element/__probe.rs:44:5:
+assertion `left == right` failed: reference cycle keeps the whole subtree alive (memory leak)
+  left: 2
+ right: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    element::__probe::dropped_document_does_not_free_its_nodes
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 81 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`
+
+-------------------------------------------------------------------
+PROBE_EXIT=101
+-------------------------------------------------------------------

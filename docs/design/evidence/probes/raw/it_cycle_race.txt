@@ -1,0 +1,37 @@
+===================================================================
+PROBE        : it_cycle_race.rs
+KIND         : it
+REPO         : /sandbox/biodivine-lib-xml-dom
+COMMIT       : 76beb74 Merge pull request #1 from sybila/feat/daemontus/initial-implementation
+RUSTC        : rustc 1.99.0 (b940084d7 2026-09-28)
+CARGO        : cargo 1.99.0 (5f94df478 2026-08-27)
+DATE (UTC)   : 2026-10-09T12:30:59Z
+===================================================================
+$ cargo test --release --test __probe -- --nocapture --test-threads=1
+
+   Compiling biodivine-lib-xml-dom v0.1.0 (/sandbox/biodivine-lib-xml-dom)
+    Finished `release` profile [optimized] target(s) in 0.52s
+     Running tests/__probe.rs (target/release/deps/__probe-81ee3879435e3dd8)
+
+running 1 test
+test concurrent_edits_must_not_create_cycles ... loops created: 37170 out of 128000 attempted parent/child pairs
+
+thread 'concurrent_edits_must_not_create_cycles' (12345) panicked at tests/__probe.rs:80:5:
+assertion `left == right` failed: concurrent edits created parent/child cycles
+  left: 37170
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    concurrent_edits_must_not_create_cycles
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+error: test failed, to rerun pass `--test __probe`
+
+-------------------------------------------------------------------
+PROBE_EXIT=101
+-------------------------------------------------------------------

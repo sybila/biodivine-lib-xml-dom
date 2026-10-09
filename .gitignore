@@ -6,3 +6,5 @@ __pycache__
 .pytest_cache
 *.so
 target/wheels
+docs/book/_build
+biodivine-lib-xml-dom-py-sys/docs/_build

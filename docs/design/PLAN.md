@@ -666,3 +666,39 @@ editing → clones/interner) are ordered so each is independently testable and r
 | R8 | Replacing the public API breaks downstream users (Biodivine tooling). | Churn for dependents. | Names kept where possible (`Document`, `Element`, `Namespace`, `QualifiedName`, `parse_*`, `write_*`, `xml_spec` types); the book has a "Migration from 0.1" chapter; version bumped to 0.2.0 on the `rewrite` branch (never published, never pushed). |
 | R9 | Sphinx/sphinx-design availability in this sandbox. | G6 could be blocked. | Fallback documented in G6's acceptance criteria: `mkdocs-material` content tabs, which offer the same language-switching behaviour. |
 | R10 | Toolchain/build reality: `maturin` + a C toolchain + Python headers are needed for G5. | G5 could be blocked. | `build-essential` is already installed; Python 3.11 + pip are present; PyO3 builds against the system CPython. Verified at the start of G5 before promising a wheel. |
+
+## 15. Implementation notes and deviations
+
+Recorded as the plan is executed; each entry says what changed and why.
+
+### 15.1 G2 — arena and handles
+
+* **`deep_clone_into` is infallible, so it has no `_checked` twin.** §4.2 listed one, but with the
+  snapshot protocol (§7, §3.1) the operation cannot fail: the source snapshot is taken under a
+  read lock and released, then the copy is inserted under the target's write lock. There is no
+  contention failure and no logical failure, so a `_checked` twin would be a pure middle man.
+  The `_checked`/panicking split therefore applies to the *editing* operations
+  (`append_child`, `insert_child`, `insert_before`, `insert_after`, `replace_with`, `set_root`,
+  `set_attribute`), and `detach`/`remove` are infallible for the same reason (`detach` on a
+  detached node is a documented no-op).
+* **Immutable payloads are shared *across* documents (risk R5 revised).** §7 said a cross-document
+  copy must "share nothing with the source". That is stricter than necessary and would defeat the
+  `Arc` dedup scheme requirement (1) asks to keep: `QualifiedName` and `Namespace` are immutable
+  values holding a local name / URI / prefix and no document identity, so a shared allocation can
+  neither expose nor retain the source document's state. What is guaranteed instead, and tested,
+  is that (a) the copy's document identity is the target, (b) the target document interns the
+  copy's names and namespaces into its own canonical allocation, and (c) the copy stays fully
+  usable after the source document has been dropped — i.e. nothing keeps the source arena alive.
+* **`NodeId` capacity.** Slots are never reclaimed (risk R3) and ids are `u32` indices, so a
+  document holds at most `u32::MAX` nodes over its lifetime. The bound is checked explicitly
+  (`arena::ensure_capacity`) and documented on `Document`/`NodeId`, and the guard itself is unit
+  tested, rather than letting the index wrap.
+* **The `xml_spec` `Arc<str>` refactor landed as its own commit** (`refactor(xml_spec): back
+  content newtypes with Arc<str>`) and is proven semantics-preserving: the `#[cfg(test)] mod tests`
+  block of `xml_spec.rs` is byte-identical before and after, the set of doctests is unchanged
+  (including `NCName::as_str`), and the rule-file assertions are untouched.
+* **The single-lock invariant is machine-checked in debug builds** by a re-entrancy guard keyed by
+  document identity. It panics on re-entering the *same* document's lock (the operation that would
+  hang) and deliberately tolerates nesting across different documents, because that is a lock
+  *ordering* concern which this crate avoids by construction (no operation holds two locks) rather
+  than a re-entrancy concern. Both behaviours are tested.

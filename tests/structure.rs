@@ -142,6 +142,36 @@ fn replacing_swaps_the_node_in_place() {
 }
 
 #[test]
+fn replacing_a_node_by_itself_is_a_documented_no_op() {
+    let document = Document::empty();
+    let root = element(&document, "root");
+    let child = element(&document, "child");
+    root.append_child(child.clone());
+    document.set_root(root.clone());
+
+    let before = snapshot(&document);
+    // Attached node: no error, no panic, nothing changes.
+    assert!(child.replace_with_checked(child.clone()).is_ok());
+    assert!(child.replace_with(child.clone()).ptr_eq(&child));
+    assert_eq!(snapshot(&document), before);
+    assert_eq!(names(&root), ["child"]);
+    assert_eq!(child.parent().unwrap(), root.node());
+
+    // Detached node: the same.
+    let detached = element(&document, "detached");
+    let before = snapshot(&document);
+    assert!(detached.replace_with_checked(detached.clone()).is_ok());
+    assert!(detached.replace_with(detached.clone()).ptr_eq(&detached));
+    assert_eq!(snapshot(&document), before);
+
+    // This matches the relative-insertion operations, which are no-ops in the same situation.
+    root.insert_before(child.clone(), child.clone());
+    root.insert_after(child.clone(), child.clone());
+    assert_eq!(names(&root), ["child"]);
+    assert_consistent(&document);
+}
+
+#[test]
 fn mixed_content_node_kinds_are_preserved() {
     let document = Document::empty();
     let root = element(&document, "root");

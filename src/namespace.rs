@@ -49,7 +49,10 @@ impl Namespace {
     ///
     /// # Errors
     ///
-    /// Returns `XmlError` if the namespace violates validation rules (see [`Namespace`]).
+    /// Returns [`XmlError::InvalidNamespace`] if `uri` is empty, and
+    /// [`XmlError::ReservedPrefix`] if the URI/prefix pair violates one of the reserved-binding
+    /// rules listed on [`Namespace`] (the `xmlns` prefix, the two reserved URIs, or `xml` bound to
+    /// anything other than `http://www.w3.org/XML/1998/namespace`).
     ///
     /// # Examples
     /// ```rust
@@ -77,8 +80,9 @@ impl Namespace {
     ///
     /// # Errors
     ///
-    /// Returns `XmlError` if the namespace violates validation rules for a namespace with
-    /// no prefix (see [`Namespace`]).
+    /// Returns [`XmlError::InvalidNamespace`] if `uri` is empty, and
+    /// [`XmlError::ReservedPrefix`] if `uri` is one of the two reserved namespace URIs, which may
+    /// never be declared as the default namespace (see [`Namespace`]).
     ///
     /// # Examples
     /// ```rust
@@ -96,7 +100,8 @@ impl Namespace {
     ///
     /// # Errors
     ///
-    /// Returns `XmlError` if the namespace violates validation rules (see [`Namespace`]).
+    /// Returns [`XmlError::InvalidName`] if `prefix` is not a valid `NCName`, plus the errors of
+    /// [`Namespace::new`] ([`XmlError::InvalidNamespace`], [`XmlError::ReservedPrefix`]).
     ///
     /// # Examples
     /// ```rust

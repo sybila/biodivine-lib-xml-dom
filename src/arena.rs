@@ -500,20 +500,31 @@ impl Arena {
     }
 
     /// Replaces the node `old` by `new` in `old`'s parent, leaving both in the arena (`old` ends
-    /// up detached). Returns the parent that `old` was removed from.
+    /// up detached).
+    ///
+    /// Replacing a node by itself is a **no-op that reports success**, mirroring
+    /// [`Arena::attach_relative`], where inserting a node before or after itself is also a no-op.
+    /// A no-op is preferable to an error here because "replace X by X" is a well-defined request
+    /// with an obvious meaning (the document already satisfies it), and because the node's
+    /// attachment state must not change the outcome: an attached node can no more be "replaced by
+    /// itself" than a detached one.
     ///
     /// # Errors
     ///
-    /// - [`XmlError::NodeHasNoParent`] if `old` is detached.
+    /// - [`XmlError::NodeHasNoParent`] if `old` is detached (`old != new`), because then there is
+    ///   nothing to replace it in.
     /// - [`XmlError::CycleDetected`] if `new` would create a cycle — either because it is an
     ///   ancestor of `old`'s parent, or because it is an ancestor of `old` itself (the latter
     ///   would leave `old` inside `new`'s subtree while claiming it is detached).
-    /// - [`XmlError::CannotAttachRoot`], [`XmlError::NotAnElement`] as [`Arena::attach`].
+    /// - [`XmlError::CannotAttachRoot`] if `new` is the document root.
     ///
-    /// Replacing a node by itself is a no-op. Nothing is modified when an error is returned.
-    pub(crate) fn replace(&mut self, old: NodeId, new: NodeId) -> XmlResult<NodeId> {
+    /// [`XmlError::NotAnElement`] cannot occur here: the parent link of a node is only ever set
+    /// by [`Arena::attach`], which requires the parent to be an element.
+    ///
+    /// Nothing is modified when an error is returned.
+    pub(crate) fn replace(&mut self, old: NodeId, new: NodeId) -> XmlResult<()> {
         if old == new {
-            return Err(XmlError::NodeHasNoParent(old));
+            return Ok(());
         }
         let parent = self
             .slot(old)
@@ -534,7 +545,7 @@ impl Arena {
         self.element_mut(parent).children[position] = new;
         self.slot_mut(new).parent = Some(parent);
         self.slot_mut(old).parent = None;
-        Ok(parent)
+        Ok(())
     }
 
     /// Sets the document root, returning the previous root.
@@ -806,10 +817,28 @@ mod tests {
         let new = element(&mut arena, "new");
         arena.append(parent, old).unwrap();
 
-        assert_eq!(arena.replace(old, new).unwrap(), parent);
+        arena.replace(old, new).unwrap();
         assert_eq!(arena.children(parent), &[new]);
         assert_eq!(arena.parent(new), Some(parent));
         assert_eq!(arena.parent(old), None);
+    }
+
+    #[test]
+    fn replace_by_self_is_a_no_op() {
+        let mut arena = Arena::new();
+        let parent = element(&mut arena, "p");
+        let child = element(&mut arena, "c");
+        let detached = element(&mut arena, "d");
+        arena.append(parent, child).unwrap();
+
+        // Attached node: no-op, and crucially not an error.
+        assert!(matches!(arena.replace(child, child), Ok(())));
+        assert_eq!(arena.children(parent), &[child]);
+        assert_eq!(arena.parent(child), Some(parent));
+
+        // Detached node: also a no-op, and also not an error.
+        assert!(matches!(arena.replace(detached, detached), Ok(())));
+        assert_eq!(arena.parent(detached), None);
     }
 
     #[test]

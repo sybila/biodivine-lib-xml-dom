@@ -155,8 +155,9 @@ impl QualifiedName {
     /// [`QualifiedName::resolve_attribute`].
     ///
     /// # Errors
-    /// Returns [`XmlError::InvalidName`] if the QName is invalid, or
-    /// [`XmlError::UndeclaredPrefix`] if a prefix is not declared.
+    /// Returns [`XmlError::InvalidName`] if the QName is invalid,
+    /// [`XmlError::UndeclaredPrefix`] if a prefix is not declared, or
+    /// [`XmlError::ReservedPrefix`] if the reserved `xmlns` prefix is used.
     ///
     /// # Examples
     /// ```rust
@@ -186,8 +187,9 @@ impl QualifiedName {
     /// [`QualifiedName::resolve_element`].
     ///
     /// # Errors
-    /// Returns [`XmlError::InvalidName`] if the QName is invalid, or
-    /// [`XmlError::UndeclaredPrefix`] if a prefix is not declared.
+    /// Returns [`XmlError::InvalidName`] if the QName is invalid,
+    /// [`XmlError::UndeclaredPrefix`] if a prefix is not declared, or
+    /// [`XmlError::ReservedPrefix`] if the reserved `xmlns` prefix is used.
     ///
     /// # Examples
     /// ```rust
@@ -308,8 +310,9 @@ impl QualifiedName {
     /// For attribute resolution, use [`QualifiedName::resolve_attribute_with_namespace_map`].
     ///
     /// # Errors
-    /// Returns [`XmlError::InvalidName`] if the QName is invalid, or
-    /// [`XmlError::UndeclaredPrefix`] if a prefix is not found in the map.
+    /// Returns [`XmlError::InvalidName`] if the QName is invalid,
+    /// [`XmlError::UndeclaredPrefix`] if a prefix is not found in the map, or
+    /// [`XmlError::ReservedPrefix`] if the reserved `xmlns` prefix is used.
     ///
     /// # Examples
     /// ```rust
@@ -336,8 +339,9 @@ impl QualifiedName {
     /// For element resolution, use [`QualifiedName::resolve_element_with_namespace_map`].
     ///
     /// # Errors
-    /// Returns [`XmlError::InvalidName`] if the QName is invalid, or
-    /// [`XmlError::UndeclaredPrefix`] if a prefix is not found in the map.
+    /// Returns [`XmlError::InvalidName`] if the QName is invalid,
+    /// [`XmlError::UndeclaredPrefix`] if a prefix is not found in the map, or
+    /// [`XmlError::ReservedPrefix`] if the reserved `xmlns` prefix is used.
     ///
     /// # Examples
     /// ```rust

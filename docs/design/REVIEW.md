@@ -148,6 +148,8 @@ The parser/serializer do not implement a set of rules that are locally decidable
 | --- | --- |
 | `rule.well-formedness.single-root-element` | a second root produces a confusing `InvalidOperation("Element belongs to a different document")` or an `add_child_element` failure rather than a validation statement; text outside the root is silently dropped |
 | `rule.elements-and-tags.end-tag-must-match-start-tag`, `rule.well-formedness.elements-nest-properly` | delegated entirely to `quick-xml`; on mismatch the whole parse fails with a generic message |
+| `rule.elements-and-tags.every-start-tag-must-have-end-tag` | **not enforced**: `parse_string("<a>")` returns a document whose root `<a>` was never closed. Found by the `tests/errors.rs` audit in G2 and pinned there as a characterisation test (`unclosed_elements_are_currently_accepted`) so that G3 has to change it deliberately. |
+| `rule.well-formedness.pi-target-not-xml` | **not enforced, and the node is silently lost**: `parse_string("<a><?xml target?></a>")` succeeds and quietly drops the processing instruction instead of reporting an illegal PI target. Same characterisation test. |
 | `rule.elements-and-tags.start-tag-syntax` / `rule.attributes.no-lt-in-values` | `<` inside an attribute value is not explicitly checked |
 | `rule.document-structure.processor-must-normalize-line-breaks` | not implemented (only `quick-xml`'s built-in `xml10_content`/`normalized_value` behaviour applies) |
 | `rule.document-structure.xml-lang-must-be-bcp47-or-empty`, `…xml-space-must-be-enumerated-default-preserve` | not checked anywhere |

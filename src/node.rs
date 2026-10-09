@@ -481,14 +481,20 @@ impl Node {
             })
     }
 
-    /// Replaces this node with `replacement` in this node's parent and returns this node
-    /// (now detached).
+    /// Replaces this node with `replacement` in this node's parent and returns this node.
+    ///
+    /// The returned value is the *old* node (this handle), which ends up detached: the
+    /// replacement takes its place in the parent's child list.
     ///
     /// # Panics
     ///
     /// Panics if this node has no parent ([`XmlError::NodeHasNoParent`]), if `replacement`
-    /// belongs to another document, or if the replacement would create a cycle (see
-    /// [`XmlError::CycleDetected`]).
+    /// belongs to another document ([`XmlError::ForeignDocument`]), if `replacement` is the
+    /// document root ([`XmlError::CannotAttachRoot`]), or if the replacement would create a cycle
+    /// ([`XmlError::CycleDetected`]).
+    ///
+    /// Replacing a node by itself is a documented no-op: it does not panic, leaves the document
+    /// unchanged and returns this node (still attached).
     #[track_caller]
     pub fn replace_with(&self, replacement: impl Into<Node>) -> Node {
         match self.replace_with_checked(replacement) {
@@ -501,27 +507,27 @@ impl Node {
     ///
     /// # Errors
     ///
-    /// - [`XmlError::NodeHasNoParent`] if this node is detached (there is nothing to replace it
-    ///   in).
     /// - [`XmlError::ForeignDocument`] if `replacement` belongs to another document.
+    /// - [`XmlError::NodeHasNoParent`] if this node is detached, so there is nothing to replace it
+    ///   in.
     /// - [`XmlError::CycleDetected`] if `replacement` is an ancestor of the parent, or an
     ///   ancestor of this node.
     /// - [`XmlError::CannotAttachRoot`] if `replacement` is the document root.
     ///
-    /// The document is never modified when an error is returned.
+    /// Replacing a node by itself is a **no-op that reports success**
+    /// ([`Ok`](XmlResult::Ok)), whether or not the node is attached; the document is left
+    /// unchanged. This mirrors [`Node::insert_before`]/[`Node::insert_after`], which are also
+    /// no-ops when the sibling and the child are the same node. The document is never modified
+    /// when an error is returned.
     pub fn replace_with_checked(&self, replacement: impl Into<Node>) -> XmlResult<()> {
         let replacement = replacement.into();
         if !replacement.belongs_to(&self.document) {
             return Err(XmlError::ForeignDocument);
         }
-        if replacement.id == self.id {
-            return Err(XmlError::NodeHasNoParent(self.id));
-        }
         self.document
             .write_arena("Node::replace_with_checked", |arena| {
                 arena.replace(self.id, replacement.id)
             })
-            .map(|_| ())
     }
 
     /// The common "can `child` become a child of `self`" precondition.

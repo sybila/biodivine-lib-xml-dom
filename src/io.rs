@@ -54,11 +54,27 @@ pub fn parse_string(xml: &str) -> XmlResult<Document> {
 ///
 /// # Errors
 ///
-/// Returns a typed [`XmlError`] if the input is not a well-formed XML document: malformed markup
-/// ([`XmlError::MalformedXml`]), content that is not valid UTF-8 ([`XmlError::InvalidUtf8`]),
-/// undeclared prefixes ([`XmlError::UndeclaredPrefix`]), duplicate attributes
-/// ([`XmlError::DuplicateAttribute`]) and every construction error raised while building nodes
-/// (invalid names, comments, CDATA, processing instructions).
+/// Returns a typed [`XmlError`] if the input is not a well-formed XML document. The variants that
+/// can be reported are:
+///
+/// - [`XmlError::MalformedXml`] — malformed markup, including unbalanced or mismatched tags and a
+///   missing or duplicated root element;
+/// - [`XmlError::InvalidUtf8`] — the input is not valid UTF-8;
+/// - [`XmlError::InvalidName`] — an element, attribute or namespace prefix is not a valid `NCName`,
+///   or a qualified name is malformed;
+/// - [`XmlError::UndeclaredPrefix`] — a prefix is used but never declared in scope;
+/// - [`XmlError::ReservedPrefix`] — the reserved `xml`/`xmlns` prefixes are used illegally;
+/// - [`XmlError::InvalidNamespace`] — a namespace declaration is illegal, e.g. `xmlns:p=""`;
+/// - [`XmlError::DuplicateAttribute`] — the same attribute (by name or by expanded name) appears
+///   twice on one element;
+/// - [`XmlError::InvalidComment`], [`XmlError::InvalidCData`],
+///   [`XmlError::InvalidProcessingInstruction`] — a comment, CDATA section or processing
+///   instruction is illegal;
+/// - [`XmlError::UndeclaredEntityReference`], [`XmlError::InvalidCharacterReference`] — an entity
+///   or character reference could not be expanded (see the module documentation for the entity
+///   policy; this is not implemented yet, see D1 in `docs/design/REVIEW.md`).
+///
+/// [`XmlError::Io`] is reported only by [`parse_file`], which opens the reader for this function.
 pub fn parse_reader<R: BufRead>(reader: R) -> XmlResult<Document> {
     let mut xml_reader = Reader::from_reader(reader);
 

@@ -702,3 +702,37 @@ Recorded as the plan is executed; each entry says what changed and why.
   hang) and deliberately tolerates nesting across different documents, because that is a lock
   *ordering* concern which this crate avoids by construction (no operation holds two locks) rather
   than a re-entrancy concern. Both behaviours are tested.
+
+### 15.2 G2 — post-review round
+
+* **`replace_with` on the node itself is a no-op, not an error.** The first implementation returned
+  `XmlError::NodeHasNoParent` for `x.replace_with_checked(x)`, which was both inconsistent with
+  `Arena::replace`'s own documentation and with the sibling operations (`insert_before`/
+  `insert_after` are documented no-ops when sibling and child coincide), and plainly misleading:
+  the node *does* have a parent, the request is simply already satisfied. It now reports success
+  and leaves the document untouched, for attached and detached nodes alike, and both the checked
+  and the panicking variant behave that way. (`Arena::replace` returns `XmlResult<()>` now: the
+  parent it used to return was never used, and a no-op has no parent to report.)
+* **Namespaces: `resolve_prefix` vs `get_namespace`.** §6.2 lists a `resolve_prefix` in the
+  namespace API; the public accessor that was implemented is `get_namespace` (the name the previous
+  version already used). `Arena::resolve_prefix` exists internally as the primitive that walks the
+  ancestor chain. No alias is added: `get_namespace` is the equivalent accessor and a second name
+  for the same thing would only be a second spelling to keep in sync.
+* **Every `# Errors` section was audited against the implementation** rather than assumed, and the
+  audit is now checked by `tests/errors.rs`, which triggers each documented condition and asserts
+  the documented variant comes back (13 tests, covering `Namespace::{new,without_prefix,prefixed}`,
+  `QualifiedName::{without_namespace,with_namespace,resolve_*}`, `Document::{set_root_checked,
+  create_*}`, `Element::{set_attribute_checked,declare_namespace_checked,resolve_*}`,
+  `Node::{append_child_checked,insert_child_checked,insert_{before,after}_checked,
+  replace_with_checked}`, `parse_*`/`write_file`). Gaps found and fixed while auditing:
+  `QualifiedName::resolve_*` and `Element::resolve_*` can return `XmlError::ReservedPrefix` (for the
+  `xmlns` prefix) but their `# Errors` sections did not say so; `Namespace::{new,prefixed,
+  without_prefix}` documented "an error" without naming the variants; and `parse_reader`'s list was
+  incomplete (it omitted `InvalidName`, `ReservedPrefix` and `InvalidNamespace`, all of which it
+  can report, as the new tests confirm).
+* **Two further D8 gaps found by that audit** (both pinned by the characterisation test
+  `unclosed_elements_are_currently_accepted` in `tests/errors.rs` and added to REVIEW D8, so G3 has
+  to fix them deliberately): `parse_string("<a>")` accepts an unclosed start tag
+  (`rule.elements-and-tags.every-start-tag-must-have-end-tag`), and
+  `parse_string("<a><?xml target?></a>")` accepts an illegal processing-instruction target
+  (`rule.well-formedness.pi-target-not-xml`) while silently dropping the node.

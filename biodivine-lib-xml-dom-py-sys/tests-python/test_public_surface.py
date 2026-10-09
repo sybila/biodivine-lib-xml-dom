@@ -104,11 +104,11 @@ def test_the_public_surface_is_wrappers_and_functions_only() -> None:
         "Namespace",
         "Node",
         "NodeId",
-        "NodeKind",
         "QualifiedName",
         "ValidationError",
         "ValidationErrors",
     }
+    assert companion == ["NodeKind"], "the companion namespace is classified separately"
     assert companion == sorted(COMPANION_NAMESPACES), (
         "the companion namespaces are a decision; keep the list and this assertion in sync"
     )

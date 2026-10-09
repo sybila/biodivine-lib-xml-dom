@@ -1,5 +1,12 @@
 use crate::error::XmlError;
+use std::borrow::Cow;
 use std::sync::Arc;
+
+pub mod declaration;
+pub mod rules;
+
+pub use declaration::{UTF8_ENCODING_NAME, XML_VERSION, XmlDeclaration};
+pub use rules::RULES_DIRECTORY;
 
 /// Validates `s` and returns it as an `Arc<str>`, or a validation error naming the expected
 /// content type.
@@ -27,6 +34,34 @@ where
     }
 }
 
+/// Normalises the line ends of `input` exactly as an XML processor must before parsing
+/// (`rule.document-structure.processor-must-normalize-line-breaks`): `\r\n` and a lone `\r`
+/// become `\n`.
+///
+/// This is applied at construction time to the node kinds whose content cannot be escaped on
+/// output — comments, CDATA sections and processing-instruction data — so that the stored value is
+/// exactly the value a re-parse would produce. Text nodes and attribute values are *not* normalised
+/// here, because the serializer can escape a literal `\r` as `&#xD;` and therefore preserve the
+/// caller's bytes; see `docs/design/PLAN.md` §16.
+pub(crate) fn normalize_line_ends(input: &str) -> Cow<'_, str> {
+    if !input.contains('\r') {
+        return Cow::Borrowed(input);
+    }
+    let mut normalized = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    while let Some(character) = chars.next() {
+        if character == '\r' {
+            if chars.peek() == Some(&'\n') {
+                chars.next();
+            }
+            normalized.push('\n');
+        } else {
+            normalized.push(character);
+        }
+    }
+    Cow::Owned(normalized)
+}
+
 /// Declares a validated, immutable, `Arc`-backed string newtype.
 ///
 /// The generated type stores its content in an `Arc<str>`, so cloning it (and cloning anything
@@ -47,6 +82,7 @@ macro_rules! validated_string_newtype {
         display_name = $display_name:literal,
         validate = $validate:expr,
         error = $error:expr,
+        normalize_line_ends = $normalize:literal,
         as_str_docs { $(#[$as_str_meta:meta])* }
     ) => {
         $(#[$meta])*
@@ -108,6 +144,13 @@ macro_rules! validated_string_newtype {
             type Error = XmlError;
 
             fn try_from(s: &str) -> Result<Self, Self::Error> {
+                let normalized;
+                let s: &str = if $normalize {
+                    normalized = normalize_line_ends(s);
+                    normalized.as_ref()
+                } else {
+                    s
+                };
                 validated_string(s, $display_name, $validate, $error).map($name)
             }
         }
@@ -165,6 +208,7 @@ validated_string_newtype! {
     display_name = "NCName",
     validate = is_valid_ncname,
     error = XmlError::InvalidName,
+    normalize_line_ends = false,
     as_str_docs {
         /// Returns the `NCName` as a string slice.
         ///
@@ -204,6 +248,7 @@ validated_string_newtype! {
     display_name = "XML text",
     validate = is_valid_text,
     error = XmlError::InvalidText,
+    normalize_line_ends = false,
     as_str_docs {
         /// Returns the text as a string slice.
     }
@@ -246,6 +291,7 @@ validated_string_newtype! {
     display_name = "CDATA content",
     validate = |s| !s.contains("]]>"),
     error = XmlError::InvalidCData,
+    normalize_line_ends = true,
     as_str_docs {
         /// Returns the CDATA content as a string slice.
     }
@@ -280,6 +326,7 @@ validated_string_newtype! {
     display_name = "XML comment",
     validate = |s| !s.contains("--") && !s.ends_with('-'),
     error = XmlError::InvalidComment,
+    normalize_line_ends = true,
     as_str_docs {
         /// Returns the comment content as a string slice.
     }
@@ -312,6 +359,7 @@ validated_string_newtype! {
     display_name = "PI target",
     validate = |s| is_valid_name(s) && !s.eq_ignore_ascii_case("xml"),
     error = XmlError::InvalidProcessingInstruction,
+    normalize_line_ends = false,
     as_str_docs {
         /// Returns the PI target as a string slice.
     }
@@ -341,6 +389,7 @@ validated_string_newtype! {
     display_name = "PI content",
     validate = |s| !s.contains("?>"),
     error = XmlError::InvalidProcessingInstruction,
+    normalize_line_ends = true,
     as_str_docs {
         /// Returns the PI content as a string slice.
     }
@@ -407,6 +456,58 @@ fn is_name_char(c: char, allow_colon: bool) -> bool {
         || c == '-'
         || c == '.'
         || matches!(cp, 48..=57 | 0xB7 | 0x0300..=0x036F | 0x203F..=0x2040)
+}
+
+/// Whether `value` is a legal value for the `xml:space` attribute.
+///
+/// `rule.document-structure.xml-space-must-be-enumerated-default-preserve`: the attribute is an
+/// enumerated type with the values `default` and `preserve`. (The rule itself is stated for a DTD
+/// declaration, which this crate does not process; the part that is observable without a DTD is the
+/// value of the attribute, and that is what this predicate checks.)
+pub fn is_valid_xml_space_value(value: &str) -> bool {
+    value == "default" || value == "preserve"
+}
+
+/// Whether `value` is a legal value for the `xml:lang` attribute, or the empty string.
+///
+/// `rule.document-structure.xml-lang-must-be-bcp47-or-empty`: the value must be a language
+/// identifier as defined by IETF BCP 47, or the empty string.
+///
+/// BCP 47's full grammar (including the registry of registered subtags) is deliberately not
+/// reproduced here; this is the pragmatic subset the specification's own examples need:
+/// a primary subtag of 1-8 ASCII alphanumerics **starting with a letter**, followed by any number
+/// of `-`-separated subtags of 1-8 ASCII alphanumerics. That accepts `en`, `en-GB`, `de-CH-1901`,
+/// `zh-Hant-TW`, `x-private` and `i-klingon`, and rejects what the rule's violating example
+/// rejects (`en_US_very_long_invalid`: underscores, an empty-free but over-long subtag set and a
+/// non-letter start are all refused).
+pub fn is_valid_language_tag(value: &str) -> bool {
+    if value.is_empty() {
+        // "in addition, the empty string may be specified"
+        return true;
+    }
+    let mut subtags = value.split('-');
+    let Some(primary) = subtags.next() else {
+        return false;
+    };
+    if !is_language_primary_subtag(primary) {
+        return false;
+    }
+    subtags.all(is_language_subtag)
+}
+
+/// A BCP 47 primary language subtag: 1-8 ASCII alphanumerics, starting with a letter.
+fn is_language_primary_subtag(subtag: &str) -> bool {
+    !subtag.is_empty()
+        && subtag.len() <= 8
+        && subtag.as_bytes()[0].is_ascii_alphabetic()
+        && subtag.bytes().all(|byte| byte.is_ascii_alphanumeric())
+}
+
+/// A BCP 47 follow-up subtag: 1-8 ASCII alphanumerics.
+fn is_language_subtag(subtag: &str) -> bool {
+    !subtag.is_empty()
+        && subtag.len() <= 8
+        && subtag.bytes().all(|byte| byte.is_ascii_alphanumeric())
 }
 
 /// Validate the URI and prefix according to XML namespace rules.
@@ -567,11 +668,7 @@ mod tests {
     /// Helper function to verify that a rule file exists for the test
     /// This ensures that if a rule is removed, the test will break and be noticed
     fn verify_rule_exists(rule_file: &str) {
-        let rule_path = format!("specification/rules/{rule_file}");
-        assert!(
-            std::path::Path::new(&rule_path).exists(),
-            "Rule file {rule_file} does not exist"
-        );
+        crate::xml_spec::rules::assert_rule_exists(rule_file);
     }
 
     #[test]
@@ -883,5 +980,84 @@ mod tests {
         // ?> is rejected
         assert!(PiData::try_from("has ?> in it").is_err());
         assert!(PiData::try_from("?> at start").is_err());
+    }
+}
+
+#[cfg(test)]
+mod g3_tests {
+    use super::*;
+
+    #[test]
+    fn line_end_normalisation() {
+        // rule: rule.document-structure.processor-must-normalize-line-breaks.md
+        rules::assert_rule_exists(
+            "rule.document-structure.processor-must-normalize-line-breaks.md",
+        );
+
+        assert_eq!(normalize_line_ends("plain"), "plain");
+        assert_eq!(normalize_line_ends("a\r\nb"), "a\nb");
+        assert_eq!(normalize_line_ends("a\rb"), "a\nb");
+        assert_eq!(normalize_line_ends("a\nb"), "a\nb");
+        assert_eq!(normalize_line_ends("a\r\r\nb\rc"), "a\n\nb\nc");
+        // Borrowed when there is nothing to do.
+        assert!(matches!(normalize_line_ends("plain"), Cow::Borrowed(_)));
+        assert!(matches!(normalize_line_ends("a\rb"), Cow::Owned(_)));
+    }
+
+    #[test]
+    fn content_that_cannot_be_escaped_is_normalised_at_construction() {
+        // Comments, CDATA sections and PI data are written verbatim, so a literal `\r` could not
+        // survive a round trip; normalising it at construction makes the stored value exactly what
+        // a re-parse produces. Text nodes and attribute values *can* be escaped (`&#xD;`), so their
+        // bytes are preserved and normalisation happens neither here nor in the parser.
+        let comment: Comment = "a\r\nb".try_into().unwrap();
+        assert_eq!(comment.as_str(), "a\nb");
+        let cdata: CData = "a\rb".try_into().unwrap();
+        assert_eq!(cdata.as_str(), "a\nb");
+        let data: PiData = "a\r\nb".try_into().unwrap();
+        assert_eq!(data.as_str(), "a\nb");
+
+        let text: Text = "a\r\nb".try_into().unwrap();
+        assert_eq!(text.as_str(), "a\r\nb", "text keeps the caller's bytes");
+        let name: NCName = "a".try_into().unwrap();
+        assert_eq!(name.as_str(), "a");
+    }
+
+    #[test]
+    fn xml_space_values() {
+        // rule: rule.document-structure.xml-space-must-be-enumerated-default-preserve.md
+        rules::assert_rule_exists(
+            "rule.document-structure.xml-space-must-be-enumerated-default-preserve.md",
+        );
+        assert!(is_valid_xml_space_value("default"));
+        assert!(is_valid_xml_space_value("preserve"));
+        assert!(!is_valid_xml_space_value("preserved"));
+        assert!(!is_valid_xml_space_value("Default"));
+        assert!(!is_valid_xml_space_value(""));
+    }
+
+    #[test]
+    fn language_tags() {
+        // rule: rule.document-structure.xml-lang-must-be-bcp47-or-empty.md
+        rules::assert_rule_exists("rule.document-structure.xml-lang-must-be-bcp47-or-empty.md");
+
+        // The empty string is explicitly allowed.
+        assert!(is_valid_language_tag(""));
+        // The specification's valid example, plus common shapes.
+        assert!(is_valid_language_tag("en-GB"));
+        assert!(is_valid_language_tag("en"));
+        assert!(is_valid_language_tag("de-CH-1901"));
+        assert!(is_valid_language_tag("zh-Hant-TW"));
+        assert!(is_valid_language_tag("x-private"));
+        assert!(is_valid_language_tag("i-klingon"));
+        // The specification's violating example, plus the obvious neighbours.
+        assert!(!is_valid_language_tag("en_US_very_long_invalid"));
+        assert!(!is_valid_language_tag("en_US"));
+        assert!(!is_valid_language_tag("-en"));
+        assert!(!is_valid_language_tag("en-"));
+        assert!(!is_valid_language_tag("1en"));
+        assert!(!is_valid_language_tag("verylongprimary"));
+        assert!(!is_valid_language_tag("en-abcdefghi")); // a 9-character subtag
+        assert!(is_valid_language_tag("en-too-long-subtag")); // several short subtags are fine
     }
 }

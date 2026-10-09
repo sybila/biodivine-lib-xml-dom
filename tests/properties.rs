@@ -514,6 +514,34 @@ proptest! {
 }
 
 proptest! {
+    #![proptest_config(ProptestConfig::with_cases(256))]
+
+    /// The complementary direction of validation: a document the model considers consistent must
+    /// produce **zero** issues. An over-eager rule that flags legitimate documents is the main risk
+    /// of the validation pass, and a generator finds that far better than curated fixtures: this
+    /// covers every name/declaration/attribute/child-kind combination the generator can build,
+    /// including documents with a default namespace, `p0`/`p1` scopes, redundant declarations and
+    /// markup-heavy values.
+    #[test]
+    fn generated_documents_validate_clean(generated in arb_document_consistent()) {
+        let document = build_document(&generated);
+        if let Err(errors) = document.validate() {
+            prop_assert!(false, "a consistent document was reported as invalid:\n{errors}");
+        }
+        // ... and the round trip must not introduce a problem either.
+        let serialized = write_string(&document).expect("serialize");
+        let reparsed = parse_string(&serialized).expect("parse");
+        if let Err(errors) = reparsed.validate() {
+            prop_assert!(
+                false,
+                "the round trip introduced a validation problem:\n{errors}\nin:\n{serialized}"
+            );
+        }
+        prop_assert!(document.is_valid());
+    }
+}
+
+proptest! {
     #![proptest_config(ProptestConfig::with_cases(512))]
 
     /// Arbitrary bytes must never make the parser panic.

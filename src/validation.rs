@@ -59,9 +59,13 @@ use crate::xml_spec::{NCName, is_valid_language_tag, is_valid_xml_space_value};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidationErrorKind {
     // -------------------------------------------------------------------------------------
-    // Structure. These invariants are maintained by the arena itself, so a problem here means
-    // that the tree is not in the shape the rest of the library assumes; they are checked
-    // anyway, so that the guarantee does not depend on the maintaining code being correct.
+    // Structure. Every variant below except `MissingRoot` is a *defensive self-check*: the arena
+    // maintains those invariants on every mutation (parent and child links are written together,
+    // `set_root` replaces the root rather than appending a second one, and cycles are rejected by
+    // `Arena::attach`), so no sequence of public API calls can produce them. They are checked
+    // anyway so that the guarantee does not depend on the maintaining code being correct, and so
+    // that the corresponding document-level rules have an explicit enforcement point. Only
+    // `MissingRoot` is reachable through the public API (a document to which no root was set).
     // -------------------------------------------------------------------------------------
     /// The document has no root element (`rule.well-formedness.document-production`).
     MissingRoot,
@@ -341,6 +345,12 @@ pub(crate) fn validate_arena(arena: &Arena) -> Vec<XmlValidationError> {
 }
 
 /// The structural self-checks.
+///
+/// Only the missing-root check can fire for a document built through this crate's API; the others
+/// verify invariants that [`Arena`] maintains on every mutation (see the note on
+/// [`ValidationErrorKind`]'s structural variants). They are cheap, they are what the corresponding
+/// specification rules are about, and they mean a future refactor cannot break the tree model
+/// silently.
 fn check_structure(arena: &Arena, errors: &mut Vec<XmlValidationError>) {
     match arena.root() {
         None => errors.push(XmlValidationError::document(
@@ -494,6 +504,13 @@ fn check_xml_attribute_values(
 }
 
 /// `xml:id` uniqueness over the attached tree.
+///
+/// Uniqueness is a property of the *document*, i.e. of the tree reachable from the root, so a
+/// detached node is never compared with an attached one. That is what makes the normal workflow
+/// "clone a subtree, edit the copy, attach it later" possible: the detached `deep_clone` carries
+/// the same `xml:id` values as its original, and only the act of attaching it creates the
+/// duplicate that the rule is about. Each node beyond the first one carrying a value gets exactly
+/// one issue, so a value shared by three attached elements produces two issues.
 fn check_xml_id_uniqueness(arena: &Arena, errors: &mut Vec<XmlValidationError>) {
     let Some(root) = arena.root() else {
         return;

@@ -841,6 +841,32 @@ Recorded as the plan is executed; each entry says what changed and why.
   consumes language information, so they are recorded as *not applicable* rather than silently
   dropped. All three verdicts are in `docs/design/evidence/rule-enforcement.md`, which now covers
   layers B, C and D (66 rules: 54 enforced, 6 partial, 4 deferred, 2 n/a).
+* **The `xml:id` policy is pinned in both directions** (advisor condition C1), in
+  `tests/validation.rs::the_xml_id_policy_is_pinned_in_both_directions` and in the rustdoc of
+  `Document::validate`:
+  (a) a detached `deep_clone` that repeats its original's `xml:id` produces **no** issue;
+  (b) once *both* are attached the duplicate *is* reported — exactly one issue, on the later node,
+  with the earlier one named in the message — and a third element sharing the value adds exactly
+  one more issue, so each offending node is reported once;
+  (c) node-local rules (`xml:id` syntax, `xml:lang`, `xml:space`) *are* reported for detached
+  nodes, and fixing them there removes the issues without attaching anything;
+  (d) the attached-tree-only rule for uniqueness is stated in the `validate()` rustdoc and here.
+* **The no-false-positive direction is a property, not a fixture list** (advisor condition C2):
+  `tests/properties.rs::generated_documents_validate_clean` reuses the round-trip generator and
+  asserts that every generated document validates with zero issues, that `is_valid()` agrees, and
+  that a `write`/`parse` round trip does not introduce a problem either (256 cases). This is what
+  catches an over-eager rule, which is the main risk of adding validation at all.
+* **The structural checks are labelled honestly** (advisor condition C3). `MultipleRootElements`
+  and `ContentOutsideRoot` are *parser* errors (`XmlError`) — a second root or text outside the root
+  cannot even be loaded — and of the validation kinds only `MissingRoot` is reachable through the
+  public API: the arena writes parent and child links together, `set_root` replaces the root rather
+  than appending a second one, and `Arena::attach` rejects cycles. The other four structural
+  variants are therefore documented as *defensive self-checks* on the enum, at `check_structure`,
+  and in the `validate()` rustdoc, and
+  `tests/validation.rs::consistent_documents_produce_no_structural_issues` asserts the complementary
+  direction over a representative set (no root, root only, detached subtree present, re-attached
+  subtree, a 2000-level tree, mixed content of every kind, cleared root) so the checks cannot
+  silently start producing false positives.
 * **Validation is read-only and takes the lock once.** `Document::validate` goes through
   `read_arena`, so it cannot re-enter the lock, and a test asserts that the serialized document is
   unchanged by a validation run.

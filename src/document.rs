@@ -357,6 +357,27 @@ impl Document {
     /// namespace declaration that a subtree relies on, or moving an element into a scope where its
     /// prefix means something else, succeeds silently and is reported here.
     ///
+    /// # Scope of the checks
+    ///
+    /// * *Node-local* rules — whether a name resolves against the namespace declarations in scope
+    ///   for the node, and the shapes of `xml:id`, `xml:lang` and `xml:space` — are checked for
+    ///   every node, **including detached ones**, so a subtree can be prepared and validated before
+    ///   it is attached.
+    /// * *Document-wide* rules — currently `xml:id` uniqueness — are checked over the tree
+    ///   reachable from the root only. A detached [`Node::deep_clone`] legitimately repeats its
+    ///   original's `xml:id` values, and attaching it is what creates the duplicate that
+    ///   `rule.attributes.id-must-be-unique` is about.
+    /// * Being *detached* is never an error by itself (requirement (2) makes detached nodes a
+    ///   normal state), and neither is a missing root: [`crate::ValidationErrorKind::MissingRoot`] is
+    ///   reported, and the rest of the document is still checked.
+    ///
+    /// The structural diagnostics ([`crate::ValidationErrorKind::ParentChildMismatch`],
+    /// [`crate::ValidationErrorKind::CyclicStructure`], [`crate::ValidationErrorKind::RootHasParent`],
+    /// [`crate::ValidationErrorKind::RootIsNotAnElement`]) are *defensive self-checks* of invariants the
+    /// arena maintains on every mutation, so no sequence of public API calls can produce them;
+    /// only [`crate::ValidationErrorKind::MissingRoot`] is reachable from the API. They exist so that the
+    /// guarantee does not depend on the maintaining code being correct.
+    ///
     /// # Errors
     ///
     /// Returns [`crate::XmlValidationErrors`] containing one [`crate::XmlValidationError`] per

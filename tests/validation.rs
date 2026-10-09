@@ -355,6 +355,176 @@ fn a_detached_copy_does_not_conflict_with_its_original() {
 }
 
 #[test]
+fn the_xml_id_policy_is_pinned_in_both_directions() {
+    // rule: rule.attributes.id-must-be-unique.md
+    // rule: rule.attributes.id-must-be-name.md
+    rules::assert_rule_exists("rule.attributes.id-must-be-unique.md");
+    rules::assert_rule_exists("rule.attributes.id-must-be-name.md");
+
+    let document = Document::empty();
+    let root = element(&document, "root");
+    document.set_root(root.clone());
+    root.set_attribute(xml_name("id"), "one");
+
+    // (a) A detached `deep_clone` repeats its original's `xml:id` and must NOT be reported:
+    //     uniqueness is a property of the document, i.e. of the tree reachable from the root.
+    let clone = root.deep_clone();
+    assert_valid(&document);
+    assert_eq!(clone.attribute(&xml_name("id")).unwrap().as_ref(), "one");
+
+    // (b) Once *both* are attached, the duplicate IS reported - on the later node, once, with the
+    //     first node named as the previous user. This is the state a user can actually reach.
+    root.append_child(clone.clone());
+    let errors = document.validate().unwrap_err();
+    assert_eq!(errors.len(), 1, "{errors}");
+    let error = &errors.as_slice()[0];
+    assert_eq!(
+        error.kind(),
+        &ValidationErrorKind::DuplicateXmlId { id: nc_name("one") }
+    );
+    assert_eq!(error.node(), Some(clone.id()));
+    assert!(error.message().contains("already used by node"));
+
+    // A third node with the same value adds exactly one more issue (one per offending node).
+    let third = element(&document, "third");
+    third.set_attribute(xml_name("id"), "one");
+    root.append_child(third.clone());
+    let errors = document.validate().unwrap_err();
+    assert_eq!(errors.len(), 2, "{errors}");
+    assert_eq!(
+        errors.iter().map(|error| error.node()).collect::<Vec<_>>(),
+        vec![Some(clone.id()), Some(third.id())]
+    );
+
+    // (c) Node-local rules ARE reported for detached nodes, so a subtree can be checked before it
+    //     is attached.
+    let detached = element(&document, "detached");
+    detached.set_attribute(xml_name("id"), "not a name");
+    detached.set_attribute(xml_name("lang"), "de_DE");
+    detached.set_attribute(xml_name("space"), "preserved");
+    let errors = document.validate().unwrap_err();
+    let detached_errors: Vec<&XmlValidationError> = errors
+        .iter()
+        .filter(|error| error.node() == Some(detached.id()))
+        .collect();
+    assert_eq!(detached_errors.len(), 3, "{errors}");
+    assert_eq!(
+        detached_errors
+            .iter()
+            .map(|error| error.kind().rule())
+            .collect::<Vec<_>>(),
+        vec![
+            "rule.attributes.id-must-be-name.md",
+            "rule.document-structure.xml-lang-must-be-bcp47-or-empty.md",
+            "rule.document-structure.xml-space-must-be-enumerated-default-preserve.md",
+        ]
+    );
+    // Fixing the detached node removes its issues without attaching it.
+    detached.set_attribute(xml_name("id"), "unique");
+    detached.set_attribute(xml_name("lang"), "en");
+    detached.set_attribute(xml_name("space"), "default");
+    let remaining: Vec<XmlValidationError> = document
+        .validate()
+        .unwrap_err()
+        .into_errors()
+        .into_iter()
+        .filter(|error| error.node() == Some(detached.id()))
+        .collect();
+    assert!(remaining.is_empty());
+}
+
+#[test]
+fn consistent_documents_produce_no_structural_issues() {
+    // The structural diagnostics are defensive self-checks except for `MissingRoot`, so the
+    // complementary direction matters as much as the positive one: a representative set of
+    // perfectly consistent documents must produce no structural issue at all, or the checks would
+    // be "silently starting to produce false positives".
+    fn structural(document: &Document) -> Vec<ValidationErrorKind> {
+        document
+            .validate()
+            .err()
+            .map(|errors| {
+                errors
+                    .into_errors()
+                    .into_iter()
+                    .map(|error| error.kind().clone())
+                    .filter(|kind| {
+                        matches!(
+                            kind,
+                            ValidationErrorKind::ParentChildMismatch
+                                | ValidationErrorKind::CyclicStructure
+                                | ValidationErrorKind::RootHasParent
+                                | ValidationErrorKind::RootIsNotAnElement
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    // No root, no nodes at all: only the missing-root issue, and no structural noise.
+    let empty = Document::empty();
+    assert!(structural(&empty).is_empty());
+    assert_eq!(
+        kinds(&empty),
+        vec![ValidationErrorKind::MissingRoot],
+        "a missing root is the one reachable structural diagnostic"
+    );
+    assert_eq!(
+        empty.validate().unwrap_err().as_slice()[0].kind(),
+        &ValidationErrorKind::MissingRoot
+    );
+
+    // Root only.
+    let document = Document::empty();
+    let root = element(&document, "root");
+    document.set_root(root.clone());
+    assert!(structural(&document).is_empty());
+
+    // A detached subtree exists but is not attached.
+    let parent = element(&document, "parent");
+    let child = element(&document, "child");
+    parent.append_child(child.clone());
+    assert!(structural(&document).is_empty());
+
+    // Re-attached subtree.
+    root.append_child(parent.clone());
+    assert!(structural(&document).is_empty());
+
+    // A deep tree.
+    let deep = element(&document, "deep");
+    document.set_root(deep.clone());
+    let mut current = deep;
+    for _ in 0..2_000 {
+        let next = element(&document, "level");
+        current.append_child(next.clone());
+        current = next;
+    }
+    assert!(structural(&document).is_empty());
+
+    // Mixed content of every kind.
+    let document = Document::empty();
+    let mixed = element(&document, "mixed");
+    document.set_root(mixed.clone());
+    mixed.append_child(document.create_text("text").unwrap());
+    mixed.append_child(document.create_comment(" comment ").unwrap());
+    mixed.append_child(document.create_cdata("raw").unwrap());
+    mixed.append_child(
+        document
+            .create_processing_instruction("target", "data")
+            .unwrap(),
+    );
+    mixed.append_child(element(&document, "child"));
+    assert!(structural(&document).is_empty());
+    assert_valid(&document);
+
+    // Clearing the root leaves a detached (but consistent) subtree.
+    document.clear_root();
+    assert!(structural(&document).is_empty());
+    assert_eq!(kinds(&document), vec![ValidationErrorKind::MissingRoot]);
+}
+
+#[test]
 fn xml_lang_and_xml_space_values_are_checked() {
     // rule: rule.document-structure.xml-lang-must-be-bcp47-or-empty.md
     // rule: rule.document-structure.xml-space-must-be-enumerated-default-preserve.md

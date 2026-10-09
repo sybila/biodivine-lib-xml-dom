@@ -805,3 +805,42 @@ Recorded as the plan is executed; each entry says what changed and why.
   document would either duplicate that logic or leave the target partially modified on error.
   `parse_bytes` exists as planned. Indentation on output is still omitted (it would inject
   whitespace into mixed content and is not needed for fidelity).
+
+### 15.4 G4 — whole-document validation
+
+* **The error type is a newtype around the list.** The criterion said
+  `Result<(), Vec<XmlValidationError>>` "or equivalent"; the implementation returns
+  `Result<(), XmlValidationErrors>`, a newtype that derefs to a slice, iterates, implements
+  `std::error::Error` and renders *all* issues in one `Display` (so a caller can `?` it and a
+  human can read the whole list). The list is deterministic: nodes in arena order, and within a
+  node the checks run in a fixed order, so two validation runs are `==`.
+* **`XmlValidationError::node` is `Option<NodeId>`.** Every issue points at the node it belongs to
+  except `MissingRoot`, where there is no node to point at. The alternative — a synthetic node id
+  or a separate error type for that one case — would be worse than an `Option` that is documented.
+* **Structural checks are self-checks.** The arena maintains parent/child agreement, acyclicity and
+  "the root has no parent" by construction, so those variants (`ParentChildMismatch`,
+  `CyclicStructure`, `RootHasParent`, `RootIsNotAnElement`) should never fire. They are implemented
+  anyway, because the guarantee then does not depend on the maintaining code being correct, and
+  because the *rule* (`rule.well-formedness.elements-nest-properly`,
+  `single-root-element`) is a document-level statement that deserves an explicit check.
+* **`xml:id` uniqueness is checked over the attached tree only.** A detached `deep_clone` of a
+  subtree legitimately carries the same `xml:id` values as its original, so comparing all arena
+  slots would produce a false positive for a completely normal workflow. Node-local rules
+  (`xml:lang`/`xml:space` values, `xml:id` syntax, name resolution against the node's own scope)
+  *are* checked for detached nodes, so a subtree can be prepared and validated before it is
+  attached. Both halves are tested
+  (`a_detached_copy_does_not_conflict_with_its_original`,
+  `detached_subtrees_are_validated_against_their_own_scope`).
+* **The two "must be declared" rules are DTD validity and stay out of scope.** The inventory
+  assigned `rule.document-structure.xml-lang-must-be-declared` and
+  `xml-space-must-be-declared` to layer C, but their content is "this attribute MUST be declared
+  [in an `ATTLIST`]": without DTD processing there is no declaration to check. The *checkable* half
+  of those two rules — the value shape — is layer A and is applied by the validation pass through
+  `is_valid_language_tag`/`is_valid_xml_space_value`. The two `xml-lang-must-inherit-*` rules
+  describe how a processor resolves the language of an element; this crate exposes no API that
+  consumes language information, so they are recorded as *not applicable* rather than silently
+  dropped. All three verdicts are in `docs/design/evidence/rule-enforcement.md`, which now covers
+  layers B, C and D (66 rules: 54 enforced, 6 partial, 4 deferred, 2 n/a).
+* **Validation is read-only and takes the lock once.** `Document::validate` goes through
+  `read_arena`, so it cannot re-enter the lock, and a test asserts that the serialized document is
+  unchanged by a validation run.

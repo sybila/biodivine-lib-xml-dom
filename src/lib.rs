@@ -165,6 +165,7 @@ pub mod io;
 mod namespace;
 mod node;
 mod qualified_name;
+pub mod validation;
 
 /// XML specification types and checks.
 ///
@@ -191,6 +192,7 @@ pub use crate::io::{
 pub use crate::namespace::Namespace;
 pub use crate::node::{Node, NodeContent, NodeKind};
 pub use crate::qualified_name::QualifiedName;
+pub use crate::validation::{ValidationErrorKind, XmlValidationError, XmlValidationErrors};
 
 #[cfg(test)]
 mod tests {

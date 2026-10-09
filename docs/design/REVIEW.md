@@ -113,7 +113,7 @@ never frees them. Additionally `Document::empty()`'s `InternalDocument` keeps th
 `RwLock<Option<Element>>` (`src/document.rs:12`) — that part is fine, but the tree below it is not.
 An arena of `NodeId` indices removes the entire problem class.
 
-### D5 — HIGH: no whole-document validation (requirement (4)(2) is entirely absent)
+### D5 — HIGH: no whole-document validation (requirement (4)(2) is entirely absent) — *fixed in G4*
 
 There is no `Document::validate`, no validation error type and no way to collect multiple issues.
 Consequences visible today: a document that uses an undeclared prefix (or a namespace with no
@@ -122,6 +122,16 @@ declaration) is serialized as if the namespace did not exist (D2), and nothing t
 classifies 9 of them as requiring a whole-document view (`xml:id` uniqueness, `xml:lang`
 declaration/inheritance, `xml:space` declaration, `xmlns` as an element prefix, prefix scope,
 default-namespace scope, `prefix-declared`).
+
+*Fixed in G4*: `Document::validate()` collects every issue in one pass
+(`src/validation.rs`, rules in `src/xml_spec/validation.rs`), reporting namespace-scope
+inconsistencies, the structural invariants and the `xml:id`/`xml:lang`/`xml:space` value rules.
+Of the 9 layer-C rules, 5 are enforced, 2 are DTD validity and 2 describe processor behaviour this
+library does not model; all of it is recorded in
+`docs/design/evidence/rule-enforcement.md`. The G1 probe `it_ns_silent_loss` — which documents
+that the serializer never invents a declaration — now has a counterpart in
+`tests/validation.rs::editing_is_silent_and_validation_is_what_reports`, which removes a
+declaration and observes exactly what validation reports.
 
 ### D6 — HIGH: no Python bindings at all
 

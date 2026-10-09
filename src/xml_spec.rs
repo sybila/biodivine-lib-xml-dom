@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 pub mod declaration;
 pub mod rules;
+pub mod validation;
 
 pub use declaration::{UTF8_ENCODING_NAME, XML_VERSION, XmlDeclaration};
 pub use rules::RULES_DIRECTORY;

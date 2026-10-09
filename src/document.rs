@@ -345,6 +345,58 @@ impl Document {
         Ok(Node::new(self.clone(), id))
     }
 
+    /// Checks the whole document and reports **every** problem it can find.
+    ///
+    /// This is requirement (4)(2): the checks that need a holistic view — namespace scope
+    /// integrity, the structural invariants, and the document-wide value rules — are collected in
+    /// one pass instead of failing at the first problem, so that a caller can fix everything in one
+    /// sweep. The rules themselves are documented in [`crate::validation`] and implemented in
+    /// [`crate::xml_spec::validation`].
+    ///
+    /// Editing operations deliberately do *not* perform these checks (requirement (3)): removing a
+    /// namespace declaration that a subtree relies on, or moving an element into a scope where its
+    /// prefix means something else, succeeds silently and is reported here.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::XmlValidationErrors`] containing one [`crate::XmlValidationError`] per
+    /// problem. Each carries a [`crate::ValidationErrorKind`], the offending [`NodeId`] (or `None`
+    /// for a problem about the document as a whole, such as a missing root element) and a
+    /// human-readable message. The list is deterministic.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
+    ///
+    /// let document = Document::empty();
+    /// let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
+    /// let root = document.create_element(QualifiedName::with_namespace("item", &ex).unwrap());
+    /// document.set_root(root.clone());
+    ///
+    /// // The name carries a namespace, but nothing declares the prefix.
+    /// let errors = document.validate().unwrap_err();
+    /// assert_eq!(errors.len(), 1);
+    ///
+    /// root.declare_namespace(ex);
+    /// assert!(document.validate().is_ok());
+    /// ```
+    pub fn validate(&self) -> Result<(), crate::XmlValidationErrors> {
+        let errors = self.read_arena("Document::validate", |arena| {
+            crate::validation::validate_arena(arena)
+        });
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors.into())
+        }
+    }
+
+    /// Whether the document passes [`Document::validate`].
+    pub fn is_valid(&self) -> bool {
+        self.validate().is_ok()
+    }
+
     /// The number of arena slots this document uses.
     ///
     /// Because slots are never reclaimed, this counts every node ever created in this document,

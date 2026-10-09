@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generates `rule-enforcement.md`: what G3 did with each layer-B and layer-D rule.
+"""Generates `rule-enforcement.md`: what G3/G4 did with each layer-B, layer-C and layer-D rule.
 
 Run from the repository root:
 
@@ -7,8 +7,8 @@ Run from the repository root:
 
 The G1 review produced `rule-inventory.md`, which assigns every rule file to an enforcement layer
 but does not say whether the layer has actually been *implemented*. This script closes that gap for
-the two layers that G3 owns — the 55 rules the parser must enforce (layer B) and the 2 that are the
-serializer's concern (layer D) — by pairing the inventory with an explicit verdict per rule.
+the implemented layers: the 55 rules the parser must enforce (layer B), the 9 that need a
+whole-document view (layer C) and the 2 that are the serializer's concern (layer D).
 
 `ENFORCEMENT` is written by hand (it is a claim about the code), but the *set of rules* is read from
 `rule-inventory.md`, so a rule can never be silently dropped from the table: the script fails if a
@@ -25,6 +25,8 @@ OUT = "docs/design/evidence/rule-enforcement.md"
 #   "enforced"  - the rule is implemented; `where` names the code and the test
 #   "partial"   - implemented for the part that is expressible without DTD processing
 #   "deferred"  - deliberately not implemented; `where` gives the one-line reason
+#   "n/a"       - the rule does not oblige this library (it prescribes processor behaviour that no
+#                 API of this crate exposes)
 ENFORCEMENT = {
     # --- attributes --------------------------------------------------------------------
     "attributes.char-ref-legal-char": ("enforced", "`parse_value` + `Text` validation; an illegal expansion is `InvalidText`"),
@@ -87,7 +89,17 @@ ENFORCEMENT = {
     "well-formedness.single-root-element": ("enforced", "`MultipleRootElements`; `there_must_be_exactly_one_root_element`"),
     "well-formedness.utf-8-utf-16-support": ("deferred", "UTF-16 is out of scope; UTF-8 is fully supported (see `entities.utf-utf16-support`)"),
     "well-formedness.whitespace-definition": ("enforced", "the `S` production is used for the declaration separator and for recognising ignorable top-level whitespace"),
-    # --- serializer layer --------------------------------------------------------------
+    # --- validation layer (goal G4) -----------------------------------------------------
+    "attributes.id-must-be-name": ("enforced", "`check_xml_attribute_values` rejects an `xml:id` that is not an `NCName`; `xml_id_values_must_be_names_and_unique`"),
+    "attributes.id-must-be-unique": ("enforced", "`check_xml_id_uniqueness` walks the attached tree; `xml_id_values_must_be_names_and_unique`"),
+    "document-structure.xml-lang-empty-must-override-ancestor": ("n/a", "prescribes how a processor resolves the language of an element; this crate exposes no API that consumes `xml:lang`, so there is nothing to check"),
+    "document-structure.xml-lang-must-be-declared": ("deferred", "\"MUST be declared\" is an attribute-list (DTD) constraint; without DTD processing there is no declaration to check. The checkable half, the value shape, is enforced via `rule.document-structure.xml-lang-must-be-bcp47-or-empty`"),
+    "document-structure.xml-lang-must-inherit-to-descendants": ("n/a", "as `xml-lang-empty-must-override-ancestor`: processor behaviour for a feature this crate does not model"),
+    "document-structure.xml-space-must-be-declared": ("deferred", "as `xml-lang-must-be-declared`; the value shape is enforced via `rule.document-structure.xml-space-must-be-enumerated-default-preserve`"),
+    "namespace-basics.xmlns-not-element-prefix": ("enforced", "`Namespace::prefixed`/`Namespace::new` refuse the reserved prefix at construction (layer A); `ScopeViolation::ReservedPrefix` re-checks it during validation, though no public constructor can reach that state"),
+    "namespace-usage.default-namespace-scope": ("enforced", "`check_element_name`/`check_attribute_name`; `default_namespace_scope_must_match_the_name`, `attributes_are_not_affected_by_the_default_namespace`"),
+    "namespace-usage.prefix-declaration-scope": ("enforced", "`NamespaceScope::from_declarations` plus `check_element_name`; `a_prefix_bound_to_a_different_uri_is_reported`, `editing_is_silent_and_validation_is_what_reports`"),
+    # --- serializer layer (goal G3) -----------------------------------------------------
     "elements-and-tags.empty-element-representation": ("enforced", "`EmptyElementStyle`; `empty_elements_and_write_options`"),
     "well-formedness.escape-ampersand-and-lt": ("enforced", "`escape_text`/`escape_attribute`; `text_is_escaped_so_that_it_round_trips`"),
 }
@@ -104,7 +116,7 @@ def main() -> None:
         if heading:
             section = heading.group(1)
             continue
-        row = re.match(r"^\| `([^`]+)` \| (B|D): [^|]*\|", line)
+        row = re.match(r"^\| `([^`]+)` \| (B|C|D): [^|]*\|", line)
         if row and section:
             owned.append((f"{section}.{row.group(1)}", row.group(2)))
     if not owned:
@@ -117,9 +129,9 @@ def main() -> None:
     if extra:
         sys.exit("verdict for a rule that is not layer B/D: " + ", ".join(extra))
 
-    counts = {"enforced": 0, "partial": 0, "deferred": 0}
+    counts = {"enforced": 0, "partial": 0, "deferred": 0, "n/a": 0}
     lines = [
-        "# Rule enforcement — layer B (parser) and layer D (serializer)",
+        "# Rule enforcement — layer B (parser), layer C (validation) and layer D (serializer)",
         "",
         f"Generated by `python3 {__file__.split('/')[-1]}` from `{INVENTORY}` plus an explicit",
         "per-rule verdict. The *set* of rules is read from the inventory, so a rule cannot be",
@@ -131,6 +143,8 @@ def main() -> None:
         "- **partial** — the expressible part is implemented; the rest needs DTD processing, which",
         "  AGENTS.md puts out of scope (no `DOCTYPE` validation).",
         "- **deferred** — deliberately not implemented; the note gives the reason.",
+        "- **n/a** — the rule does not oblige this library (it prescribes processor behaviour that no",
+        "  API of this crate exposes).",
         "",
         "| rule | layer | verdict | code path / reason |",
         "| --- | --- | --- | --- |",
@@ -146,8 +160,9 @@ def main() -> None:
         "",
         f"- {counts['enforced']} enforced",
         f"- {counts['partial']} partial (the remainder needs DTD processing)",
-        f"- {counts['deferred']} deferred (UTF-16, which is out of the project's scope)",
-        f"- {len(owned)} total layer-B/D rules",
+        f"- {counts['deferred']} deferred (UTF-16 or DTD validity, both out of the project's scope)",
+        f"- {counts['n/a']} not applicable",
+        f"- {len(owned)} total layer-B/C/D rules",
         "",
         "Everything not listed here belongs to layer A (validated types, in `xml_spec`), layer C",
         "(whole-document validation) or layer X (out of scope); see `rule-inventory.md`.",

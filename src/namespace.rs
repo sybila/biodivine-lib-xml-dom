@@ -172,6 +172,16 @@ impl Namespace {
     pub fn is_equal_ns(&self, other: &Namespace) -> bool {
         self.uri() == other.uri()
     }
+
+    /// Whether this value and `other` share the same `Arc` allocation.
+    ///
+    /// Used to verify the per-document interning that requirement (1) asks for: two value-equal
+    /// namespaces of one document must be the very same allocation. This is an implementation
+    /// detail, so it is crate-internal — nothing in the public API depends on pointer identity.
+    #[cfg(test)]
+    pub(crate) fn shares_data_with(&self, other: &Namespace) -> bool {
+        Arc::ptr_eq(&self.data, &other.data)
+    }
 }
 
 #[cfg(test)]

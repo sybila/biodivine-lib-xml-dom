@@ -1,25 +1,29 @@
 use crate::error::XmlError;
 use std::sync::Arc;
 
-/// Validates `s` and returns it as an `Arc<str>`, or an [`XmlError::InvalidXml`] naming the
-/// expected content type.
+/// Validates `s` and returns it as an `Arc<str>`, or a validation error naming the expected
+/// content type.
 ///
 /// This is the single place where the "not a valid X" error message is produced, so all
 /// [`validated_string_newtype!`] types report failures consistently.
 ///
 /// # Errors
 ///
-/// Returns [`XmlError::InvalidXml`] if `validate` rejects `s`.
-fn validated_string<F>(s: &str, display_name: &str, validate: F) -> Result<Arc<str>, XmlError>
+/// Returns `error(...)` if `validate` rejects `s`. The constructor is chosen by the caller so
+/// that each wrapper type reports its own typed [`XmlError`] variant.
+fn validated_string<F>(
+    s: &str,
+    display_name: &str,
+    validate: F,
+    error: fn(String) -> XmlError,
+) -> Result<Arc<str>, XmlError>
 where
     F: FnOnce(&str) -> bool,
 {
     if validate(s) {
         Ok(Arc::from(s))
     } else {
-        Err(XmlError::InvalidXml(format!(
-            "'{s}' is not a valid {display_name}"
-        )))
+        Err(error(format!("'{s}' is not a valid {display_name}")))
     }
 }
 
@@ -31,8 +35,8 @@ where
 /// nothing in the public API exposes the pointer identity. This also satisfies requirement (1)'s
 /// "keep the Arc-based scheme for deduplication" for repetitive content.
 ///
-/// `validate` is called with the raw string; the first failing argument produces
-/// [`XmlError::InvalidXml`] with the message `'<value>' is not a valid <display_name>`.
+/// `validate` is called with the raw string; a failing argument produces `error(...)` with the
+/// message `'<value>' is not a valid <display_name>`.
 ///
 /// The type is deliberately only constructible through [`TryFrom`], so a value of this type is
 /// always valid (requirement (4)(1): low-level integrity enforced by construction).
@@ -42,6 +46,7 @@ macro_rules! validated_string_newtype {
         $name:ident,
         display_name = $display_name:literal,
         validate = $validate:expr,
+        error = $error:expr,
         as_str_docs { $(#[$as_str_meta:meta])* }
     ) => {
         $(#[$meta])*
@@ -103,7 +108,7 @@ macro_rules! validated_string_newtype {
             type Error = XmlError;
 
             fn try_from(s: &str) -> Result<Self, Self::Error> {
-                validated_string(s, $display_name, $validate).map($name)
+                validated_string(s, $display_name, $validate, $error).map($name)
             }
         }
 
@@ -159,6 +164,7 @@ validated_string_newtype! {
     NCName,
     display_name = "NCName",
     validate = is_valid_ncname,
+    error = XmlError::InvalidName,
     as_str_docs {
         /// Returns the `NCName` as a string slice.
         ///
@@ -197,6 +203,7 @@ validated_string_newtype! {
     Text,
     display_name = "XML text",
     validate = is_valid_text,
+    error = XmlError::InvalidText,
     as_str_docs {
         /// Returns the text as a string slice.
     }
@@ -238,6 +245,7 @@ validated_string_newtype! {
     CData,
     display_name = "CDATA content",
     validate = |s| !s.contains("]]>"),
+    error = XmlError::InvalidCData,
     as_str_docs {
         /// Returns the CDATA content as a string slice.
     }
@@ -271,6 +279,7 @@ validated_string_newtype! {
     Comment,
     display_name = "XML comment",
     validate = |s| !s.contains("--") && !s.ends_with('-'),
+    error = XmlError::InvalidComment,
     as_str_docs {
         /// Returns the comment content as a string slice.
     }
@@ -302,6 +311,7 @@ validated_string_newtype! {
     PiTarget,
     display_name = "PI target",
     validate = |s| is_valid_name(s) && !s.eq_ignore_ascii_case("xml"),
+    error = XmlError::InvalidProcessingInstruction,
     as_str_docs {
         /// Returns the PI target as a string slice.
     }
@@ -330,6 +340,7 @@ validated_string_newtype! {
     PiData,
     display_name = "PI content",
     validate = |s| !s.contains("?>"),
+    error = XmlError::InvalidProcessingInstruction,
     as_str_docs {
         /// Returns the PI content as a string slice.
     }
@@ -402,8 +413,8 @@ fn is_name_char(c: char, allow_colon: bool) -> bool {
 pub(crate) fn validate_namespace(uri: &str, prefix: Option<&NCName>) -> Result<(), XmlError> {
     // URI must not be empty
     if uri.is_empty() {
-        return Err(XmlError::NamespaceError(
-            "Namespace URI must not be empty".to_string(),
+        return Err(XmlError::InvalidNamespace(
+            "a namespace URI must not be empty".to_string(),
         ));
     }
 
@@ -411,8 +422,8 @@ pub(crate) fn validate_namespace(uri: &str, prefix: Option<&NCName>) -> Result<(
     if let Some(p) = prefix {
         // `xmlns` prefix must never be declared
         if p == "xmlns" {
-            return Err(XmlError::NamespaceError(
-                "The prefix 'xmlns' is reserved and cannot be declared".to_string(),
+            return Err(XmlError::ReservedPrefix(
+                "the prefix `xmlns` is reserved and cannot be declared".to_string(),
             ));
         }
 
@@ -421,23 +432,23 @@ pub(crate) fn validate_namespace(uri: &str, prefix: Option<&NCName>) -> Result<(
             validate_xml_prefix_binding(Some(uri))?;
         } else if uri == RESERVED_XML_URI {
             // No prefix other than `xml` may bind to the reserved XML URI
-            return Err(XmlError::NamespaceError(format!(
-                "The URI '{RESERVED_XML_URI}' can only be bound to the 'xml' prefix, not '{p}'"
+            return Err(XmlError::ReservedPrefix(format!(
+                "the URI `{RESERVED_XML_URI}` can only be bound to the `xml` prefix, not `{p}`"
             )));
         }
     }
 
     // Neither reserved URI may be used as a default namespace
     if prefix.is_none() && (uri == RESERVED_XML_URI || uri == RESERVED_XMLNS_URI) {
-        return Err(XmlError::NamespaceError(format!(
-            "The URI '{uri}' cannot be declared as the default namespace"
+        return Err(XmlError::ReservedPrefix(format!(
+            "the URI `{uri}` cannot be declared as the default namespace"
         )));
     }
 
     // No prefix may bind to the reserved xmlns URI
     if uri == RESERVED_XMLNS_URI {
-        return Err(XmlError::NamespaceError(format!(
-            "The URI '{RESERVED_XMLNS_URI}' cannot be bound to any prefix"
+        return Err(XmlError::ReservedPrefix(format!(
+            "the URI `{RESERVED_XMLNS_URI}` cannot be bound to any prefix"
         )));
     }
 
@@ -459,15 +470,15 @@ pub(crate) fn validate_namespace(uri: &str, prefix: Option<&NCName>) -> Result<(
 /// - The local name is not a valid NCName
 pub(crate) fn split_qname(qname: &str) -> Result<(Option<NCName>, NCName), XmlError> {
     if qname.is_empty() {
-        return Err(XmlError::NamespaceError(
-            "Qualified name must not be empty".to_string(),
+        return Err(XmlError::InvalidName(
+            "a qualified name must not be empty".to_string(),
         ));
     }
 
     // Check for multiple colons — a QName may have at most one.
     if qname.matches(':').count() > 1 {
-        return Err(XmlError::NamespaceError(format!(
-            "Qualified name '{qname}' contains more than one colon"
+        return Err(XmlError::InvalidName(format!(
+            "the qualified name `{qname}` contains more than one colon"
         )));
     }
 
@@ -476,8 +487,8 @@ pub(crate) fn split_qname(qname: &str) -> Result<(Option<NCName>, NCName), XmlEr
         let local_str = &qname[colon_pos + 1..];
 
         if prefix_str.is_empty() {
-            return Err(XmlError::NamespaceError(
-                "Qualified name cannot have an empty prefix".to_string(),
+            return Err(XmlError::InvalidName(
+                "a qualified name cannot have an empty prefix".to_string(),
             ));
         }
 
@@ -510,8 +521,8 @@ pub(crate) fn validate_resolved_prefix(
     resolved_uri: Option<&str>,
 ) -> Result<(), XmlError> {
     if prefix == "xmlns" {
-        return Err(XmlError::NamespaceError(
-            "The prefix 'xmlns' is reserved and cannot be used in a qualified name".to_string(),
+        return Err(XmlError::ReservedPrefix(
+            "the prefix `xmlns` is reserved and cannot be used in a qualified name".to_string(),
         ));
     }
 
@@ -534,11 +545,11 @@ pub(crate) fn validate_resolved_prefix(
 fn validate_xml_prefix_binding(uri: Option<&str>) -> Result<(), XmlError> {
     match uri {
         Some(u) if u == RESERVED_XML_URI => Ok(()),
-        Some(u) => Err(XmlError::NamespaceError(format!(
-            "The prefix 'xml' can only be bound to '{RESERVED_XML_URI}', not '{u}'"
+        Some(u) => Err(XmlError::ReservedPrefix(format!(
+            "the prefix `xml` can only be bound to `{RESERVED_XML_URI}`, not `{u}`"
         ))),
-        None => Err(XmlError::NamespaceError(format!(
-            "The prefix 'xml' must be bound to '{RESERVED_XML_URI}'"
+        None => Err(XmlError::ReservedPrefix(format!(
+            "the prefix `xml` must be bound to `{RESERVED_XML_URI}`"
         ))),
     }
 }
@@ -556,11 +567,10 @@ mod tests {
     /// Helper function to verify that a rule file exists for the test
     /// This ensures that if a rule is removed, the test will break and be noticed
     fn verify_rule_exists(rule_file: &str) {
-        let rule_path = format!("specification/rules/{}", rule_file);
+        let rule_path = format!("specification/rules/{rule_file}");
         assert!(
             std::path::Path::new(&rule_path).exists(),
-            "Rule file {} does not exist",
-            rule_file
+            "Rule file {rule_file} does not exist"
         );
     }
 

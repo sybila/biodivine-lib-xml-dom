@@ -1,656 +1,477 @@
-use parking_lot::RwLock;
+//! The element handle.
+//!
+//! [`Element`] is a newtype around [`Node`] whose payload is guaranteed to be an element. The
+//! invariant is established at construction (the only ways to obtain one are
+//! [`Node::as_element`] and [`Document::create_element`]), so none of the element methods has to
+//! deal with "this is actually a text node" — the type system does it (requirement (4)(1) on the
+//! API level).
+//!
+//! All tree operations ([`Node::append_child`], [`Node::detach`], …) are available through
+//! `Deref<Target = Node>`.
+
 use std::collections::BTreeMap;
+use std::ops::Deref;
 use std::sync::Arc;
 
-use crate::QualifiedName;
 use crate::document::Document;
-use crate::error::XmlResult;
+use crate::error::{XmlError, XmlResult};
 use crate::namespace::Namespace;
-use crate::xml_spec::{CData, Comment, NCName, PiData, PiTarget, Text};
+use crate::node::Node;
+use crate::qualified_name::QualifiedName;
+use crate::xml_spec::{NCName, Text};
 
-/// A child node of an [`Element`].
+/// A handle to an element node of a [`Document`].
 ///
-/// XML elements can contain other elements, text, comments, CDATA sections,
-/// and processing instructions. This enum represents all possible child node types.
-#[derive(Debug, Clone)]
-pub enum XmlNode {
-    /// A child element node.
-    Element(Element),
-    /// A text node.
-    Text(Text),
-    /// A comment node.
-    Comment(Comment),
-    /// A CDATA section node.
-    CData(CData),
-    /// A processing instruction node (target, data).
-    ProcessingInstruction(PiTarget, PiData),
-}
-
-/// Internal representation of an XML element node
-#[derive(Debug)]
-pub(crate) struct ElementData {
-    /// Reference to the document this element belongs to
-    pub document: Document,
-    /// Element qualified name (local name + namespace)
-    pub qualified_name: QualifiedName,
-    /// Element attributes
-    pub attributes: BTreeMap<QualifiedName, String>,
-    /// Child nodes
-    pub children: Vec<XmlNode>,
-    /// Parent element (None if root or detached)
-    pub parent: Option<Element>,
-    /// Namespace declarations on this element (prefix -> Option<Namespace>).
-    /// The key is `None` for the default namespace, `Some(prefix)` for a prefixed namespace.
-    /// The value is `None` for empty declarations (xmlns="" or xmlns:prefix="").
-    pub namespace_declarations: BTreeMap<Option<NCName>, Option<Namespace>>,
-}
-
-/// Represents an XML element node within a [`Document`].
-///
-/// An element carries a qualified name, attributes, child nodes (elements, text,
-/// comments, CDATA, and processing instructions), and namespace declarations.
-/// Elements are reference-counted and internally synchronized, allowing safe
-/// shared ownership across threads.
-///
-/// Use [`Element::qualified_name`] to access the element's name and namespace.
-/// For example, `element.qualified_name().local_name()` returns the local name,
-/// and `element.qualified_name().namespace()` returns the optional namespace.
-#[derive(Debug, Clone)]
-pub struct Element(Arc<RwLock<ElementData>>);
+/// `Clone` copies the handle, not the element; see [`Node`] for the cloning operations that
+/// actually duplicate data.
+#[derive(Clone)]
+pub struct Element(Node);
 
 impl Element {
-    /// Create a new element in the given document with a qualified name
-    pub(crate) fn new(document: Document, qualified_name: QualifiedName) -> Self {
-        Self(Arc::new(RwLock::new(ElementData {
-            document,
-            qualified_name,
-            attributes: BTreeMap::new(),
-            children: Vec::new(),
-            parent: None,
-            namespace_declarations: BTreeMap::new(),
-        })))
+    /// Wraps a node whose payload is known to be an element.
+    ///
+    /// The invariant is upheld by the two construction sites ([`Node::as_element`] and
+    /// [`Document::create_element`]); this constructor is crate-internal precisely so that no
+    /// other code can break it.
+    pub(crate) fn new_unchecked(node: Node) -> Self {
+        Self(node)
     }
 
-    /// Get the element's qualified name.
-    ///
-    /// The returned [`QualifiedName`] is cheap to clone (internally `Arc`-backed).
-    /// Use its methods to access the local name or namespace, e.g.,
-    /// `element.qualified_name().local_name()` or `element.qualified_name().namespace()`.
-    pub fn qualified_name(&self) -> QualifiedName {
-        self.0.read().qualified_name.clone()
+    /// This element as a generic [`Node`] handle.
+    pub fn node(&self) -> Node {
+        self.0.clone()
     }
 
-    /// Declare a namespace on this element using the prefix carried by the [`Namespace`].
-    ///
-    /// If the namespace has no prefix, this declares the default namespace.
-    /// For empty default declarations (xmlns=""), use [`Element::undeclare_default_namespace`].
-    ///
-    /// # Errors
-    ///
-    /// Returns [`crate::XmlError::InvalidOperation`] if the prefix is already declared on this element
-    /// with a different namespace URI. Re-declarations are not permitted.
-    pub fn declare_namespace(&self, namespace: Namespace) -> XmlResult<()> {
-        let prefix = namespace.prefix().cloned();
-        let existing = {
-            let inner = self.0.read();
-            inner.namespace_declarations.get(&prefix).cloned()
-        };
-        // Check if this prefix is already declared with a different URI
-        if let Some(Some(existing_ns)) = existing
-            && !existing_ns.is_equal_ns(&namespace)
-        {
-            return Err(crate::error::XmlError::InvalidOperation(format!(
-                "Namespace prefix '{}' is already declared with a different URI",
-                prefix.as_ref().map(|p| p.as_str()).unwrap_or("(default)")
-            )));
-        }
+    /// Consumes this handle and returns the generic [`Node`].
+    pub fn into_node(self) -> Node {
         self.0
-            .write()
-            .namespace_declarations
-            .insert(prefix, Some(namespace));
-        Ok(())
     }
 
-    /// Undeclare the default namespace on this element (xmlns="").
-    /// This removes the default namespace within its scope per XML Namespaces spec §6.2.
-    pub fn undeclare_default_namespace(&self) {
-        self.0.write().namespace_declarations.insert(None, None);
-    }
-
-    /// Resolve the namespace for a given prefix by walking up the parent chain.
-    ///
-    /// Returns `None` if the prefix is not declared on this element or any ancestor.
-    pub fn get_namespace(&self, prefix: Option<&NCName>) -> Option<Namespace> {
-        let (local_result, parent) = {
-            let inner = self.0.read();
-            let local_result = inner.namespace_declarations.get(&prefix.cloned()).cloned();
-            let parent = inner.parent.clone();
-            (local_result, parent)
-        };
-        match local_result {
-            Some(Some(ns)) => return Some(ns),
-            Some(None) => return None,
-            _ => {}
-        }
-        if let Some(parent) = parent {
-            return parent.get_namespace(prefix);
-        }
-        None
-    }
-
-    /// Resolve a qualified name string for an element in the context of this element's
-    /// namespace declarations.
-    ///
-    /// Delegates to [`QualifiedName::resolve_element`].
-    pub fn resolve_qualified_name(&self, qualified_name: &str) -> XmlResult<QualifiedName> {
-        QualifiedName::resolve_element(self, qualified_name)
-    }
-
-    /// Get a clone of this element's namespace declarations.
-    pub fn namespace_declarations(&self) -> BTreeMap<Option<NCName>, Option<Namespace>> {
-        self.0.read().namespace_declarations.clone()
-    }
-
-    /// Add an attribute to this element.
-    pub fn add_attribute(&self, name: QualifiedName, value: String) {
-        self.0.write().attributes.insert(name, value);
-    }
-
-    /// Replace all attributes on this element.
-    pub(crate) fn set_attributes(&self, attrs: BTreeMap<QualifiedName, String>) {
-        self.0.write().attributes = attrs;
-    }
-
-    /// Get a clone of this element's attributes.
-    pub fn attributes(&self) -> BTreeMap<QualifiedName, String> {
-        self.0.read().attributes.clone()
-    }
-
-    /// Get the value of an attribute by its qualified name.
-    pub fn get_attribute(&self, name: &QualifiedName) -> Option<String> {
-        self.0.read().attributes.get(name).cloned()
-    }
-
-    /// Add a child element to this element.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`crate::error::XmlError::InvalidOperation`] if the child belongs to a
-    /// different document, if the child is the same element as `self`, if the child
-    /// already has a parent, or if `self` would appear in the subtree of `child` (which
-    /// would create a cycle).
-    pub fn add_child_element(&self, child: Element) -> XmlResult<()> {
-        if Arc::ptr_eq(&self.0, &child.0) {
-            return Err(crate::error::XmlError::InvalidOperation(
-                "Cannot add an element as its own child".to_string(),
-            ));
-        }
-        if !Arc::ptr_eq(&self.document().internal, &child.document().internal) {
-            return Err(crate::error::XmlError::InvalidOperation(
-                "Element belongs to a different document".to_string(),
-            ));
-        }
-        if child.0.read().parent.is_some() {
-            return Err(crate::error::XmlError::InvalidOperation(
-                "Child element already has a parent".to_string(),
-            ));
-        }
-        if child.is_ancestor(self) {
-            return Err(crate::error::XmlError::InvalidOperation(
-                "Cannot add an ancestor as a child (would create a cycle)".to_string(),
-            ));
-        }
-        child.0.write().parent = Some(self.clone());
-        self.0.write().children.push(XmlNode::Element(child));
-        Ok(())
-    }
-
-    /// Check whether `self` appears in the parent chain of `other`.
-    pub fn is_ancestor(&self, other: &Element) -> bool {
-        let mut current = other.clone();
-        loop {
-            let parent = {
-                let inner = current.0.read();
-                inner.parent.clone()
-            };
-            if let Some(parent) = parent {
-                if Arc::ptr_eq(&self.0, &parent.0) {
-                    return true;
-                }
-                current = parent;
-            } else {
-                break;
-            }
-        }
-        false
-    }
-
-    /// Add a text node as a child of this element.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`crate::XmlError::InvalidXml`] if the text contains illegal XML characters
-    /// (e.g., control characters or surrogate code points).
-    pub fn add_text(&self, text: String) -> XmlResult<()> {
-        let text = Text::try_from(text)?;
-        self.0.write().children.push(XmlNode::Text(text));
-        Ok(())
-    }
-
-    /// Add a comment node as a child of this element.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`crate::XmlError::InvalidXml`] if the comment contains `--` or ends with `-`.
-    pub fn add_comment(&self, comment: String) -> XmlResult<()> {
-        let comment = Comment::try_from(comment)?;
-        self.0.write().children.push(XmlNode::Comment(comment));
-        Ok(())
-    }
-
-    /// Add a CDATA section as a child of this element.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`crate::XmlError::InvalidXml`] if the CDATA content contains `]]>`.
-    pub fn add_cdata(&self, cdata: String) -> XmlResult<()> {
-        let cdata = CData::try_from(cdata)?;
-        self.0.write().children.push(XmlNode::CData(cdata));
-        Ok(())
-    }
-
-    /// Add a processing instruction as a child of this element.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`crate::XmlError::InvalidXml`] if the target is not a valid XML Name or matches
-    /// `xml` case-insensitively, or if the content contains `?>`.
-    pub fn add_processing_instruction(&self, target: String, data: String) -> XmlResult<()> {
-        let target = PiTarget::try_from(target)?;
-        let data = PiData::try_from(data)?;
-        self.0
-            .write()
-            .children
-            .push(XmlNode::ProcessingInstruction(target, data));
-        Ok(())
-    }
-
-    /// Get all child nodes of this element.
-    pub fn children(&self) -> Vec<XmlNode> {
-        self.0.read().children.clone()
-    }
-
-    /// Get only the element children of this element.
-    pub fn element_children(&self) -> Vec<Element> {
-        self.0
-            .read()
-            .children
-            .iter()
-            .filter_map(|n| {
-                if let XmlNode::Element(e) = n {
-                    Some(e.clone())
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    /// Get only the text children of this element.
-    pub fn text_children(&self) -> Vec<Text> {
-        self.0
-            .read()
-            .children
-            .iter()
-            .filter_map(|n| {
-                if let XmlNode::Text(t) = n {
-                    Some(t.clone())
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    /// Get only the comment children of this element.
-    pub fn comment_children(&self) -> Vec<Comment> {
-        self.0
-            .read()
-            .children
-            .iter()
-            .filter_map(|n| {
-                if let XmlNode::Comment(c) = n {
-                    Some(c.clone())
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    /// Get only the CDATA children of this element.
-    pub fn cdata_children(&self) -> Vec<CData> {
-        self.0
-            .read()
-            .children
-            .iter()
-            .filter_map(|n| {
-                if let XmlNode::CData(c) = n {
-                    Some(c.clone())
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    /// Get only the processing instruction children of this element.
-    pub fn processing_instruction_children(&self) -> Vec<(PiTarget, PiData)> {
-        self.0
-            .read()
-            .children
-            .iter()
-            .filter_map(|n| {
-                if let XmlNode::ProcessingInstruction(target, data) = n {
-                    Some((target.clone(), data.clone()))
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    /// Get the parent element, if any.
-    pub fn parent(&self) -> Option<Element> {
-        self.0.read().parent.clone()
-    }
-
-    /// Check if this element is attached to a document (reachable from the document root).
-    pub fn is_attached(&self) -> bool {
-        let mut current = self.clone();
-        loop {
-            let (parent, document) = {
-                let inner = current.0.read();
-                (inner.parent.clone(), inner.document.clone())
-            };
-            if parent.is_none() {
-                let root = document.internal.root();
-                return root
-                    .as_ref()
-                    .map(|r| Arc::ptr_eq(&r.0, &current.0))
-                    .unwrap_or(false);
-            }
-            current = parent.unwrap();
-        }
-    }
-
-    /// Get the document this element belongs to.
+    /// The document this element belongs to.
     pub fn document(&self) -> Document {
-        self.0.read().document.clone()
+        self.0.document()
+    }
+
+    // -------------------------------------------------------------------------------------
+    // Name
+    // -------------------------------------------------------------------------------------
+
+    /// The expanded name of this element.
+    ///
+    /// The returned value is `Arc`-backed and cheap to clone. Use
+    /// [`QualifiedName::local_name`] and [`QualifiedName::namespace`] for the parts.
+    pub fn qualified_name(&self) -> QualifiedName {
+        let id = self.0.id;
+        self.0
+            .document
+            .read_arena("Element::qualified_name", |arena| {
+                arena.element(id).name.clone()
+            })
+    }
+
+    /// The local name of this element.
+    pub fn local_name(&self) -> NCName {
+        self.qualified_name().local_name().clone()
+    }
+
+    /// The namespace of this element, if it has one.
+    pub fn namespace(&self) -> Option<Namespace> {
+        self.qualified_name().namespace().cloned()
+    }
+
+    /// Changes the name of this element.
+    ///
+    /// As everywhere else, no namespace declaration is added or removed: the new name simply
+    /// carries whatever namespace it was built with. `Document::validate` reports the situation if
+    /// the namespace is no longer in scope (requirement (3)).
+    pub fn set_qualified_name(&self, name: QualifiedName) {
+        let id = self.0.id;
+        self.0
+            .document
+            .write_arena("Element::set_qualified_name", |arena| {
+                arena.element_mut(id).name = arena.intern_name(name);
+            });
+    }
+
+    // -------------------------------------------------------------------------------------
+    // Attributes
+    // -------------------------------------------------------------------------------------
+
+    /// All attributes of this element, keyed by expanded name.
+    ///
+    /// Because the attributes live in a map keyed by [`QualifiedName`], two attributes with the
+    /// same expanded name are unrepresentable — requirement (4)(1) and
+    /// `rule.elements-and-tags.unique-attribute-specification` are enforced by the storage type.
+    pub fn attributes(&self) -> BTreeMap<QualifiedName, Arc<str>> {
+        let id = self.0.id;
+        self.0.document.read_arena("Element::attributes", |arena| {
+            arena.element(id).attributes.clone()
+        })
+    }
+
+    /// The value of the attribute with the given expanded name.
+    pub fn attribute(&self, name: &QualifiedName) -> Option<Arc<str>> {
+        let id = self.0.id;
+        self.0.document.read_arena("Element::attribute", |arena| {
+            arena.element(id).attributes.get(name).cloned()
+        })
+    }
+
+    /// The value of the attribute with the given local name that is in *no* namespace.
+    ///
+    /// This is the common case (`<a href="…">`) and is the only way an unprefixed attribute can
+    /// be spelled, because the default namespace never applies to attributes
+    /// (`rule.namespace-usage.default-namespace-not-attributes`).
+    pub fn attribute_local(&self, local_name: &NCName) -> Option<Arc<str>> {
+        self.attribute(&QualifiedName::new(local_name.clone(), None))
+    }
+
+    /// Whether this element has an attribute with the given expanded name.
+    pub fn has_attribute(&self, name: &QualifiedName) -> bool {
+        self.attribute(name).is_some()
+    }
+
+    /// Sets an attribute, overwriting any previous value with the same expanded name.
+    ///
+    /// Overwriting is the documented default behaviour required by the task description (a map
+    /// keyed by expanded name cannot hold two entries, and requiring an explicit removal first
+    /// would make the common "update this attribute" case unnecessarily verbose).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `value` contains characters that are not legal in XML documents
+    /// ([`XmlError::InvalidText`]). Use [`Element::set_attribute_checked`] to handle that case
+    /// without panicking.
+    ///
+    /// # Notes
+    ///
+    /// The value is stored verbatim; the serializer escapes it. In particular `<` and `&` are
+    /// legal to store and are written back as `&lt;` and `&amp;`
+    /// (`rule.well-formedness.escape-ampersand-and-lt`).
+    #[track_caller]
+    pub fn set_attribute(&self, name: QualifiedName, value: impl AsRef<str>) {
+        match self.set_attribute_checked(name, value) {
+            Ok(()) => {}
+            Err(error) => panic!("Element::set_attribute failed: {error}"),
+        }
+    }
+
+    /// Fallible variant of [`Element::set_attribute`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`XmlError::InvalidText`] if `value` contains characters that are not legal XML
+    /// characters (`rule.well-formedness.legal-characters`).
+    pub fn set_attribute_checked(
+        &self,
+        name: QualifiedName,
+        value: impl AsRef<str>,
+    ) -> XmlResult<()> {
+        let value = Text::try_from(value.as_ref())?;
+        let id = self.0.id;
+        self.0
+            .document
+            .write_arena("Element::set_attribute_checked", |arena| {
+                let name = arena.intern_name(name);
+                let element = arena.element_mut(id);
+                element.attributes.insert(name, Arc::from(value.as_str()));
+            });
+        Ok(())
+    }
+
+    /// Removes an attribute, returning its previous value.
+    pub fn remove_attribute(&self, name: &QualifiedName) -> Option<Arc<str>> {
+        let id = self.0.id;
+        self.0
+            .document
+            .write_arena("Element::remove_attribute", |arena| {
+                arena.element_mut(id).attributes.remove(name)
+            })
+    }
+
+    /// Removes all attributes of this element.
+    pub fn clear_attributes(&self) {
+        let id = self.0.id;
+        self.0
+            .document
+            .write_arena("Element::clear_attributes", |arena| {
+                arena.element_mut(id).attributes.clear();
+            });
+    }
+
+    // -------------------------------------------------------------------------------------
+    // Namespaces
+    // -------------------------------------------------------------------------------------
+
+    /// The namespace declarations written on *this* element, without inheritance.
+    ///
+    /// The key is the prefix (`None` for the default namespace); the value is the binding, where
+    /// `Some(None)` denotes an empty declaration (`xmlns=""`) that removes the default namespace
+    /// from scope (`rule.namespace-usage.empty-default-namespace`).
+    pub fn namespace_declarations(&self) -> BTreeMap<Option<NCName>, Option<Namespace>> {
+        let id = self.0.id;
+        self.0
+            .document
+            .read_arena("Element::namespace_declarations", |arena| {
+                arena.element(id).namespace_declarations.clone()
+            })
+    }
+
+    /// All namespace bindings visible to this element, innermost first.
+    ///
+    /// Namespace declarations are inherited down the tree
+    /// (`rule.namespace-usage.prefix-declaration-scope`); an inner declaration shadows an outer
+    /// one, and an empty default declaration (`xmlns=""`) appears in the result as a binding to
+    /// "no namespace".
+    pub fn namespaces_in_scope(&self) -> Vec<(Option<NCName>, Option<Namespace>)> {
+        let id = self.0.id;
+        self.0
+            .document
+            .read_arena("Element::namespaces_in_scope", |arena| {
+                arena.namespaces_in_scope(id)
+            })
+    }
+
+    /// Declares a namespace on this element, overwriting any previous binding for that prefix.
+    ///
+    /// The prefix is taken from the [`Namespace`] itself; a namespace without a prefix declares
+    /// (or replaces) the default namespace.
+    ///
+    /// Overwriting is the documented default behaviour required by the task description. Use
+    /// [`Element::declare_namespace_checked`] to get an error instead.
+    ///
+    /// No other node is touched: declarations are never propagated into or out of the subtree
+    /// (requirement (3)).
+    pub fn declare_namespace(&self, namespace: Namespace) {
+        let id = self.0.id;
+        let prefix = namespace.prefix().cloned();
+        self.0
+            .document
+            .write_arena("Element::declare_namespace", |arena| {
+                let namespace = arena.intern_namespace(namespace);
+                arena
+                    .element_mut(id)
+                    .namespace_declarations
+                    .insert(prefix, Some(namespace));
+            });
+    }
+
+    /// Fallible variant of [`Element::declare_namespace`] that refuses to *change* an existing
+    /// binding.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`XmlError::InvalidNamespace`] if the prefix is already declared on this element
+    /// with a different namespace URI. Declaring the same prefix/URI pair again is allowed and
+    /// does nothing.
+    ///
+    /// The element is never modified when an error is returned.
+    pub fn declare_namespace_checked(&self, namespace: Namespace) -> XmlResult<()> {
+        let id = self.0.id;
+        let prefix = namespace.prefix().cloned();
+        self.0
+            .document
+            .write_arena("Element::declare_namespace_checked", |arena| {
+                let existing = arena
+                    .element(id)
+                    .namespace_declarations
+                    .get(&prefix)
+                    .cloned();
+                if let Some(Some(existing)) = existing
+                    && !existing.is_equal_ns(&namespace)
+                {
+                    return Err(XmlError::InvalidNamespace(format!(
+                        "the prefix `{}` is already declared with a different URI (`{}`)",
+                        prefix
+                            .as_ref()
+                            .map_or("(default)", |prefix| prefix.as_str()),
+                        existing.uri()
+                    )));
+                }
+                let namespace = arena.intern_namespace(namespace);
+                arena
+                    .element_mut(id)
+                    .namespace_declarations
+                    .insert(prefix, Some(namespace));
+                Ok(())
+            })
+    }
+
+    /// Declares `xmlns=""` on this element, removing the default namespace from its scope
+    /// (`rule.namespace-usage.empty-default-namespace`).
+    pub fn undeclare_default_namespace(&self) {
+        let id = self.0.id;
+        self.0
+            .document
+            .write_arena("Element::undeclare_default_namespace", |arena| {
+                arena
+                    .element_mut(id)
+                    .namespace_declarations
+                    .insert(None, None);
+            });
+    }
+
+    /// Removes a namespace declaration from this element.
+    ///
+    /// `prefix` is `None` for the default namespace. Returns the previous binding (with
+    /// `Some(None)` denoting an empty declaration), or `None` if this element had no such
+    /// declaration.
+    ///
+    /// Removing a declaration never checks whether anything in the subtree still relies on it
+    /// (requirement (3)); `Document::validate` reports the resulting dangling prefixes.
+    pub fn remove_namespace_declaration(
+        &self,
+        prefix: Option<&NCName>,
+    ) -> Option<Option<Namespace>> {
+        let id = self.0.id;
+        self.0
+            .document
+            .write_arena("Element::remove_namespace_declaration", |arena| {
+                arena
+                    .element_mut(id)
+                    .namespace_declarations
+                    .remove(&prefix.cloned())
+            })
+    }
+
+    /// The namespace bound to `prefix` in the scope of this element.
+    ///
+    /// `prefix` is `None` for the default namespace. Returns `None` when the prefix is not bound
+    /// at all, including when the default namespace has been removed by an empty declaration.
+    ///
+    /// The predefined `xml` prefix is *not* resolved here: it is implicitly bound even without a
+    /// declaration (Namespaces 1.0 §3, `rule.namespace-basics.xml-prefix-fixed-binding`), which
+    /// [`Element::resolve_qualified_name`] handles.
+    pub fn get_namespace(&self, prefix: Option<&NCName>) -> Option<Namespace> {
+        let id = self.0.id;
+        self.0
+            .document
+            .read_arena("Element::get_namespace", |arena| {
+                arena.resolve_prefix(id, prefix)
+            })
+            .flatten()
+    }
+
+    /// Resolves an element name written as a string (`prefix:local` or `local`) against the
+    /// namespace declarations that are in scope for this element.
+    ///
+    /// Unprefixed names are bound to the default namespace if one is in scope, and the predefined
+    /// `xml` prefix is always available.
+    ///
+    /// # Errors
+    ///
+    /// - [`XmlError::InvalidName`] if the string is not a syntactically valid `QName`
+    ///   (`rule.namespace-usage.qname-format`, `rule.namespace-usage.zero-or-one-colon`).
+    /// - [`XmlError::UndeclaredPrefix`] if the prefix is not declared in scope
+    ///   (`rule.namespace-usage.prefix-declared`).
+    /// - [`XmlError::ReservedPrefix`] for the `xmlns` prefix
+    ///   (`rule.namespace-basics.xmlns-not-element-prefix`).
+    pub fn resolve_qualified_name(&self, name: &str) -> XmlResult<QualifiedName> {
+        QualifiedName::resolve_element(self, name)
+    }
+
+    /// Resolves an attribute name written as a string against the namespace declarations that
+    /// are in scope for this element.
+    ///
+    /// The default namespace never applies to attributes
+    /// (`rule.namespace-usage.default-namespace-not-attributes`).
+    ///
+    /// # Errors
+    ///
+    /// As [`Element::resolve_qualified_name`].
+    pub fn resolve_attribute_name(&self, name: &str) -> XmlResult<QualifiedName> {
+        QualifiedName::resolve_attribute(self, name)
+    }
+
+    // -------------------------------------------------------------------------------------
+    // Cloning
+    // -------------------------------------------------------------------------------------
+
+    /// Creates a detached, shallow copy of this element in the same document.
+    ///
+    /// Shadowing [`Node::shallow_clone`] so that the result is an [`Element`] again: the copy of
+    /// an element is always an element.
+    pub fn shallow_clone(&self) -> Element {
+        Element::new_unchecked(self.0.shallow_clone())
+    }
+
+    /// Creates a detached, deep copy of this element in the same document.
+    ///
+    /// See [`Node::deep_clone`] for the details.
+    pub fn deep_clone(&self) -> Element {
+        Element::new_unchecked(self.0.deep_clone())
+    }
+
+    /// Creates a detached, shallow copy of this element in `target`.
+    ///
+    /// See [`Node::shallow_clone_into`].
+    pub fn shallow_clone_into(&self, target: &Document) -> Element {
+        Element::new_unchecked(self.0.shallow_clone_into(target))
+    }
+
+    /// Creates a detached, deep copy of this element in `target`.
+    ///
+    /// This is the sanctioned way to copy a subtree into another document; see
+    /// [`Node::deep_clone_into`].
+    pub fn deep_clone_into(&self, target: &Document) -> Element {
+        Element::new_unchecked(self.0.deep_clone_into(target))
+    }
+
+    /// Detaches this element from its parent and returns it.
+    ///
+    /// Shadowing [`Node::remove`] so that the result stays an [`Element`].
+    pub fn remove(&self) -> Element {
+        self.0.detach();
+        self.clone()
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::Namespace;
+impl Deref for Element {
+    type Target = Node;
 
-    #[test]
-    fn test_empty_default_namespace_stops_inheritance() {
-        // An empty default namespace declaration (xmlns="") should block
-        // inheritance of the default namespace from ancestors.
-        let doc = Document::empty();
-        let parent = doc.create_element(QualifiedName::without_namespace("parent").unwrap());
-        parent
-            .declare_namespace(Namespace::without_prefix("http://default.com").unwrap())
-            .unwrap();
-
-        let child = doc.create_element(QualifiedName::without_namespace("child").unwrap());
-        child.undeclare_default_namespace();
-        parent.add_child_element(child.clone()).unwrap();
-
-        // Child should not inherit parent's default namespace
-        assert!(
-            child.get_namespace(None).is_none(),
-            "Empty default namespace declaration must stop inheritance"
-        );
-
-        // A grandchild without its own declaration also should NOT see the ancestor's default ns
-        let grandchild =
-            doc.create_element(QualifiedName::without_namespace("grandchild").unwrap());
-        child.add_child_element(grandchild.clone()).unwrap();
-        assert!(
-            grandchild.get_namespace(None).is_none(),
-            "Grandchild should not see ancestor's default namespace past empty declaration"
-        );
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
+}
 
-    #[test]
-    fn test_get_namespace_prefixed_still_inherits() {
-        // Prefixed namespace resolution should still walk up the parent chain.
-        let doc = Document::empty();
-        let parent = doc.create_element(QualifiedName::without_namespace("parent").unwrap());
-        parent
-            .declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap())
-            .unwrap();
-
-        let child = doc.create_element(QualifiedName::without_namespace("child").unwrap());
-        parent.add_child_element(child.clone()).unwrap();
-
-        assert_eq!(
-            child.get_namespace(Some(&crate::xml_spec::nc_name("ex"))),
-            Some(Namespace::prefixed("http://example.com", "ex").unwrap())
-        );
+impl std::fmt::Debug for Element {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Element({}, id={}, attached={})",
+            self.qualified_name(),
+            self.0.id,
+            self.is_attached()
+        )
     }
+}
 
-    #[test]
-    fn test_undeclare_does_not_affect_prefixed_ns() {
-        // Undeclaring the default namespace should not interfere with prefixed namespace resolution.
-        let doc = Document::empty();
-        let parent = doc.create_element(QualifiedName::without_namespace("parent").unwrap());
-        parent
-            .declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap())
-            .unwrap();
-
-        let child = doc.create_element(QualifiedName::without_namespace("child").unwrap());
-        child.undeclare_default_namespace();
-        parent.add_child_element(child.clone()).unwrap();
-
-        // Prefixed namespace is still visible through the child
-        let ex = crate::xml_spec::nc_name("ex");
-        assert_eq!(
-            child.get_namespace(Some(&ex)),
-            Some(Namespace::prefixed("http://example.com", "ex").unwrap())
-        );
+impl std::fmt::Display for Element {
+    /// Renders this element (and its subtree) as XML.
+    ///
+    /// This delegates to the module-level XML serializer, which writes exactly the namespace
+    /// declarations stored in the tree and never invents new ones (requirement (3)).
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&crate::io::write_element_to_string(self))
     }
+}
 
-    #[test]
-    fn test_undeclare_records_declaration() {
-        // The undeclaration should be recorded in namespace_declarations.
-        let doc = Document::empty();
-        let el = doc.create_element(QualifiedName::without_namespace("el").unwrap());
-        el.undeclare_default_namespace();
-
-        let decls = el.namespace_declarations();
-        assert!(
-            decls.contains_key(&None),
-            "Default namespace key should be present"
-        );
-        assert_eq!(
-            decls.get(&None),
-            Some(&None),
-            "Value should be None (undeclaration)"
-        );
+impl PartialEq for Element {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
     }
+}
 
-    #[test]
-    fn test_undeclare_re_enables_default_ns() {
-        // Undeclaring then re-declaring the default namespace on the same element works.
-        let doc = Document::empty();
-        let root = doc.create_element(QualifiedName::without_namespace("root").unwrap());
-        root.declare_namespace(Namespace::without_prefix("http://first.com").unwrap())
-            .unwrap();
+impl Eq for Element {}
 
-        let child = doc.create_element(QualifiedName::without_namespace("child").unwrap());
-        child.undeclare_default_namespace();
-        child
-            .declare_namespace(Namespace::without_prefix("http://second.com").unwrap())
-            .unwrap();
-        root.add_child_element(child.clone()).unwrap();
-
-        // Child sees its own re-declared default namespace, not parent's.
-        assert_eq!(
-            child.get_namespace(None),
-            Some(Namespace::without_prefix("http://second.com").unwrap())
-        );
+impl std::hash::Hash for Element {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
     }
+}
 
-    #[test]
-    fn test_add_child_prevents_cycle() {
-        // Adding a descendant as a child would create a cycle and must be rejected.
-        let doc = Document::empty();
-        let a = doc.create_element(QualifiedName::without_namespace("a").unwrap());
-        let b = doc.create_element(QualifiedName::without_namespace("b").unwrap());
-        let c = doc.create_element(QualifiedName::without_namespace("c").unwrap());
-
-        a.add_child_element(b.clone()).unwrap();
-        b.add_child_element(c.clone()).unwrap();
-
-        // Trying to add `a` as child of `c` would create a -> b -> c -> a cycle
-        let result = c.add_child_element(a.clone());
-        assert!(
-            result.is_err(),
-            "Adding an ancestor as a child must be rejected"
-        );
-    }
-
-    #[test]
-    fn test_is_ancestor_direct_parent() {
-        let doc = Document::empty();
-        let parent = doc.create_element(QualifiedName::without_namespace("parent").unwrap());
-        let child = doc.create_element(QualifiedName::without_namespace("child").unwrap());
-
-        parent.add_child_element(child.clone()).unwrap();
-
-        assert!(parent.is_ancestor(&child));
-    }
-
-    #[test]
-    fn test_is_ancestor_deep_tree() {
-        let doc = Document::empty();
-        let a = doc.create_element(QualifiedName::without_namespace("a").unwrap());
-        let b = doc.create_element(QualifiedName::without_namespace("b").unwrap());
-        let c = doc.create_element(QualifiedName::without_namespace("c").unwrap());
-
-        a.add_child_element(b.clone()).unwrap();
-        b.add_child_element(c.clone()).unwrap();
-
-        assert!(a.is_ancestor(&c));
-        assert!(a.is_ancestor(&b));
-    }
-
-    #[test]
-    fn test_is_ancestor_not_related() {
-        let doc = Document::empty();
-        let a = doc.create_element(QualifiedName::without_namespace("a").unwrap());
-        let b = doc.create_element(QualifiedName::without_namespace("b").unwrap());
-
-        assert!(!a.is_ancestor(&b));
-    }
-
-    #[test]
-    fn test_is_ancestor_same_element() {
-        let doc = Document::empty();
-        let a = doc.create_element(QualifiedName::without_namespace("a").unwrap());
-
-        assert!(!a.is_ancestor(&a));
-    }
-
-    #[test]
-    fn test_namespace_redeclaration_rejected() {
-        // Re-declaring the same prefix with a different URI should be an error.
-        let doc = Document::empty();
-        let el = doc.create_element(QualifiedName::without_namespace("el").unwrap());
-        el.declare_namespace(Namespace::prefixed("http://first.com", "ex").unwrap())
-            .unwrap();
-        let result = el.declare_namespace(Namespace::prefixed("http://second.com", "ex").unwrap());
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("already declared"));
-    }
-
-    #[test]
-    fn test_namespace_redeclaration_same_uri_ok() {
-        // Re-declaring the same prefix with the same URI should be allowed.
-        let doc = Document::empty();
-        let el = doc.create_element(QualifiedName::without_namespace("el").unwrap());
-        let ns = Namespace::prefixed("http://example.com", "ex").unwrap();
-        el.declare_namespace(ns.clone()).unwrap();
-        let result = el.declare_namespace(ns.clone());
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_add_text_validation() {
-        // Valid text should work
-        let doc = Document::empty();
-        let el = doc.create_element(QualifiedName::without_namespace("el").unwrap());
-        el.add_text("Hello, World!".to_string()).unwrap();
-        assert_eq!(el.text_children().len(), 1);
-
-        // Text with control chars should fail
-        let result = el.add_text("control \u{01}".to_string());
-        assert!(result.is_err());
-
-        // Text with BEL char (U+0007) should fail
-        let result = el.add_text("bell \u{07}".to_string());
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_add_comment_validation() {
-        let doc = Document::empty();
-        let el = doc.create_element(QualifiedName::without_namespace("el").unwrap());
-
-        // Valid comment
-        el.add_comment(" This is valid ".to_string()).unwrap();
-
-        // Double hyphen should fail
-        let result = el.add_comment("has -- double".to_string());
-        assert!(result.is_err());
-
-        // Trailing hyphen should fail
-        let result = el.add_comment("ends with -".to_string());
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_add_cdata_validation() {
-        let doc = Document::empty();
-        let el = doc.create_element(QualifiedName::without_namespace("el").unwrap());
-
-        // Valid CDATA
-        el.add_cdata("safe content".to_string()).unwrap();
-
-        // ]]> should fail
-        let result = el.add_cdata("contains ]]> end".to_string());
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_add_pi_validation() {
-        let doc = Document::empty();
-        let el = doc.create_element(QualifiedName::without_namespace("el").unwrap());
-
-        // Valid PI
-        el.add_processing_instruction("target".to_string(), "data".to_string())
-            .unwrap();
-
-        // Case-insensitive xml target should fail
-        let result = el.add_processing_instruction("xml".to_string(), "data".to_string());
-        assert!(result.is_err());
-
-        // PI data with ?> should fail
-        let result = el.add_processing_instruction("target".to_string(), "has ?>".to_string());
-        assert!(result.is_err());
+impl From<Element> for Node {
+    fn from(element: Element) -> Self {
+        element.0
     }
 }

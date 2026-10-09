@@ -707,6 +707,71 @@ fn adjacent_text_nodes_are_merged_on_output() {
 }
 
 #[test]
+fn processing_instruction_content_is_kept_verbatim() {
+    // rule: rule.well-formedness.pi-pass-through.md
+    rules::assert_rule_exists("rule.well-formedness.pi-pass-through.md");
+
+    // The whitespace separating target and content is syntax: exactly one character of it is
+    // removed, the rest of the content is data and is preserved (including leading and trailing
+    // whitespace, which the pre-rewrite implementation trimmed away).
+    for (input, expected) in [
+        ("<?a?>", ""),
+        ("<?a ?>", ""),
+        ("<?a x?>", "x"),
+        ("<?a  x?>", " x"),
+        ("<?a x ?>", "x "),
+        ("<?a x y?>", "x y"),
+        ("<?a echo \"hi\"; ?>", "echo \"hi\"; "),
+    ] {
+        let document = parse_string(&format!("<r>{input}</r>")).unwrap();
+        let (_, data) = document
+            .root()
+            .unwrap()
+            .children()
+            .iter()
+            .find_map(|node| node.processing_instruction())
+            .unwrap_or_else(|| panic!("no PI parsed from {input}"));
+        assert_eq!(data.as_str(), expected, "input: {input}");
+
+        // ... and the output re-parses to the same content.
+        let serialized = write_string(&document).unwrap();
+        let reparsed = parse_string(&serialized).unwrap();
+        let (_, data) = reparsed
+            .root()
+            .unwrap()
+            .children()
+            .iter()
+            .find_map(|node| node.processing_instruction())
+            .unwrap();
+        assert_eq!(data.as_str(), expected, "output: {serialized}");
+    }
+}
+
+#[test]
+fn empty_text_nodes_have_no_representation_and_are_omitted() {
+    let document = Document::empty();
+    let root = element(&document, "a");
+    document.set_root(root.clone());
+    root.append_child(document.create_text("").unwrap());
+    root.append_child(document.create_text("text").unwrap());
+    root.append_child(document.create_text("").unwrap());
+    root.append_child(element(&document, "b"));
+    root.append_child(document.create_text("").unwrap());
+
+    assert_eq!(write_string(&document).unwrap(), "<a>text<b/></a>");
+    // Comments and CDATA sections have a representation for "empty" and keep it.
+    let document = Document::empty();
+    let root = element(&document, "a");
+    document.set_root(root.clone());
+    root.append_child(document.create_comment("").unwrap());
+    root.append_child(document.create_cdata("").unwrap());
+    assert_eq!(
+        write_string(&document).unwrap(),
+        "<a><!----><![CDATA[]]></a>"
+    );
+}
+
+#[test]
 fn comments_cdata_and_processing_instructions_are_written_verbatim() {
     let document = Document::empty();
     let root = element(&document, "a");

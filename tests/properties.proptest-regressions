@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 175f0b284e34562e100edfc60324a338d7163af22b84431c9dd9b2857d126527 # shrinks to generated = GenDocument { default_namespace: false, root: GenElement { name: None, redeclare: [false, false, false], attributes: [], children: [Element(GenElement { name: None, redeclare: [false, false, false], attributes: [], children: [Pi("a", "\t")] })] } }
+cc b7d8edda09b38990b81340e36af3c4ca7013e35ba3000752616a4cc6dbf3ed5c # shrinks to generated = GenDocument { default_namespace: false, root: GenElement { name: None, redeclare: [false, false, false], attributes: [], children: [Element(GenElement { name: None, redeclare: [false, false, false], attributes: [], children: [Pi("a", "\t")] })] } }
+cc e67621d394c7e626f23f1a20664292c0ace49b7380871e2d4677c5bc3cc5cd2a # shrinks to generated = GenDocument { default_namespace: false, root: GenElement { name: None, redeclare: [false, false, false], attributes: [], children: [Text("")] } }

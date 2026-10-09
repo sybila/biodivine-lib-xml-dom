@@ -18,6 +18,9 @@
 //!   cannot contain an escape sequence, so line ends are normalised when they are *constructed*
 //!   (see [`crate::xml_spec`]), which makes the stored value exactly what a re-parse produces;
 //! * adjacent text nodes are merged, so the output does not depend on how the tree was built.
+//!   An *empty* text node is omitted: it carries no character data and XML has no representation
+//!   for it, so writing one is not possible even in principle. (Empty comments `<!---->` and
+//!   empty CDATA sections `<![CDATA[]]>` are representable and are written.)
 //!
 //! # Namespaces
 //!

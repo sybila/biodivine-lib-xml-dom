@@ -304,8 +304,16 @@ impl<'input> Parser<'input> {
                     return Ok(());
                 }
                 let target = decode_bytes(instruction.target(), "processing instruction target")?;
+                // `PI ::= '<?' PITarget (S (Char* - (Char* '?>' Char*)))? '?>'`: the whitespace
+                // that separates the target from the content is syntax, so exactly one character
+                // of it is removed. Everything else - including leading and trailing whitespace of
+                // the content itself - is data and is kept verbatim, which is what makes the
+                // content round-trip exactly (`rule.well-formedness.pi-pass-through.md`).
                 let content =
-                    decode_bytes(instruction.content(), "processing instruction content")?.trim();
+                    decode_bytes(instruction.content(), "processing instruction content")?;
+                let content = content
+                    .strip_prefix([' ', '\t', '\n', '\r'])
+                    .unwrap_or(content);
                 let element = self.stack.last().expect("checked above");
                 let node = self
                     .document

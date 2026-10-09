@@ -437,11 +437,30 @@ fn parse_errors() {
         "ReservedPrefix",
         |error| matches!(error, XmlError::ReservedPrefix(_)),
     );
+    // A `--` inside a comment is caught by the tokenizer (malformed markup), whereas a comment
+    // whose content *ends* with a hyphen only becomes visible once the section is closed, so it is
+    // caught by the `Comment` validator. Both are documented in `parse_reader`'s `# Errors`.
     assert_variant(
         "parse_string('<a><!-- bad -- comment --></a>')",
         parse_string("<a><!-- bad -- comment --></a>"),
-        "InvalidComment",
-        |error| matches!(error, XmlError::InvalidComment(_)),
+        "MalformedXml or InvalidComment",
+        |error| {
+            matches!(
+                error,
+                XmlError::MalformedXml(_) | XmlError::InvalidComment(_)
+            )
+        },
+    );
+    assert_variant(
+        "parse_string('<a><!--x---></a>')",
+        parse_string("<a><!--x---></a>"),
+        "MalformedXml or InvalidComment",
+        |error| {
+            matches!(
+                error,
+                XmlError::MalformedXml(_) | XmlError::InvalidComment(_)
+            )
+        },
     );
     assert_variant(
         "parse_string('<1bad/>')",

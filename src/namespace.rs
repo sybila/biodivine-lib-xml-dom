@@ -1,0 +1,243 @@
+use crate::error::XmlError;
+use crate::xml_spec::{self, NCName};
+use std::sync::Arc;
+
+/// Represents an XML namespace with URI and optional prefix.
+///
+/// [`Namespace`] is immutable and thread-safe by design. The namespace data is shared
+/// behind an `Arc` pointer, so copying namespaces should be relatively cheap. Prefer
+/// cloning existing namespaces instead of creating new ones to reduce memory usage.
+///
+/// # Equality
+///
+/// Two [`Namespace`] objects are considered equal if they have the same URI **and** the
+/// same prefix. The XML specification defines namespace equality by URI comparison alone;
+/// use [`Namespace::is_equal_ns`] for that. The derived [`PartialEq`] implementation
+/// additionally requires the prefix to match, which is useful for distinguishing namespace
+/// declarations that bind the same URI under different prefixes.
+///
+/// # Conditions for a valid namespace:
+///
+/// - The URI must not be empty.
+/// - The prefix, if present, must be a valid XML NCName per XML 1.0 Fifth Edition:
+///   non-empty, no colon (`:`), must start with a letter (including Unicode), underscore,
+///   and may contain letters, digits, underscores, hyphens, and periods (including Unicode).
+/// - The prefix `xml` must only be bound to `http://www.w3.org/XML/1998/namespace`.
+/// - The prefix `xmlns` must never be declared.
+/// - No prefix other than `xml` may be bound to `http://www.w3.org/XML/1998/namespace`.
+/// - No prefix may be bound to `http://www.w3.org/2000/xmlns/`.
+/// - The default namespace (no prefix) must not be `http://www.w3.org/XML/1998/namespace`
+///   or `http://www.w3.org/2000/xmlns/`.
+///
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Namespace {
+    data: Arc<NamespaceData>,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct NamespaceData {
+    uri: String,
+    prefix: Option<NCName>,
+}
+
+impl Namespace {
+    /// Create a new namespace with URI and optional prefix, validating XML rules.
+    ///
+    /// This constructor takes owned [`String`] objects to avoid allocating when the caller
+    /// already has owned data. For more convenient constructors that accept
+    /// `&str`, see [`Namespace::prefixed`] and [`Namespace::without_prefix`].
+    ///
+    /// # Errors
+    ///
+    /// Returns `XmlError` if the namespace violates validation rules (see [`Namespace`]).
+    ///
+    /// # Examples
+    /// ```rust
+    /// use biodivine_lib_xml_dom::Namespace;
+    /// use biodivine_lib_xml_dom::xml_spec::NCName;
+    /// use std::convert::TryInto;
+    /// let prefix: NCName = "ex".try_into().unwrap();
+    /// let ns = Namespace::new("http://example.com".to_string(), Some(prefix));
+    /// assert!(ns.is_ok());
+    /// let ns = Namespace::new("http://example.com".to_string(), None);
+    /// assert!(ns.is_ok());
+    /// let invalid: Result<NCName, _> = "123".try_into();
+    /// if let Err(_) = invalid {
+    ///     // Invalid NCNames are rejected at construction
+    /// }
+    /// ```
+    pub fn new(uri: String, prefix: Option<NCName>) -> Result<Self, XmlError> {
+        xml_spec::validate_namespace(&uri, prefix.as_ref())?;
+        Ok(Self {
+            data: Arc::new(NamespaceData { uri, prefix }),
+        })
+    }
+
+    /// Create a namespace without a prefix (default namespace), validating XML rules.
+    ///
+    /// # Errors
+    ///
+    /// Returns `XmlError` if the namespace violates validation rules for a namespace with
+    /// no prefix (see [`Namespace`]).
+    ///
+    /// # Examples
+    /// ```rust
+    /// use biodivine_lib_xml_dom::Namespace;
+    /// let ns = Namespace::without_prefix("http://example.com");
+    /// assert!(ns.is_ok());
+    /// let ns = Namespace::without_prefix("");
+    /// assert!(ns.is_err());
+    /// ```
+    pub fn without_prefix<U: AsRef<str>>(uri: U) -> Result<Self, XmlError> {
+        Self::new(uri.as_ref().to_string(), None)
+    }
+
+    /// Create a prefixed namespace, validating XML rules.
+    ///
+    /// # Errors
+    ///
+    /// Returns `XmlError` if the namespace violates validation rules (see [`Namespace`]).
+    ///
+    /// # Examples
+    /// ```rust
+    /// use biodivine_lib_xml_dom::Namespace;
+    /// let ns = Namespace::prefixed("http://example.com", "ex");
+    /// assert!(ns.is_ok());
+    /// let ns = Namespace::prefixed("http://example.com", "ex:bad");
+    /// assert!(ns.is_err());
+    /// ```
+    pub fn prefixed<U: AsRef<str>, P: AsRef<str>>(uri: U, prefix: P) -> Result<Self, XmlError> {
+        let prefix_ncname = NCName::try_from(prefix.as_ref())?;
+        Self::new(uri.as_ref().to_string(), Some(prefix_ncname))
+    }
+
+    /// Get a reference to the namespace URI.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use biodivine_lib_xml_dom::Namespace;
+    /// let ns = Namespace::without_prefix("http://example.com").unwrap();
+    /// assert_eq!(ns.uri(), "http://example.com");
+    /// ```
+    pub fn uri(&self) -> &str {
+        &self.data.uri
+    }
+
+    /// Get a reference to the namespace prefix as an [`NCName`], if any.
+    ///
+    /// The returned [`NCName`] is guaranteed to be a valid XML NCName.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use biodivine_lib_xml_dom::Namespace;
+    /// let ns = Namespace::prefixed("http://example.com", "ex").unwrap();
+    /// assert_eq!(ns.prefix().map(|p| p.as_str()), Some("ex"));
+    /// let ns = Namespace::without_prefix("http://example.com").unwrap();
+    /// assert_eq!(ns.prefix(), None);
+    /// ```
+    pub fn prefix(&self) -> Option<&NCName> {
+        self.data.prefix.as_ref()
+    }
+
+    /// Get a reference to the namespace prefix as a string slice, if any.
+    ///
+    /// This is a convenience method that returns the prefix as `&str`.
+    /// Prefer [`Namespace::prefix`] when you need the type-safe [`NCName`] representation.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use biodivine_lib_xml_dom::Namespace;
+    /// let ns = Namespace::prefixed("http://example.com", "ex").unwrap();
+    /// assert_eq!(ns.prefix_str(), Some("ex"));
+    /// let ns = Namespace::without_prefix("http://example.com").unwrap();
+    /// assert_eq!(ns.prefix_str(), None);
+    /// ```
+    pub fn prefix_str(&self) -> Option<&str> {
+        self.data.prefix.as_ref().map(|p| p.as_str())
+    }
+
+    /// Compare this namespace with another for equality based only on their URI.
+    /// This is what the XML specification considers as "equal" namespaces in the
+    /// context of namespace declarations.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use biodivine_lib_xml_dom::Namespace;
+    /// let ns1 = Namespace::prefixed("http://example.com", "ex").unwrap();
+    /// let ns2 = Namespace::without_prefix("http://example.com").unwrap();
+    /// assert!(ns1.is_equal_ns(&ns2));
+    /// let ns3 = Namespace::without_prefix("http://different.com").unwrap();
+    /// assert!(!ns1.is_equal_ns(&ns3));
+    /// ```
+    pub fn is_equal_ns(&self, other: &Namespace) -> bool {
+        self.uri() == other.uri()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::document::Document;
+    use crate::qualified_name::QualifiedName;
+
+    #[test]
+    fn test_namespace_support() {
+        let doc = Document::empty();
+        let namespace = Namespace::prefixed("http://example.com", "ex").unwrap();
+        let element =
+            doc.create_element(QualifiedName::with_namespace("test", &namespace).unwrap());
+
+        assert_eq!(element.qualified_name().local_name(), "test");
+        assert_eq!(element.qualified_name().namespace(), Some(&namespace));
+        assert_eq!(element.qualified_name().to_string(), "ex:test");
+    }
+
+    #[test]
+    fn test_namespace_equality() {
+        let ns1 = Namespace::prefixed("http://example.com", "ex").unwrap();
+        let ns2 = Namespace::prefixed("http://example.com", "ex").unwrap();
+        let ns3 = Namespace::prefixed("http://example.com", "other").unwrap();
+        let ns4 = Namespace::without_prefix("http://example.com").unwrap();
+        let ns5 = Namespace::without_prefix("http://different.com").unwrap();
+
+        // Same URI and prefix, but different Arc pointers
+        assert_eq!(ns1, ns2);
+        // Same URI, different prefix
+        assert_ne!(ns1, ns3);
+        // Same URI, one with prefix, one without
+        assert_ne!(ns1, ns4);
+        // Different URI
+        assert_ne!(ns1, ns5);
+        // Default namespace equality
+        let ns6 = Namespace::without_prefix("http://example.com").unwrap();
+        assert_eq!(ns4, ns6);
+
+        // Clone should produce an equal Namespace
+        let ns1_clone = ns1.clone();
+        assert_eq!(ns1, ns1_clone);
+    }
+
+    #[test]
+    fn test_namespace_is_equal_ns() {
+        let ns1 = Namespace::prefixed("http://example.com", "ex").unwrap();
+        let ns2 = Namespace::without_prefix("http://example.com").unwrap();
+        let ns3 = Namespace::prefixed("http://example.com", "other").unwrap();
+        let ns4 = Namespace::without_prefix("http://different.com").unwrap();
+        // Same URI, different prefixes
+        assert!(ns1.is_equal_ns(&ns2));
+        assert!(ns1.is_equal_ns(&ns3));
+        // Different URIs
+        assert!(!ns1.is_equal_ns(&ns4));
+        assert!(!ns2.is_equal_ns(&ns4));
+        // Identical objects
+        assert!(ns1.is_equal_ns(&ns1));
+    }
+
+    #[test]
+    fn test_unicode_prefixes() {
+        // Valid Unicode prefixes should be accepted
+        assert!(Namespace::prefixed("http://example.com", "\u{00C0}").is_ok());
+        assert!(Namespace::prefixed("http://example.com", "\u{4E00}\u{4E00}").is_ok());
+        assert!(Namespace::prefixed("http://example.com", "\u{0391}bc").is_ok());
+    }
+}

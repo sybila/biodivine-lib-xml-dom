@@ -9,6 +9,14 @@ edition = "2024"
 [workspace]
 members = ["biodivine-lib-xml-dom-py-sys"]
 
+# Requirement (7): every public item is documented. `missing_docs` makes that a lint instead of a
+# habit, and the docs gate (`RUSTDOCFLAGS="-D warnings" cargo doc`) turns it into a hard failure.
+[workspace.lints.rust]
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+uninlined_format_args = "warn"
+
 # Note: no `panic = "abort"` in any profile. PyO3 converts a Rust panic into a Python
 # `PanicException`, which is only possible while unwinding; `panic = "abort"` would turn a panic
 # inside the bindings into a process abort instead.
@@ -21,5 +29,5 @@ parking_lot = "0.12"
 quick-xml = "0.41"
 thiserror = "2.0"
 
-[lints.clippy]
-uninlined_format_args = "warn"
+[lints]
+workspace = true

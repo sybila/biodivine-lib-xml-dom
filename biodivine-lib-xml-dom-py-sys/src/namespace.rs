@@ -38,6 +38,9 @@ impl PyNamespace {
     /// Creates a namespace, with a prefix if one is given.
     ///
     /// Raises `XmlNamespaceError`/`XmlSyntaxError` if the pair is not a legal namespace.
+    /// Raises:
+    ///     XmlNamespaceError: if the URI is empty or is one of the reserved URIs.
+    ///     XmlSyntaxError: if the prefix is not a valid XML name.
     #[new]
     #[pyo3(signature = (uri, prefix = None))]
     pub fn new(uri: &str, prefix: Option<&str>) -> PyResult<Self> {
@@ -49,6 +52,8 @@ impl PyNamespace {
     }
 
     /// Creates a namespace without a prefix (a default namespace).
+    /// Raises:
+    ///     XmlNamespaceError: if the URI is empty or is one of the reserved URIs.
     #[staticmethod]
     pub fn without_prefix(uri: &str) -> PyResult<Self> {
         Namespace::without_prefix(uri)
@@ -57,6 +62,9 @@ impl PyNamespace {
     }
 
     /// Creates a namespace with a prefix.
+    /// Raises:
+    ///     XmlSyntaxError: if the prefix is not a valid XML name.
+    ///     XmlNamespaceError: if the URI/prefix pair is not a legal namespace.
     #[staticmethod]
     pub fn prefixed(uri: &str, prefix: &str) -> PyResult<Self> {
         Namespace::prefixed(uri, prefix)
@@ -85,16 +93,21 @@ impl PyNamespace {
         self.inner.is_equal_ns(&other.inner)
     }
 
+    /// A hash consistent with `__eq__` (the same value Rust's `Hash` produces, so
+    /// equal handles hash equally and can be used as dictionary keys).
     pub fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.inner.hash(&mut hasher);
         hasher.finish()
     }
 
+    /// Equality with another handle of the same type: the same node/document/value
+    /// (Rust's `PartialEq`). Python object identity is *not* part of it.
     pub fn __eq__(&self, other: &Self) -> bool {
         self.inner == other.inner
     }
 
+    /// A debug representation for interactive use, not a serialization of the value.
     pub fn __repr__(&self) -> String {
         match self.inner.prefix_str() {
             Some(prefix) => format!("Namespace({:?}, prefix={:?})", self.inner.uri(), prefix),
@@ -102,6 +115,8 @@ impl PyNamespace {
         }
     }
 
+    /// The value as a string: a node as XML, a name as `prefix:local`, a namespace as
+    /// `prefix:uri` (or just the URI), a number as its digits.
     pub fn __str__(&self) -> String {
         match self.inner.prefix_str() {
             Some(prefix) => format!("{prefix}:{}", self.inner.uri()),

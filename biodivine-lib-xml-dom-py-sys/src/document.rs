@@ -63,6 +63,8 @@ impl PyDocument {
     /// Raises `XmlDocumentError` if `root` belongs to another document or is already attached to a
     /// parent. (Rust has a panicking `set_root` and a `set_root_checked`; Python has no panics, so
     /// this is the `_checked` behaviour under the plain name.)
+    /// Raises:
+    ///     XmlDocumentError: if `root` belongs to another document or is already attached to a parent.
     #[pyo3(signature = (root))]
     pub fn set_root(&self, root: &PyElement) -> PyResult<Option<PyElement>> {
         self.inner
@@ -87,6 +89,8 @@ impl PyDocument {
     ///
     /// Raises `XmlSyntaxError` if the content contains characters that are not legal in XML, so an
     /// invalid text node cannot be created at all.
+    /// Raises:
+    ///     XmlSyntaxError: if the content contains characters that are not legal in XML.
     pub fn create_text(&self, text: &str) -> PyResult<PyNode> {
         self.inner
             .create_text(text)
@@ -97,6 +101,8 @@ impl PyDocument {
     /// Creates a new, detached comment node.
     ///
     /// Raises `XmlSyntaxError` if the content contains `--` or ends with `-`.
+    /// Raises:
+    ///     XmlSyntaxError: if the content contains `--` or ends with `-`.
     pub fn create_comment(&self, text: &str) -> PyResult<PyNode> {
         self.inner
             .create_comment(text)
@@ -107,6 +113,8 @@ impl PyDocument {
     /// Creates a new, detached CDATA section.
     ///
     /// Raises `XmlSyntaxError` if the content contains `]]>`.
+    /// Raises:
+    ///     XmlSyntaxError: if the content contains `]]>`.
     pub fn create_cdata(&self, text: &str) -> PyResult<PyNode> {
         self.inner
             .create_cdata(text)
@@ -118,6 +126,9 @@ impl PyDocument {
     ///
     /// Raises `XmlSyntaxError` if the target is not a valid XML `Name` or matches `xml`
     /// case-insensitively, or if the content contains `?>`.
+    /// Raises:
+    ///     XmlSyntaxError: if the target is not a valid XML name or matches `xml` case-insensitively,
+    ///     or if the content contains `?>`.
     pub fn create_processing_instruction(&self, target: &str, data: &str) -> PyResult<PyNode> {
         self.inner
             .create_processing_instruction(target, data)
@@ -144,6 +155,9 @@ impl PyDocument {
     /// list without catching an exception.
     ///
     /// The GIL is released for the duration of the walk.
+    /// Raises:
+    ///     XmlValidationError: if the document has any problem. `args[0]` is the multi-line summary
+    ///     and `args[1]` the `ValidationErrors` sequence.
     pub fn validate(&self, py: Python<'_>) -> PyResult<()> {
         let document = self.inner.clone();
         py.detach(|| document.validate())
@@ -195,6 +209,8 @@ impl PyDocument {
         self.inner.ptr_eq(&other.inner)
     }
 
+    /// A hash consistent with `__eq__` (the same value Rust's `Hash` produces, so
+    /// equal handles hash equally and can be used as dictionary keys).
     pub fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         hash_document(&self.inner, &mut hasher);
@@ -206,6 +222,7 @@ impl PyDocument {
         self.inner == other.inner
     }
 
+    /// A debug representation for interactive use, not a serialization of the value.
     pub fn __repr__(&self) -> String {
         format!("Document(nodes={})", self.inner.node_count())
     }

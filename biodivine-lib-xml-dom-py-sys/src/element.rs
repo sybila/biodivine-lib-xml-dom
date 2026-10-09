@@ -88,6 +88,8 @@ impl PyElement {
     }
 
     /// The value of the attribute with the given local name that is in no namespace, or `None`.
+    /// Raises:
+    ///     XmlSyntaxError: if `local_name` is not a valid XML name.
     pub fn attribute_local(&self, local_name: &str) -> PyResult<Option<String>> {
         let local_name =
             biodivine_lib_xml_dom::xml_spec::NCName::try_from(local_name).map_err(to_py_err)?;
@@ -105,6 +107,8 @@ impl PyElement {
     /// Sets an attribute, overwriting any previous value with the same expanded name.
     ///
     /// Raises `XmlSyntaxError` if the value contains characters that are not legal in XML.
+    /// Raises:
+    ///     XmlSyntaxError: if the value contains characters that are not legal in XML.
     pub fn set_attribute(&self, name: &PyQualifiedName, value: &str) -> PyResult<()> {
         self.inner
             .set_attribute_checked(name.inner.clone(), value)
@@ -162,6 +166,8 @@ impl PyElement {
     /// Declares a namespace, refusing to *change* an existing binding for the same prefix.
     ///
     /// Raises `XmlNamespaceError` if the prefix is already bound to a different URI.
+    /// Raises:
+    ///     XmlNamespaceError: if the prefix is already bound to a different URI.
     pub fn declare_namespace_checked(&self, namespace: &PyNamespace) -> PyResult<()> {
         self.inner
             .declare_namespace_checked(namespace.inner.clone())
@@ -177,6 +183,8 @@ impl PyElement {
     ///
     /// `prefix` is `None` for the default namespace. Returns the previous binding, or `None` if
     /// this element had no such declaration.
+    /// Raises:
+    ///     XmlSyntaxError: if the prefix is not a valid XML name.
     #[pyo3(signature = (prefix = None))]
     pub fn remove_namespace_declaration(
         &self,
@@ -198,6 +206,8 @@ impl PyElement {
     ///
     /// `prefix` is `None` for the default namespace. The predefined `xml` prefix is *not* resolved
     /// here (it needs no declaration); use `resolve_attribute`/`resolve_element` for that.
+    /// Raises:
+    ///     XmlSyntaxError: if the prefix is not a valid XML name.
     #[pyo3(signature = (prefix = None))]
     pub fn get_namespace(&self, prefix: Option<&str>) -> PyResult<Option<PyNamespace>> {
         let prefix = match prefix {
@@ -213,6 +223,9 @@ impl PyElement {
     }
 
     /// Resolves an element name written as a string against the declarations in scope.
+    /// Raises:
+    ///     XmlSyntaxError: if the name is malformed.
+    ///     XmlNamespaceError: if the prefix is undeclared or reserved.
     pub fn resolve_qualified_name(&self, name: &str) -> PyResult<PyQualifiedName> {
         self.inner
             .resolve_qualified_name(name)
@@ -221,6 +234,9 @@ impl PyElement {
     }
 
     /// Resolves an attribute name written as a string against the declarations in scope.
+    /// Raises:
+    ///     XmlSyntaxError: if the name is malformed.
+    ///     XmlNamespaceError: if the prefix is undeclared or reserved.
     pub fn resolve_attribute_name(&self, name: &str) -> PyResult<PyQualifiedName> {
         self.inner
             .resolve_attribute_name(name)
@@ -257,6 +273,8 @@ impl PyElement {
     }
 
     /// Appends `child` as the last child of this element (see [`PyNode::append_child`]).
+    /// Raises:
+    ///     XmlDocumentError: for a foreign document, a cycle, or an attempt to attach the root.
     pub fn append_child(&self, child: crate::node::PyNodeArg) -> PyResult<()> {
         self.inner
             .node()
@@ -305,20 +323,27 @@ impl PyElement {
         self.inner.node().ptr_eq(&other.inner.node())
     }
 
+    /// The value as a string: a node as XML, a name as `prefix:local`, a namespace as
+    /// `prefix:uri` (or just the URI), a number as its digits.
     pub fn __str__(&self) -> String {
         self.inner.to_string()
     }
 
+    /// A hash consistent with `__eq__` (the same value Rust's `Hash` produces, so
+    /// equal handles hash equally and can be used as dictionary keys).
     pub fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.inner.hash(&mut hasher);
         hasher.finish()
     }
 
+    /// Equality with another handle of the same type: the same node/document/value
+    /// (Rust's `PartialEq`). Python object identity is *not* part of it.
     pub fn __eq__(&self, other: &Self) -> bool {
         self.inner == other.inner
     }
 
+    /// A debug representation for interactive use, not a serialization of the value.
     pub fn __repr__(&self) -> String {
         format!(
             "Element({}, id={}, attached={})",

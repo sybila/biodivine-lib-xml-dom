@@ -38,28 +38,38 @@ impl PyNodeId {
         self.inner.index()
     }
 
+    /// The value as an integer index, so a `NodeId` can be used in `range()`, list
+    /// indexing and slicing.
     pub fn __index__(&self) -> usize {
         self.inner.index()
     }
 
+    /// The value as an `int` (the same as `__index__`).
     pub fn __int__(&self) -> usize {
         self.inner.index()
     }
 
+    /// A hash consistent with `__eq__` (the same value Rust's `Hash` produces, so
+    /// equal handles hash equally and can be used as dictionary keys).
     pub fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.inner.hash(&mut hasher);
         hasher.finish()
     }
 
+    /// Equality with another handle of the same type: the same node/document/value
+    /// (Rust's `PartialEq`). Python object identity is *not* part of it.
     pub fn __eq__(&self, other: &Self) -> bool {
         self.inner == other.inner
     }
 
+    /// A debug representation for interactive use, not a serialization of the value.
     pub fn __repr__(&self) -> String {
         format!("NodeId({})", self.inner.index())
     }
 
+    /// The value as a string: a node as XML, a name as `prefix:local`, a namespace as
+    /// `prefix:uri` (or just the URI), a number as its digits.
     pub fn __str__(&self) -> String {
         self.inner.to_string()
     }

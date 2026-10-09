@@ -81,10 +81,13 @@ impl PyXmlValidationError {
         self.inner.message().to_string()
     }
 
+    /// The value as a string: a node as XML, a name as `prefix:local`, a namespace as
+    /// `prefix:uri` (or just the URI), a number as its digits.
     pub fn __str__(&self) -> String {
         self.inner.to_string()
     }
 
+    /// A debug representation for interactive use, not a serialization of the value.
     pub fn __repr__(&self) -> String {
         format!(
             "ValidationError(kind={:?}, node={:?}, message={:?})",
@@ -94,6 +97,8 @@ impl PyXmlValidationError {
         )
     }
 
+    /// Equality with another handle of the same type: the same node/document/value
+    /// (Rust's `PartialEq`). Python object identity is *not* part of it.
     pub fn __eq__(&self, other: &Self) -> bool {
         self.inner == other.inner
     }
@@ -128,6 +133,8 @@ impl PyXmlValidationErrors {
     }
 
     /// The problem at `index`.
+    /// Raises:
+    ///     IndexError: if there is no problem at `index`.
     pub fn __getitem__(&self, index: usize) -> PyResult<PyXmlValidationError> {
         self.inner
             .as_slice()
@@ -146,10 +153,13 @@ impl PyXmlValidationErrors {
             .collect()
     }
 
+    /// The value as a string: a node as XML, a name as `prefix:local`, a namespace as
+    /// `prefix:uri` (or just the URI), a number as its digits.
     pub fn __str__(&self) -> String {
         self.inner.to_string()
     }
 
+    /// A debug representation for interactive use, not a serialization of the value.
     pub fn __repr__(&self) -> String {
         format!("ValidationErrors({} problem(s))", self.inner.len())
     }

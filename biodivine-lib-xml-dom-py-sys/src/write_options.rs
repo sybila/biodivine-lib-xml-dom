@@ -139,6 +139,7 @@ impl PyWriteOptions {
         WriteOptions::default().into()
     }
 
+    /// A debug representation for interactive use, not a serialization of the value.
     pub fn __repr__(&self) -> String {
         format!(
             "WriteOptions(declaration={:?}, empty_elements={:?})",
@@ -146,6 +147,8 @@ impl PyWriteOptions {
         )
     }
 
+    /// Equality with another handle of the same type: the same node/document/value
+    /// (Rust's `PartialEq`). Python object identity is *not* part of it.
     pub fn __eq__(&self, other: &Self) -> bool {
         self.declaration == other.declaration && self.empty_elements == other.empty_elements
     }
@@ -208,10 +211,13 @@ impl PyXmlDeclaration {
         self.inner.to_string()
     }
 
+    /// A debug representation for interactive use, not a serialization of the value.
     pub fn __repr__(&self) -> String {
         format!("XmlDeclaration({:?})", self.inner.to_string())
     }
 
+    /// Equality with another handle of the same type: the same node/document/value
+    /// (Rust's `PartialEq`). Python object identity is *not* part of it.
     pub fn __eq__(&self, other: &Self) -> bool {
         self.inner == other.inner
     }

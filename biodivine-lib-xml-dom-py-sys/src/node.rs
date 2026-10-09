@@ -181,6 +181,8 @@ impl PyNode {
     /// is this node or an ancestor of it (`cycle_detected`), or if it is the document root
     /// (`cannot_attach_root`). No namespace declaration is added, removed or rewritten: run
     /// `Document.validate` to find the resulting inconsistencies.
+    /// Raises:
+    ///     XmlDocumentError: for a foreign document, a cycle, or an attempt to attach the root.
     pub fn append_child(&self, child: PyNodeArg) -> PyResult<()> {
         self.inner
             .append_child_checked(Node::from(child))
@@ -191,6 +193,8 @@ impl PyNode {
     ///
     /// `index` is interpreted after `child` has been detached from any previous parent. Raises
     /// `XmlDocumentError` including `index_out_of_bounds`-style failures.
+    /// Raises:
+    ///     XmlDocumentError: as `append_child`, or an out-of-range `index`.
     pub fn insert_child(&self, index: usize, child: PyNodeArg) -> PyResult<()> {
         self.inner
             .insert_child_checked(index, Node::from(child))
@@ -198,6 +202,8 @@ impl PyNode {
     }
 
     /// Inserts `child` directly before the child `sibling` of this node.
+    /// Raises:
+    ///     XmlDocumentError: as `append_child`, or if `sibling` is not a child of this node.
     pub fn insert_before(&self, sibling: PyNodeArg, child: PyNodeArg) -> PyResult<()> {
         self.inner
             .insert_before_checked(Node::from(sibling), Node::from(child))
@@ -205,6 +211,8 @@ impl PyNode {
     }
 
     /// Inserts `child` directly after the child `sibling` of this node.
+    /// Raises:
+    ///     XmlDocumentError: as `append_child`, or if `sibling` is not a child of this node.
     pub fn insert_after(&self, sibling: PyNodeArg, child: PyNodeArg) -> PyResult<()> {
         self.inner
             .insert_after_checked(Node::from(sibling), Node::from(child))
@@ -213,6 +221,9 @@ impl PyNode {
 
     /// Replaces this node with `replacement` in this node's parent, returning this node (now
     /// detached).
+    /// Raises:
+    ///     XmlDocumentError: if this node has no parent, if the replacement belongs to another
+    ///     document, or if the replacement would create a cycle.
     pub fn replace_with(&self, replacement: PyNodeArg) -> PyResult<PyNode> {
         self.inner
             .replace_with_checked(Node::from(replacement))
@@ -261,16 +272,21 @@ impl PyNode {
         self.inner.to_string()
     }
 
+    /// A hash consistent with `__eq__` (the same value Rust's `Hash` produces, so
+    /// equal handles hash equally and can be used as dictionary keys).
     pub fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.inner.hash(&mut hasher);
         hasher.finish()
     }
 
+    /// Equality with another handle of the same type: the same node/document/value
+    /// (Rust's `PartialEq`). Python object identity is *not* part of it.
     pub fn __eq__(&self, other: &Self) -> bool {
         self.inner == other.inner
     }
 
+    /// A debug representation for interactive use, not a serialization of the value.
     pub fn __repr__(&self) -> String {
         let kind = match self.inner.kind() {
             biodivine_lib_xml_dom::NodeKind::Element => "Element".to_string(),

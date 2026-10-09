@@ -22,6 +22,12 @@ from biodivine_lib_xml_dom import _sys
 #: value types (an enum and two plain data holders) whose native form is already idiomatic in
 #: Python, and the exception hierarchy, which PyO3 has to define as native types. Everything else in
 #: `__all__` must be a Python class or function defined by this package.
+#: Python classes that exist only to *name* native enum members, rather than to wrap an object:
+#: `NodeKind` is an ordinary Python class whose attributes are the native `_sys.NodeKind` members,
+#: so `node.kind is NodeKind.Element` holds while `NodeKind` itself is defined by this package. This
+#: is a decision, so it is listed here and asserted below rather than passing by accident.
+COMPANION_NAMESPACES = {"NodeKind"}
+
 NATIVE_RE_EXPORTS = {
     "WriteOptions",
     "DeclarationStyle",
@@ -58,7 +64,7 @@ def test_every_exported_name_resolves() -> None:
 def test_the_public_surface_is_wrappers_and_functions_only() -> None:
     """Every exported object is a wrapper class, a function, or an explicitly allow-listed native
     value type/exception — never an accidental `_sys` leak."""
-    wrappers, functions = [], []
+    wrappers, functions, companion = [], [], []
     for name in xml.__all__:
         obj = getattr(xml, name)
         if name in NATIVE_RE_EXPORTS:
@@ -72,7 +78,18 @@ def test_the_public_surface_is_wrappers_and_functions_only() -> None:
             assert not _is_native(obj), (
                 f"{name} leaks a native type; add it to NATIVE_RE_EXPORTS if that is deliberate"
             )
-            wrappers.append(name)
+            if name in COMPANION_NAMESPACES:
+                members = [
+                    member for member in vars(obj).values()
+                    if isinstance(member, _sys.NodeKind)
+                ]
+                assert members, f"{name} is a companion namespace but has no native members"
+                assert all(_is_native(type(member)) for member in members), (
+                    f"{name}'s members must be the native enum values"
+                )
+                companion.append(name)
+            else:
+                wrappers.append(name)
         elif callable(obj) or isinstance(obj, types.FunctionType):
             functions.append(name)
         elif isinstance(obj, str):
@@ -92,6 +109,9 @@ def test_the_public_surface_is_wrappers_and_functions_only() -> None:
         "ValidationError",
         "ValidationErrors",
     }
+    assert companion == sorted(COMPANION_NAMESPACES), (
+        "the companion namespaces are a decision; keep the list and this assertion in sync"
+    )
     assert set(functions) == {"parse", "parse_file", "write", "write_file"}
     # Nothing that the Rust spec layer or the native module keeps internal may appear here.
     for leaked in ("NCName", "Text", "Comment", "CData", "PiTarget", "PiData", "NodeContent"):
@@ -125,6 +145,12 @@ def test_classes_are_constructible_or_produced_by_a_documented_factory() -> None
     assert isinstance(xml.QualifiedName("child"), xml.QualifiedName)
     assert isinstance(xml.WriteOptions(), xml.WriteOptions)
     assert isinstance(xml.XmlDeclaration.utf8(), xml.XmlDeclaration)
+    # `NodeKind` names the native enum members, so identity works and the value is native.
+    document_for_kinds = xml.Document()
+    text = document_for_kinds.create_text("x")
+    assert text.kind is xml.NodeKind.Text
+    assert isinstance(text.kind, _sys.NodeKind)
+    assert text.kind is not None and text.kind == _sys.NodeKind.Text
     assert xml.DeclarationStyle.Never is not None
     assert xml.EmptyElementStyle.SelfClosing is not None
     assert [member for member in ("Element", "Text", "Comment", "CData", "ProcessingInstruction")

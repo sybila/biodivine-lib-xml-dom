@@ -17,6 +17,9 @@ use crate::write_options::PyWriteOptions;
 ///
 /// Raises `XmlSyntaxError` (well-formedness), `XmlNamespaceError` (namespaces) or `XmlIoError` as
 /// appropriate; the message is the Rust error text.
+/// Raises:
+///     XmlSyntaxError: if the input is not well-formed.
+///     XmlNamespaceError: if a namespace is used illegally.
 #[pyfunction]
 #[pyo3(signature = (source))]
 pub fn parse_string(py: Python<'_>, source: &str) -> PyResult<PyDocument> {
@@ -27,6 +30,9 @@ pub fn parse_string(py: Python<'_>, source: &str) -> PyResult<PyDocument> {
 }
 
 /// Parses an XML document from bytes (which must be valid UTF-8).
+/// Raises:
+///     XmlSyntaxError: if the input is not well-formed or is not valid UTF-8.
+///     XmlNamespaceError: if a namespace is used illegally.
 #[pyfunction]
 #[pyo3(signature = (data))]
 pub fn parse_bytes(py: Python<'_>, data: &Bound<'_, PyBytes>) -> PyResult<PyDocument> {
@@ -39,6 +45,9 @@ pub fn parse_bytes(py: Python<'_>, data: &Bound<'_, PyBytes>) -> PyResult<PyDocu
 /// Parses an XML document from a file.
 ///
 /// Raises `XmlIoError` if the file cannot be read.
+/// Raises:
+///     XmlIoError: if the file cannot be read.
+///     XmlSyntaxError / XmlNamespaceError: as `parse_bytes`.
 #[pyfunction]
 #[pyo3(signature = (path))]
 pub fn parse_file(py: Python<'_>, path: PathBuf) -> PyResult<PyDocument> {
@@ -50,6 +59,9 @@ pub fn parse_file(py: Python<'_>, path: PathBuf) -> PyResult<PyDocument> {
 /// Serializes a document into a string, using the default options.
 ///
 /// A document without a root element and without a declaration serializes to the empty string.
+/// Raises:
+///     XmlSyntaxError: if the output were not valid UTF-8, which cannot happen for a document
+///     built through this API (reported rather than panicking).
 #[pyfunction]
 #[pyo3(signature = (document))]
 pub fn write_string(py: Python<'_>, document: &PyDocument) -> PyResult<String> {
@@ -57,6 +69,8 @@ pub fn write_string(py: Python<'_>, document: &PyDocument) -> PyResult<String> {
 }
 
 /// Serializes a document into a string with explicit options.
+/// Raises:
+///     As `write_string`.
 #[pyfunction]
 #[pyo3(signature = (document, options = None))]
 pub fn write_string_with(
@@ -71,6 +85,8 @@ pub fn write_string_with(
 }
 
 /// Writes a document to a file, using the default options.
+/// Raises:
+///     XmlIoError: if the file cannot be created or written.
 #[pyfunction]
 #[pyo3(signature = (document, path))]
 pub fn write_file(py: Python<'_>, document: &PyDocument, path: PathBuf) -> PyResult<()> {
@@ -78,6 +94,8 @@ pub fn write_file(py: Python<'_>, document: &PyDocument, path: PathBuf) -> PyRes
 }
 
 /// Writes a document to a file with explicit options.
+/// Raises:
+///     XmlIoError: if the file cannot be created or written.
 #[pyfunction]
 #[pyo3(signature = (document, path, options = None))]
 pub fn write_file_with(

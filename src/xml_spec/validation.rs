@@ -284,6 +284,11 @@ fn attribute_in_xml_namespace<'a>(
 /// `rule.namespace-basics.xml-prefix-fixed-binding`, `xmlns-prefix-not-declared`,
 /// `xml-namespace-not-default`, `xmlns-namespace-not-default`,
 /// `no-other-prefix-to-xml-namespace`, `no-other-prefix-to-xmlns-namespace`).
+///
+/// # Errors
+///
+/// Returns the reason as a [`String`] if the declaration is one the specification forbids; the
+/// caller turns it into a structured validation issue.
 pub fn check_namespace_declaration(prefix: Option<&NCName>, uri: &str) -> Result<(), String> {
     crate::xml_spec::validate_namespace(uri, prefix).map_err(|error| error.to_string())
 }

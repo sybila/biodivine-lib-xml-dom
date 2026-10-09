@@ -1,0 +1,51 @@
+===================================================================
+PROBE        : it_prefix_loss.rs
+KIND         : it
+REPO         : /sandbox/biodivine-lib-xml-dom
+COMMIT       : d5790d4 test(io): add round-trip, idempotence and no-panic property tests
+RUSTC        : rustc 1.99.0 (b940084d7 2026-09-28)
+CARGO        : cargo 1.99.0 (5f94df478 2026-08-27)
+DATE (UTC)   : 2026-10-09T13:45:51Z
+===================================================================
+$ cargo test --release --test __probe -- --nocapture --test-threads=1
+
+   Compiling getrandom v0.3.4
+   Compiling zerocopy v0.8.62
+   Compiling rustix v1.1.5
+   Compiling getrandom v0.4.3
+   Compiling bitflags v2.13.0
+   Compiling linux-raw-sys v0.12.1
+   Compiling autocfg v1.5.1
+   Compiling once_cell v1.21.4
+   Compiling fastrand v2.5.0
+   Compiling wait-timeout v0.2.1
+   Compiling fnv v1.0.7
+   Compiling bit-vec v0.8.0
+   Compiling quick-error v1.2.3
+   Compiling unarray v0.1.4
+   Compiling regex-syntax v0.8.11
+   Compiling biodivine-lib-xml-dom v0.1.0 (/sandbox/biodivine-lib-xml-dom)
+   Compiling num-traits v0.2.19
+   Compiling bit-set v0.8.0
+   Compiling rand_core v0.9.5
+   Compiling rand_xorshift v0.4.0
+   Compiling rand v0.9.5
+   Compiling tempfile v3.27.0
+   Compiling rusty-fork v0.3.1
+   Compiling ppv-lite86 v0.2.21
+   Compiling rand_chacha v0.9.0
+   Compiling proptest v1.11.0
+    Finished `release` profile [optimized] target(s) in 2.98s
+     Running tests/__probe.rs (target/release/deps/__probe-96197373cfe7d3f4)
+
+running 1 test
+test serializer_preserves_element_prefix ... input : <html:html xmlns:html="http://www.w3.org/1999/xhtml"><html:body>hi</html:body></html:html>
+output: <html:html xmlns:html="http://www.w3.org/1999/xhtml"><html:body>hi</html:body></html:html>
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+-------------------------------------------------------------------
+PROBE_EXIT=0
+-------------------------------------------------------------------

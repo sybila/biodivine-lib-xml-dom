@@ -258,7 +258,25 @@ Requirement (1) is read literally: `_checked` variants exist for **logical** fai
 creation, cross-document attach, missing parent/root), while lock acquisition itself cannot fail
 because there is exactly one lock and no re-entrancy. See `PLAN.md` §3 for the full argument.
 
-### 4.3 Breaking changes
+### 4.3 Line-end handling (relates to D9)
+
+XML processors normalise `\r\n` and a lone `\r` to `\n` before parsing
+(`rule.document-structure.processor-must-normalize-line-breaks`), so a literal carriage return can
+only survive a round trip if it is written as `&#xD;`. The I/O rewrite therefore splits the node
+kinds by whether such an escape exists:
+
+| kind | stored | written |
+| --- | --- | --- |
+| text | caller's bytes verbatim | `&`, `<`, `>` and a literal `\r` (as `&#xD;`) escaped |
+| attribute value | caller's bytes verbatim | additionally `"` and tab/LF/CR as character references, because attribute-value normalisation would turn literal whitespace into spaces |
+| comment, CDATA, PI content | line ends normalised to `\n` **at construction** | verbatim |
+| namespace declaration (`xmlns`, `xmlns:*`) | as given by `Namespace`, except that the parser normalises line ends (a declaration value is an attribute value, so §3.3.3 applies to it as well) | re-escaped like any attribute value, so a URI containing a line end still round-trips |
+
+Normalising at construction rather than rejecting is a deliberate choice for the third row: a
+`\r` in a comment is valid XML, and refusing it would be worse than storing the value a re-parse
+will produce. Details and tests: `PLAN.md` §15.3, `tests/io.rs`.
+
+### 4.4 Breaking changes
 
 AGENTS.md states the project is experimental and unreleased, so the rewrite may change the public
 API freely. The plan nevertheless keeps the well-tested names (`Document`, `Element`, `Namespace`,

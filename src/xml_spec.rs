@@ -30,7 +30,9 @@ where
     if validate(s) {
         Ok(Arc::from(s))
     } else {
-        Err(error(format!("'{s}' is not a valid {display_name}")))
+        // `{s:?}` rather than `{s}`: a rejected value often contains exactly the characters that
+        // made it invalid (control characters, for instance), which would be invisible otherwise.
+        Err(error(format!("{s:?} is not a valid {display_name}")))
     }
 }
 

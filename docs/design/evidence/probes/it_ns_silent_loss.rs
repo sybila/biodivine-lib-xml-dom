@@ -23,7 +23,7 @@ fn default_namespace_without_declaration_survives_round_trip() {
     let doc = Document::empty();
     let ns = Namespace::without_prefix("http://example.com").unwrap();
     let root = doc.create_element(QualifiedName::with_namespace("r", &ns).unwrap());
-    doc.set_root(root).unwrap();
+    doc.set_root(root);
 
     let out = write_string(&doc).expect("serialize");
     println!("serialized: {out}");
@@ -48,8 +48,8 @@ fn prefixed_namespace_without_declaration_survives_round_trip() {
     let doc = Document::empty();
     let ns = Namespace::prefixed("http://example.com", "ex").unwrap();
     let root = doc.create_element(QualifiedName::with_namespace("r", &ns).unwrap());
-    doc.set_root(root.clone()).unwrap();
-    root.add_attribute(QualifiedName::with_namespace("a", &ns).unwrap(), "v".to_string());
+    doc.set_root(root.clone());
+    root.set_attribute(QualifiedName::with_namespace("a", &ns).unwrap(), "v");
 
     let out = write_string(&doc).expect("serialize");
     println!("serialized: {out}");

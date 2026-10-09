@@ -208,3 +208,26 @@ Findings:
 * `git branch -a` shows only `master` (+ `origin/master`) — the requested `rewrite` branch does not exist;
 * `.coderabbit.yaml` and `.github/workflows/{build,release}.yml` exist (reused `sybila/github-workflows`
   reusable workflows pinned to `@main`), and `.gitignore` covers only `/target` and `.idea`.
+
+---
+
+## Status after G3 (I/O rewrite)
+
+Re-run with the same runner; fresh transcripts are saved next to the originals as
+`probes/raw/<probe>.after-g3.txt`. Three probes target parse/serialize and were re-run; the other
+five describe parts of the system that have since been replaced, and are marked accordingly below.
+
+| probe | after G3 | evidence |
+| --- | --- | --- |
+| `it_prefix_loss` | **fixed** — `PROBE_EXIT=0` | `output: <html:html xmlns:html="http://www.w3.org/1999/xhtml"><html:body>hi</html:body></html:html>` |
+| `it_entity_panic` | **fixed** — `PROBE_EXIT=0` | `OK: parsed and re-serialized as "<a>AT&amp;T</a>"` and `OK: typed error returned: undeclared entity reference \`&undefined;\`` |
+| `it_ns_silent_loss` | **still fails, by design** — `PROBE_EXIT=101` | `serialized: <ex:r ex:a="v"/>` — the serializer writes the prefixes and declarations that are stored in the tree and never invents one (requirement (3)). Detecting the resulting inconsistency is the job of whole-document validation (G4), not of the serializer. |
+| `it_cycle_race` | superseded — the scenario is now the permanent test `tests/concurrency.rs::two_threads_adding_opposite_children_never_create_a_cycle` (0 cycles, exactly one winner per pair). It no longer compiles because `add_child_element` was replaced by `append_child`/`append_child_checked`. |
+| `cf_missing_api` | superseded — most of the listed items now exist (`remove`, `detach`, `replace_with`, `insert_child`, `deep_clone`, `deep_clone_into`, `namespaces_in_scope`, `remove_namespace_declaration`, `belongs_to`, `Node`). The remaining one (`Document::validate`) is G4. |
+| `sh_python_bindings` | unchanged — Python bindings are G5. |
+| `sh_docs_and_repo_state` | partially outdated — the `rewrite` branch, the removal of `output.xml` and the move of `src/main.rs` to `examples/tour.rs` are done; the docs book and the MSRV pin are G6/G7. |
+
+Two probes were adapted by one line each to keep them runnable against the new API
+(`add_attribute` → `set_attribute`; the `set_root` call no longer returns a `Result`, it returns the
+previous root). Their original transcripts from the pre-rewrite tree are unchanged and still in
+`probes/raw/<probe>.txt`.

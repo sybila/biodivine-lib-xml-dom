@@ -1,0 +1,41 @@
+===================================================================
+PROBE        : it_ns_silent_loss.rs
+KIND         : it
+REPO         : /sandbox/biodivine-lib-xml-dom
+COMMIT       : d5790d4 test(io): add round-trip, idempotence and no-panic property tests
+RUSTC        : rustc 1.99.0 (b940084d7 2026-09-28)
+CARGO        : cargo 1.99.0 (5f94df478 2026-08-27)
+DATE (UTC)   : 2026-10-09T13:46:47Z
+===================================================================
+$ cargo test --release --test __probe -- --nocapture --test-threads=1
+
+   Compiling biodivine-lib-xml-dom v0.1.0 (/sandbox/biodivine-lib-xml-dom)
+    Finished `release` profile [optimized] target(s) in 0.17s
+     Running tests/__probe.rs (target/release/deps/__probe-96197373cfe7d3f4)
+
+running 2 tests
+test default_namespace_without_declaration_survives_round_trip ... serialized: <r/>
+
+thread 'default_namespace_without_declaration_survives_round_trip' (81590) panicked at tests/__probe.rs:30:5:
+namespace not declared in the output: <r/>
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test prefixed_namespace_without_declaration_survives_round_trip ... serialized: <ex:r ex:a="v"/>
+
+thread 'prefixed_namespace_without_declaration_survives_round_trip' (81591) panicked at tests/__probe.rs:56:5:
+prefix `ex` not declared in the output: <ex:r ex:a="v"/>
+FAILED
+
+failures:
+
+failures:
+    default_namespace_without_declaration_survives_round_trip
+    prefixed_namespace_without_declaration_survives_round_trip
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test __probe`
+
+-------------------------------------------------------------------
+PROBE_EXIT=101
+-------------------------------------------------------------------

@@ -112,8 +112,12 @@ its reason. In short:
 
 ## Commits on `rewrite`
 
-27 commits, conventional-commit style, each self-contained and green; nothing pushed, `master`
-untouched. The sequence is: the review and plan (`docs: add baseline verification evidence and defect
+conventional-commit style, each self-contained and green; nothing pushed, `master` untouched. The
+list is `git log --oneline rewrite ^master` and the count is `git rev-list --count rewrite ^master`
+(not written down here, because every commit changes it); at the transcript commit it was 29
+(`git rev-list --count 8254b3b ^master` = 29), and `docs/check_facts.py` verifies the numbers that
+*are* written down - commit counts for named commits, gate and test counts, rule and book counts,
+and the version - every time the gate runs. The sequence is: the review and plan (`docs: add baseline verification evidence and defect
 probes`, `docs: classify all 194 specification rules by enforcement layer`, `docs: audit the current
 implementation against the requirements`, `docs: add the long-term design and implementation plan`),
 the core rewrite (`refactor(xml_spec): back content newtypes with Arc<str>`, `feat: replace per-node

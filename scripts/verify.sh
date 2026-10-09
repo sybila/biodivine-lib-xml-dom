@@ -81,6 +81,7 @@ run env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 run "$PYTHON" docs/check_doc_sections.py --self-test
 run "$PYTHON" docs/check_doc_sections.py
 run "$PYTHON" docs/check_book.py
+run "$PYTHON" docs/check_facts.py
 run bash docs/build_docs.sh
 run "$PYTHON" docs/check_book.py --built
 

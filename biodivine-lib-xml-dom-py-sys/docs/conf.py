@@ -11,7 +11,11 @@ The package under test must be importable, which means the native extension has 
 project = "biodivine-lib-xml-dom"
 copyright = "2026, Sybila"
 author = "Sybila"
-version = "0.2.0"
+# Read from the built package (which reports the crate version), so the documentation cannot
+# advertise a different version than the code.
+import biodivine_lib_xml_dom
+
+version = biodivine_lib_xml_dom.__version__
 release = version
 
 extensions = [

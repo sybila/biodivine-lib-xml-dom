@@ -83,6 +83,9 @@ fn _sys(module: &Bound<'_, PyModule>) -> PyResult<()> {
         "__doc__",
         "Native bindings of biodivine-lib-xml-dom (the `_sys` layer).",
     )?;
+    // The version comes from this crate's manifest, which inherits it from `[workspace.package]`,
+    // so the Python package can report the same number without a literal of its own.
+    module.add("__version__", env!("CARGO_PKG_VERSION"))?;
 
     module.add_class::<PyNodeId>()?;
     module.add_class::<PyNamespace>()?;

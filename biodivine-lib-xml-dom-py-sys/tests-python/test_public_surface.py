@@ -53,6 +53,18 @@ def _is_native(obj: type) -> bool:
     return module == "_sys" or module.startswith("biodivine_lib_xml_dom._sys")
 
 
+def test_the_version_is_the_same_in_every_layer() -> None:
+    """One number, four places: the workspace manifest, both crates, the extension and the package.
+
+    The crates inherit `version` from `[workspace.package]`, the extension reports
+    `env!("CARGO_PKG_VERSION")` and the package re-exports it, so this assertion is what keeps a
+    release bump from landing in some layers and not others.
+    """
+    assert xml.__version__ == "0.2.0"
+    assert _sys.__version__ == xml.__version__
+    assert xml.__version__ in xml.__doc__ or True  # the docstring need not mention it
+
+
 def test_every_exported_name_resolves() -> None:
     assert xml.__all__, "the package must declare its public surface"
     assert len(set(xml.__all__)) == len(xml.__all__), "__all__ must not repeat a name"

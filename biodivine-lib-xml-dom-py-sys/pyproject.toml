@@ -4,7 +4,9 @@ build-backend = "maturin"
 
 [project]
 name = "biodivine-lib-xml-dom"
-version = "0.1.0"
+# Taken from `Cargo.toml` (which inherits it from `[workspace.package]`), so the version has one
+# source of truth rather than one per layer.
+dynamic = ["version"]
 description = "An XML DOM library with safe namespace handling and thread-safe documents."
 requires-python = ">=3.9"
 readme = "../README.md"

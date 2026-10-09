@@ -16,8 +16,8 @@ The parts that are usually awkward are the parts this library gets right:
   whole-document properties (namespace scope, unique `xml:id`s, structural invariants) are collected
   by `Document::validate()`, which reports *every* problem at once.
 * **No namespace magic.** Editing never adds, removes or rewrites a namespace declaration; edits are
-  silent and fast, and `validate()` is where you ask. See
-  [`docs/book/src`](docs/book) for the full contract.
+  silent and fast, and `validate()` is where you ask. The [documentation book](docs/book) states the
+  full contract.
 
 ## Three layers
 

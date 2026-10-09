@@ -44,6 +44,7 @@ work, so a long operation in one thread does not freeze the others.
 """
 
 from . import _sys as _sys
+from ._sys import __version__ as __version__
 from .document import Document
 from .element import Element
 from .errors import (
@@ -62,7 +63,6 @@ from .parsing import parse, parse_file, write, write_file
 from .validation import ValidationError, ValidationErrors
 from .write_options import DeclarationStyle, EmptyElementStyle, WriteOptions, XmlDeclaration
 
-__version__ = "0.1.0"
 
 __all__ = [
     "DeclarationStyle",

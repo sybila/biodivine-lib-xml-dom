@@ -1,7 +1,8 @@
 [package]
 name = "biodivine-lib-xml-dom-py-sys"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
+rust-version.workspace = true
 description = "Thin PyO3 wrapper around biodivine-lib-xml-dom (the `_sys` layer)."
 license = "MIT"
 

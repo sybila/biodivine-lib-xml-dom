@@ -101,7 +101,68 @@ def check(label: str, directory: Path, floor: int) -> list[str]:
     return problems
 
 
+def self_test() -> list[str]:
+    """Checks the checker: the floor must fire, and a missing section must be reported.
+
+    Runs on a temporary corpus, so it is safe to call from a gate. Kept next to the checker rather
+    than in the Python test suite because it exercises a Rust-source parser.
+    """
+    import tempfile
+
+    problems: list[str] = []
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / "good.rs").write_text(
+            "/// Does nothing.\n"
+            "///\n"
+            "/// # Errors\n"
+            "///\n"
+            "/// Never.\n"
+            "pub fn good() -> Result<(), ()> { Ok(()) }\n"
+        )
+        (root / "bad.rs").write_text(
+            "/// Fails.\n"
+            "pub fn bad() -> Result<(), ()> { Err(()) }\n"
+            "/// Panics.\n"
+            "#[track_caller]\n"
+            "pub fn panicky() {}\n"
+        )
+        # The problems reported for the bad corpus are the *evidence* that the checker works, so
+        # they are inspected rather than collected.
+        reported = check("self-test corpus", root, 100_000)
+        if not any("bad.rs" in problem for problem in reported):
+            problems.append("self-test: a missing `# Errors` section was not reported")
+        if not any("panicky" in problem for problem in reported):
+            problems.append("self-test: a panicking twin without `# Panics` was not reported")
+        if not any("inspected only" in problem for problem in reported):
+            problems.append("self-test: the sanity floor did not fire")
+
+        # And the positive direction: the well-documented corpus alone must pass.
+        (root / "bad.rs").unlink()
+        (root / "good.rs").unlink()
+        (root / "ok.rs").write_text(
+            "/// Does nothing.\n"
+            "///\n"
+            "/// # Errors\n"
+            "///\n"
+            "/// Never.\n"
+            "pub fn good() -> Result<(), ()> { Ok(()) }\n"
+        )
+        if check("self-test corpus", root, 1):
+            problems.append("self-test: a well-documented corpus was reported as broken")
+    if problems:
+        return [f"the self-test failed: {problem}" for problem in problems]
+    print("self-test: the checker reports missing sections and enforces its floor")
+    return []
+
+
 def main() -> int:
+    if "--self-test" in sys.argv:
+        problems = self_test()
+        for problem in problems:
+            print(f"  - {problem}", file=sys.stderr)
+        return 1 if problems else 0
+
     problems: list[str] = []
     for label, directory, floor in CORPORA:
         if not directory.is_dir():

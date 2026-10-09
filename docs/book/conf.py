@@ -12,7 +12,13 @@ switches every example on the page.
 project = "biodivine-lib-xml-dom"
 copyright = "2026, Sybila"
 author = "Sybila"
-version = "0.2.0"
+# Read from the crate manifest (via `[workspace.package]`), so the book and the code agree.
+_version = [
+    line.split("=", 1)[1].strip().strip('"')
+    for line in open("Cargo.toml").read().splitlines()
+    if line.startswith("version")
+][0]
+version = _version
 release = version
 
 extensions = [

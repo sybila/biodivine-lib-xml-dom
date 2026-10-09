@@ -59,6 +59,8 @@ else
 fi
 
 step "2. documentation sections (# Errors / # Panics)"
+"$PYTHON" docs/check_doc_sections.py --self-test
+report $?
 "$PYTHON" docs/check_doc_sections.py
 report $?
 

@@ -8,7 +8,10 @@ artefact cannot disagree:
 scripts/verify.sh          # runs every gate below and prints each command with its exit code
 ```
 
-The run recorded here was made on the final commit of the `rewrite` branch, in this sandbox.
+The transcript below is from a run of `scripts/verify.sh` at commit `8254b3b` on the `rewrite` branch in
+this sandbox. The only difference between that tree and the one containing this document is the
+addition of the documentation files themselves (this transcript, `REPORT.md`, `CHANGELOG.md`), which
+cannot affect a gate; re-running `make verify` reproduces every result below.
 
 ## Environment
 
@@ -53,25 +56,25 @@ sphinx 9.0.4
 | `/sandbox/biodivine-lib-xml-dom/.venv/bin/python -m pytest biodivine-lib-xml-dom-py-sys/tests-python` | 0 |
 
 All 23 gates passed. `--all-features` is applied to the **core** crate only: the binding
-crate's `extension-module` feature is deliberately enabled by maturin for wheel builds, and turning
-it on for `cargo clippy` would check the configuration that is explicitly *not* the in-process-test
-one. Clippy runs with `-D warnings`, so "0 warnings" is a gate rather than a snapshot.
+crate's `extension-module` feature is deliberately enabled by maturin for wheel builds, and turning it
+on for `cargo clippy` would check the configuration that is explicitly *not* the in-process-test one.
+Clippy runs with `-D warnings`, so "0 warnings" is a gate rather than a snapshot.
 
 ## Test counts
 
 | suite | tests |
 | --- | --- |
-| `cargo test --workspace` | 250 |
+| `cargo test --workspace` (debug) | 250 |
 | `cargo test --workspace --release` | 249 |
-| `cargo +1.88.0 test --workspace` | 250 |
-| `cargo +1.95.0 test --workspace` | 250 |
+| `cargo +1.88.0 test --workspace` (declared MSRV) | 250 |
+| `cargo +1.95.0 test --workspace` (CI pin) | 250 |
 | `pytest` (Python bindings) | 41 |
 
-The suites break down as: 83 lib tests in release (84 in debug - one test asserts the debug-only
+The suites break down as: 84 lib tests in debug (83 in release - one test asserts the debug-only
 re-entrancy guard, which compiles away), 13 `errors`, 15 `cloning`, 5 `concurrency`, 9 `element`,
 35 `io`, 7 `properties` (`proptest`: 256-case round-trip and validation properties, 512-case
-no-panic properties over arbitrary bytes/strings/mutations), 28 `structure`, 21 `validation`,
-6 in-process binding tests, 27 doctests, and 41 Python tests.
+no-panic properties over arbitrary bytes, strings and mutations of well-formed documents),
+28 `structure`, 21 `validation`, 6 in-process binding tests and 27 doctests.
 
 The full transcript, including every command's output, is at the end of this document.
 
@@ -179,40 +182,37 @@ $ cargo fmt --check
 
 $ cargo clippy --workspace --all-targets -- -D warnings
    Compiling pyo3-ffi v0.29.3
-    Checking biodivine-lib-xml-dom v0.2.0 (/sandbox/biodivine-lib-xml-dom)
    Compiling pyo3 v0.29.3
     Checking biodivine-lib-xml-dom-py-sys v0.2.0 (/sandbox/biodivine-lib-xml-dom/biodivine-lib-xml-dom-py-sys)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.18s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.16s
 -> exit 0
 
 $ cargo clippy -p biodivine-lib-xml-dom --all-targets --all-features -- -D warnings
-    Checking biodivine-lib-xml-dom v0.2.0 (/sandbox/biodivine-lib-xml-dom)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.14s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
 -> exit 0
 
 $ cargo test --workspace
-   Compiling biodivine-lib-xml-dom v0.2.0 (/sandbox/biodivine-lib-xml-dom)
    Compiling pyo3-ffi v0.29.3
    Compiling pyo3 v0.29.3
    Compiling biodivine-lib-xml-dom-py-sys v0.2.0 (/sandbox/biodivine-lib-xml-dom/biodivine-lib-xml-dom-py-sys)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.77s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.54s
      Running unittests src/lib.rs (target/debug/deps/biodivine_lib_xml_dom-6f2b08f50d2a4b44)
 
 running 84 tests
-test arena::tests::attach_and_detach_maintain_both_directions ... ok
-test arena::tests::exceeding_the_arena_capacity_panics_instead_of_wrapping - should panic ... ok
 test arena::tests::attached_root_cannot_be_reset_as_root ... ok
+test arena::tests::attach_and_detach_maintain_both_directions ... ok
 test arena::tests::detaching_a_detached_node_is_a_no_op ... ok
 test arena::tests::cyclic_attachments_are_rejected ... ok
-test arena::tests::relative_insertion ... ok
-test arena::tests::namespaces_in_scope_shadow_outer_declarations ... ok
 test arena::tests::out_of_range_index_is_an_error_and_changes_nothing ... ok
-test arena::tests::replace_keeps_links_consistent ... ok
+test arena::tests::namespaces_in_scope_shadow_outer_declarations ... ok
+test arena::tests::exceeding_the_arena_capacity_panics_instead_of_wrapping - should panic ... ok
 test arena::tests::replace_by_self_is_a_no_op ... ok
+test arena::tests::relative_insertion ... ok
+test arena::tests::replace_keeps_links_consistent ... ok
 test arena::tests::replace_rejects_an_ancestor_of_the_replaced_node ... ok
 test arena::tests::root_cannot_be_attached ... ok
-test arena::tests::the_capacity_guard_allows_everything_below_the_limit ... ok
 test arena::tests::snapshot_round_trip_preserves_the_subtree ... ok
+test arena::tests::the_capacity_guard_allows_everything_below_the_limit ... ok
 test arena::tests::the_index_is_interpreted_after_detaching ... ok
 test document::tests::documents_are_equal_by_identity ... ok
 test document::tests::empty_documents_have_no_root ... ok
@@ -220,34 +220,34 @@ test document::tests::handles_are_send_and_sync ... ok
 test document::tests::nesting_access_to_two_different_documents_is_allowed ... ok
 test interner::tests::interning_deduplicates_by_value ... ok
 test document::tests::re_entrant_access_to_the_same_document_panics_in_debug_builds - should panic ... ok
-test namespace::tests::test_namespace_equality ... ok
 test interner::tests::interning_never_rewrites_a_prefix ... ok
+test namespace::tests::test_namespace_equality ... ok
 test namespace::tests::test_namespace_is_equal_ns ... ok
 test namespace::tests::test_namespace_support ... ok
 test namespace::tests::test_unicode_prefixes ... ok
 test node::tests::interning_does_not_change_equality ... ok
 test node::tests::re_interns_names_in_the_target_document ... ok
 test qualified_name::tests::test_creation_and_error ... ok
-test qualified_name::tests::test_equality_and_ordering ... ok
 test qualified_name::tests::test_hashing_semantic_equality ... ok
-test qualified_name::tests::test_ord_consistent_with_partial_eq ... ok
+test qualified_name::tests::test_equality_and_ordering ... ok
 test qualified_name::tests::test_qualified_name_string_no_prefix_ns ... ok
+test qualified_name::tests::test_ord_consistent_with_partial_eq ... ok
 test qualified_name::tests::test_resolve_attribute_ignores_default_ns ... ok
 test qualified_name::tests::test_resolve_attribute_with_map_ignores_default_ns ... ok
 test qualified_name::tests::test_resolve_attribute_with_map_prefixed ... ok
 test qualified_name::tests::test_resolve_attribute_with_prefix ... ok
-test qualified_name::tests::test_resolve_no_prefix ... ok
 test qualified_name::tests::test_resolve_attribute_xml_prefix_auto ... ok
 test qualified_name::tests::test_resolve_undefined_prefix ... ok
+test qualified_name::tests::test_resolve_no_prefix ... ok
 test qualified_name::tests::test_resolve_with_map_prefixed ... ok
 test qualified_name::tests::test_resolve_with_map_undefined_prefix ... ok
 test qualified_name::tests::test_resolve_with_map_xml_prefix_auto ... ok
-test qualified_name::tests::test_resolve_with_prefix ... ok
 test qualified_name::tests::test_resolve_with_parent_ns ... ok
+test qualified_name::tests::test_resolve_with_prefix ... ok
 test qualified_name::tests::test_resolve_xml_prefix_auto ... ok
 test qualified_name::tests::test_resolve_xmlns_prefix_rejected ... ok
-test tests::test_add_children ... ok
 test tests::test_create_document ... ok
+test tests::test_add_children ... ok
 test tests::test_create_element ... ok
 test tests::test_document_reference ... ok
 test tests::test_dropping_a_document_frees_its_nodes ... ok
@@ -255,14 +255,14 @@ test tests::test_namespace_declaration ... ok
 test tests::test_qualified_name_resolution ... ok
 test xml_spec::declaration::tests::accessors ... ok
 test xml_spec::declaration::tests::declaration_rendering ... ok
-test xml_spec::declaration::tests::encoding_names_are_case_insensitive ... ok
 test xml_spec::declaration::tests::pseudo_attributes ... ok
+test xml_spec::declaration::tests::encoding_names_are_case_insensitive ... ok
 test xml_spec::g3_tests::content_that_cannot_be_escaped_is_normalised_at_construction ... ok
-test xml_spec::g3_tests::language_tags ... ok
 test xml_spec::g3_tests::line_end_normalisation ... ok
+test xml_spec::g3_tests::language_tags ... ok
 test xml_spec::g3_tests::xml_space_values ... ok
-test xml_spec::tests::test_cdata_wrapper ... ok
 test xml_spec::rules::tests::the_rules_directory_is_where_we_think_it_is ... ok
+test xml_spec::tests::test_cdata_wrapper ... ok
 test xml_spec::tests::test_namespace_validation ... ok
 test xml_spec::tests::test_comment_wrapper ... ok
 test xml_spec::tests::test_ncname_helper ... ok
@@ -273,14 +273,14 @@ test xml_spec::tests::test_reserved_xml_prefix ... ok
 test xml_spec::tests::test_reserved_xmlns_prefix ... ok
 test xml_spec::tests::test_split_qname_invalid ... ok
 test xml_spec::tests::test_split_qname_valid ... ok
-test xml_spec::validation::tests::attributes_ignore_the_default_namespace ... ok
-test xml_spec::tests::test_uri_comparison_case_sensitive ... ok
-test xml_spec::validation::tests::prefixed_names_must_be_declared ... ok
 test xml_spec::tests::test_text_wrapper ... ok
+test xml_spec::tests::test_uri_comparison_case_sensitive ... ok
 test xml_spec::tests::test_validate_resolved_prefix ... ok
+test xml_spec::validation::tests::attributes_ignore_the_default_namespace ... ok
 test xml_spec::validation::tests::default_namespace_rules ... ok
 test xml_spec::validation::tests::inner_declarations_shadow_outer_ones ... ok
 test xml_spec::validation::tests::the_xml_prefix_needs_no_declaration ... ok
+test xml_spec::validation::tests::prefixed_names_must_be_declared ... ok
 test xml_spec::validation::tests::the_xmlns_prefix_can_never_become_a_name_prefix ... ok
 test node::tests::repeated_names_share_one_allocation ... ok
 
@@ -293,19 +293,19 @@ test cloning_a_handle_refers_to_the_same_node ... ok
 test a_deep_clone_is_cheap_because_names_are_shared ... ok
 test a_deep_copy_can_be_edited_independently_of_its_source ... ok
 test a_copied_subtree_can_be_attached_in_the_target_document ... ok
-test display_of_non_element_nodes ... ok
 test deep_clone_into_the_same_document_behaves_like_deep_clone ... ok
-test deep_clone_into_another_document_rebuilds_the_tree_there ... ok
 test deep_clone_copies_the_whole_subtree ... ok
+test deep_clone_into_another_document_rebuilds_the_tree_there ... ok
+test display_of_non_element_nodes ... ok
+test node_content_exposes_every_kind ... ok
 test display_renders_the_subtree_as_xml ... ok
 test non_element_nodes_can_be_copied_between_documents ... ok
-test node_content_exposes_every_kind ... ok
-test shallow_clone_of_a_text_node_copies_the_content ... ok
 test shallow_clone_copies_the_payload_but_not_the_children ... ok
+test shallow_clone_of_a_text_node_copies_the_content ... ok
 test shallow_clone_into_another_document_keeps_only_the_node ... ok
 test copying_while_the_source_is_mutated_produces_consistent_copies ... ok
 
-test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
 
      Running tests/concurrency.rs (target/debug/deps/concurrency-1515948d9de680fe)
 
@@ -316,19 +316,19 @@ test structural_edits_stay_consistent_under_contention ... ok
 test readers_and_writers_do_not_deadlock ... ok
 test two_threads_adding_opposite_children_never_create_a_cycle ... ok
 
-test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
 
      Running tests/element.rs (target/debug/deps/element-12a86330486bce83)
 
 running 9 tests
-test an_empty_default_declaration_removes_the_default_namespace ... ok
-test declarations_are_inherited_and_shadowed ... ok
-test names_accessors_agree ... ok
-test attribute_crud_is_keyed_by_expanded_name ... ok
 test invalid_attribute_values_are_rejected ... ok
-test removing_a_declaration_is_silent_even_though_the_subtree_relies_on_it ... ok
+test declarations_are_inherited_and_shadowed ... ok
+test an_empty_default_declaration_removes_the_default_namespace ... ok
+test attribute_crud_is_keyed_by_expanded_name ... ok
+test names_accessors_agree ... ok
 test namespace_declarations_can_be_added_changed_and_removed ... ok
 test resolution_uses_the_in_scope_declarations ... ok
+test removing_a_declaration_is_silent_even_though_the_subtree_relies_on_it ... ok
 test namespaced_documents_round_trip_through_the_parser ... ok
 
 test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -339,15 +339,15 @@ running 13 tests
 test namespace_construction_errors ... ok
 test insert_child_errors ... ok
 test append_child_errors ... ok
-test element_errors ... ok
 test node_construction_errors ... ok
+test element_errors ... ok
 test parse_file_reports_io_errors ... ok
 test qualified_name_construction_errors ... ok
 test qualified_name_resolution_errors ... ok
-test replace_with_errors ... ok
 test relative_insertion_errors ... ok
-test set_root_errors ... ok
+test replace_with_errors ... ok
 test parse_errors ... ok
+test set_root_errors ... ok
 test unclosed_elements_and_xml_target_pis_are_rejected ... ok
 
 test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -357,38 +357,38 @@ test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 35 tests
 test a_document_without_a_root_serializes_to_nothing_useful_but_does_not_fail ... ok
 test a_declaration_must_be_the_very_first_thing ... ok
-test an_optional_utf8_byte_order_mark_is_accepted ... ok
-test adjacent_text_nodes_are_merged_on_output ... ok
 test a_literal_carriage_return_in_text_round_trips ... ok
+test adjacent_text_nodes_are_merged_on_output ... ok
+test an_optional_utf8_byte_order_mark_is_accepted ... ok
+test character_references_are_expanded ... ok
 test cdata_and_processing_instructions_must_be_well_formed ... ok
 test an_empty_default_declaration_removes_the_default_namespace ... ok
-test character_references_are_expanded ... ok
-test declaration_style_is_honoured ... ok
 test comments_must_be_well_formed ... ok
+test comments_cdata_and_processing_instructions_are_written_verbatim ... ok
+test declaration_style_is_honoured ... ok
 test empty_text_nodes_have_no_representation_and_are_omitted ... ok
 test attribute_value_normalisation_in_both_directions ... ok
 test empty_elements_and_write_options ... ok
 test illegal_character_references_are_rejected ... ok
-test comments_cdata_and_processing_instructions_are_written_verbatim ... ok
 test invalid_utf8_is_a_typed_error ... ok
 test less_than_is_rejected_in_attribute_values ... ok
 test line_ends_are_normalised_in_text ... ok
 test namespace_declarations_are_never_invented_or_removed ... ok
-test namespaces_are_resolved_and_reported ... ok
 test predefined_entities_are_expanded ... ok
+test namespaces_are_resolved_and_reported ... ok
+test text_containing_a_cdata_close_round_trips ... ok
 test prefixes_are_preserved ... ok
 test tags_must_nest_and_close ... ok
-test text_containing_a_cdata_close_round_trips ... ok
-test text_is_escaped_so_that_it_round_trips ... ok
-test processing_instruction_content_is_kept_verbatim ... ok
 test rules_referenced_by_the_parser_and_serializer_exist ... ok
-test the_declaration_is_interpreted_and_preserved ... ok
-test undeclared_entity_references_are_typed_errors_not_panics ... ok
 test there_must_be_exactly_one_root_element ... ok
-test unsupported_declarations_are_rejected ... ok
-test top_level_content_policy ... ok
-test xml_lang_and_xml_space_round_trip_with_the_implicit_xml_prefix ... ok
+test processing_instruction_content_is_kept_verbatim ... ok
+test the_declaration_is_interpreted_and_preserved ... ok
 test parser_never_panics_on_odd_input ... ok
+test unsupported_declarations_are_rejected ... ok
+test undeclared_entity_references_are_typed_errors_not_panics ... ok
+test top_level_content_policy ... ok
+test text_is_escaped_so_that_it_round_trips ... ok
+test xml_lang_and_xml_space_round_trip_with_the_implicit_xml_prefix ... ok
 test a_deeply_nested_document_round_trips ... ok
 
 test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
@@ -398,10 +398,10 @@ test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 7 tests
 test arbitrary_strings_never_panic ... ok
 test arbitrary_bytes_never_panic ... ok
+test round_trip_preserves_the_document ... ok
 test writing_is_idempotent ... ok
 test the_declaration_survives_a_round_trip ... ok
 test generated_documents_validate_clean ... ok
-test round_trip_preserves_the_document ... ok
 test mutated_well_formed_documents_never_panic ... ok
 
 test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
@@ -410,29 +410,29 @@ test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 28 tests
 test a_foreign_element_cannot_become_the_root ... ok
-test an_attached_element_cannot_become_the_root ... ok
 test attachment_state_is_only_about_the_root_of_the_document ... ok
+test an_attached_element_cannot_become_the_root ... ok
 test attaching_a_detached_subtree_restores_it ... ok
-test a_detached_subtree_stays_editable_clonable_and_reattachable ... ok
 test cycles_are_rejected ... ok
+test a_detached_subtree_stays_editable_clonable_and_reattachable ... ok
 test attaching_and_detaching_keeps_the_tree_consistent ... ok
-test detaching_is_idempotent_and_returns_the_previous_parent ... ok
-test foreign_documents_are_rejected ... ok
 test descendants_are_returned_in_document_pre_order ... ok
+test detaching_is_idempotent_and_returns_the_previous_parent ... ok
 test insertion_positions_are_stable ... ok
+test foreign_documents_are_rejected ... ok
 test non_elements_cannot_be_parents ... ok
 test mixed_content_node_kinds_are_preserved ... ok
 test out_of_range_insertions_are_rejected ... ok
 test panicking_append_child_on_a_foreign_document_leaves_everything_unchanged ... ok
-test panicking_insert_child_leaves_the_document_unchanged ... ok
 test panicking_append_child_leaves_the_document_unchanged ... ok
+test panicking_insert_child_leaves_the_document_unchanged ... ok
 test relative_insertion_requires_a_sibling_of_the_same_parent ... ok
-test remove_returns_the_detached_node_itself ... ok
-test panicking_set_root_leaves_the_document_unchanged ... ok
 test panicking_set_attribute_leaves_the_document_unchanged ... ok
-test replacing_a_node_by_itself_is_a_documented_no_op ... ok
+test remove_returns_the_detached_node_itself ... ok
 test panicking_replace_with_leaves_the_document_unchanged ... ok
 test replacing_swaps_the_node_in_place ... ok
+test panicking_set_root_leaves_the_document_unchanged ... ok
+test replacing_a_node_by_itself_is_a_documented_no_op ... ok
 test sibling_and_index_queries_agree_with_the_child_list ... ok
 test setting_the_root_returns_the_previous_one ... ok
 test the_root_cannot_be_attached_as_a_child ... ok
@@ -443,25 +443,25 @@ test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/validation.rs (target/debug/deps/validation-3d645127ae7e363e)
 
 running 21 tests
+test a_detached_copy_does_not_conflict_with_its_original ... ok
 test a_consistent_document_has_no_structural_problems ... ok
 test a_prefix_bound_to_a_different_uri_is_reported ... ok
 test an_empty_document_has_no_root ... ok
-test an_element_in_a_namespace_needs_it_declared ... ok
-test a_detached_copy_does_not_conflict_with_its_original ... ok
 test all_problems_are_reported_in_one_call ... ok
-test attributes_are_not_affected_by_the_default_namespace ... ok
+test an_element_in_a_namespace_needs_it_declared ... ok
 test detached_subtrees_are_validated_against_their_own_scope ... ok
-test the_error_type_is_a_std_error ... ok
+test attributes_are_not_affected_by_the_default_namespace ... ok
 test every_error_kind_names_an_existing_rule_file ... ok
-test default_namespace_scope_must_match_the_name ... ok
-test moving_an_element_can_break_its_namespace_and_validation_says_so ... ok
+test the_error_type_is_a_std_error ... ok
 test editing_is_silent_and_validation_is_what_reports ... ok
 test the_xml_prefix_is_always_available ... ok
-test validation_is_deterministic ... ok
-test validation_does_not_change_the_document ... ok
+test default_namespace_scope_must_match_the_name ... ok
+test moving_an_element_can_break_its_namespace_and_validation_says_so ... ok
 test xml_id_values_must_be_names_and_unique ... ok
-test xml_lang_and_xml_space_values_are_checked ... ok
+test validation_does_not_change_the_document ... ok
 test the_xml_id_policy_is_pinned_in_both_directions ... ok
+test xml_lang_and_xml_space_values_are_checked ... ok
+test validation_is_deterministic ... ok
 test every_parsed_fixture_is_valid ... ok
 test consistent_documents_produce_no_structural_issues ... ok
 
@@ -482,37 +482,37 @@ test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
    Doc-tests biodivine_lib_xml_dom
 
 running 27 tests
-test src/lib.rs - (line 107) ... ok
-test src/lib.rs - (line 63) ... ok
-test src/namespace.rs - namespace::Namespace::prefix (line 136) ... ok
-test src/document.rs - document::Document::validate (line 390) ... ok
+test src/namespace.rs - namespace::Namespace::is_equal_ns (line 169) ... ok
 test src/lib.rs - (line 87) ... ok
 test src/namespace.rs - namespace::Namespace::new (line 58) ... ok
+test src/document.rs - document::Document::validate (line 390) ... ok
+test src/lib.rs - (line 107) ... ok
+test src/lib.rs - (line 63) ... ok
 test src/namespace.rs - namespace::Namespace::prefixed (line 107) ... ok
-test src/namespace.rs - namespace::Namespace::is_equal_ns (line 169) ... ok
-test src/namespace.rs - namespace::Namespace::without_prefix (line 88) ... ok
-test src/namespace.rs - namespace::Namespace::uri (line 122) ... ok
-test src/node.rs - node::Node (line 63) ... ok
+test src/namespace.rs - namespace::Namespace::prefix (line 136) ... ok
 test src/namespace.rs - namespace::Namespace::prefix_str (line 153) ... ok
+test src/namespace.rs - namespace::Namespace::uri (line 122) ... ok
+test src/namespace.rs - namespace::Namespace::without_prefix (line 88) ... ok
 test src/qualified_name.rs - qualified_name::QualifiedName (line 43) ... ok
-test src/qualified_name.rs - qualified_name::QualifiedName::resolve_attribute_with_namespace_map (line 347) ... ok
-test src/qualified_name.rs - qualified_name::QualifiedName::resolve_element (line 163) ... ok
-test src/lib.rs - (line 134) ... ok
-test src/qualified_name.rs - qualified_name::QualifiedName::resolve_element_with_namespace_map (line 318) ... ok
-test src/qualified_name.rs - qualified_name::QualifiedName::with_namespace (line 105) ... ok
+test src/node.rs - node::Node (line 63) ... ok
 test src/qualified_name.rs - qualified_name::QualifiedName::resolve_attribute (line 195) ... ok
-test src/qualified_name.rs - qualified_name::QualifiedName::without_namespace (line 87) ... ok
+test src/qualified_name.rs - qualified_name::QualifiedName::resolve_attribute_with_namespace_map (line 347) ... ok
+test src/lib.rs - (line 134) ... ok
+test src/qualified_name.rs - qualified_name::QualifiedName::with_namespace (line 105) ... ok
+test src/qualified_name.rs - qualified_name::QualifiedName::resolve_element (line 163) ... ok
+test src/qualified_name.rs - qualified_name::QualifiedName::resolve_element_with_namespace_map (line 318) ... ok
 test src/xml_spec.rs - xml_spec::CData (line 282) ... ok
-test src/xml_spec.rs - xml_spec::Comment (line 313) ... ok
-test src/xml_spec.rs - xml_spec::NCName::as_str (line 220) ... ok
-test src/xml_spec.rs - xml_spec::PiTarget (line 348) ... ok
+test src/qualified_name.rs - qualified_name::QualifiedName::without_namespace (line 87) ... ok
 test src/xml_spec.rs - xml_spec::NCName (line 193) ... ok
-test src/xml_spec.rs - xml_spec::PiData (line 380) ... ok
+test src/xml_spec.rs - xml_spec::NCName::as_str (line 220) ... ok
 test src/xml_spec.rs - xml_spec::Text (line 239) ... ok
+test src/xml_spec.rs - xml_spec::Comment (line 313) ... ok
+test src/xml_spec.rs - xml_spec::PiTarget (line 348) ... ok
+test src/xml_spec.rs - xml_spec::PiData (line 380) ... ok
 
 test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-all doctests ran in 0.13s; merged doctests compilation took 0.13s
+all doctests ran in 0.12s; merged doctests compilation took 0.12s
    Doc-tests biodivine_lib_xml_dom_sys
 
 running 0 tests
@@ -527,15 +527,15 @@ $ cargo test --workspace --release
 
 running 83 tests
 test arena::tests::attach_and_detach_maintain_both_directions ... ok
+test arena::tests::detaching_a_detached_node_is_a_no_op ... ok
 test arena::tests::attached_root_cannot_be_reset_as_root ... ok
 test arena::tests::cyclic_attachments_are_rejected ... ok
+test arena::tests::namespaces_in_scope_shadow_outer_declarations ... ok
 test arena::tests::out_of_range_index_is_an_error_and_changes_nothing ... ok
+test arena::tests::exceeding_the_arena_capacity_panics_instead_of_wrapping - should panic ... ok
 test arena::tests::relative_insertion ... ok
 test arena::tests::replace_by_self_is_a_no_op ... ok
-test arena::tests::exceeding_the_arena_capacity_panics_instead_of_wrapping - should panic ... ok
-test arena::tests::detaching_a_detached_node_is_a_no_op ... ok
 test arena::tests::replace_keeps_links_consistent ... ok
-test arena::tests::namespaces_in_scope_shadow_outer_declarations ... ok
 test arena::tests::replace_rejects_an_ancestor_of_the_replaced_node ... ok
 test arena::tests::root_cannot_be_attached ... ok
 test arena::tests::snapshot_round_trip_preserves_the_subtree ... ok
@@ -553,46 +553,49 @@ test namespace::tests::test_namespace_support ... ok
 test namespace::tests::test_unicode_prefixes ... ok
 test node::tests::interning_does_not_change_equality ... ok
 test node::tests::re_interns_names_in_the_target_document ... ok
-test qualified_name::tests::test_creation_and_error ... ok
 test qualified_name::tests::test_equality_and_ordering ... ok
-test qualified_name::tests::test_hashing_semantic_equality ... ok
-test qualified_name::tests::test_qualified_name_string_no_prefix_ns ... ok
 test qualified_name::tests::test_resolve_attribute_ignores_default_ns ... ok
-test qualified_name::tests::test_ord_consistent_with_partial_eq ... ok
 test qualified_name::tests::test_resolve_attribute_with_map_ignores_default_ns ... ok
+test qualified_name::tests::test_creation_and_error ... ok
 test qualified_name::tests::test_resolve_attribute_xml_prefix_auto ... ok
-test qualified_name::tests::test_resolve_attribute_with_map_prefixed ... ok
-test qualified_name::tests::test_resolve_no_prefix ... ok
-test node::tests::repeated_names_share_one_allocation ... ok
-test qualified_name::tests::test_resolve_undefined_prefix ... ok
-test qualified_name::tests::test_resolve_with_map_prefixed ... ok
-test qualified_name::tests::test_resolve_with_map_undefined_prefix ... ok
-test qualified_name::tests::test_resolve_with_map_xml_prefix_auto ... ok
-test qualified_name::tests::test_resolve_with_prefix ... ok
+test qualified_name::tests::test_hashing_semantic_equality ... ok
+test qualified_name::tests::test_ord_consistent_with_partial_eq ... ok
 test qualified_name::tests::test_resolve_xml_prefix_auto ... ok
-test qualified_name::tests::test_resolve_xmlns_prefix_rejected ... ok
-test xml_spec::declaration::tests::accessors ... ok
-test tests::test_document_reference ... ok
+test tests::test_create_element ... ok
 test tests::test_create_document ... ok
+test node::tests::repeated_names_share_one_allocation ... ok
+test tests::test_document_reference ... ok
+test tests::test_namespace_declaration ... ok
+test tests::test_add_children ... ok
+test xml_spec::declaration::tests::accessors ... ok
 test xml_spec::declaration::tests::declaration_rendering ... ok
 test xml_spec::declaration::tests::pseudo_attributes ... ok
 test xml_spec::g3_tests::content_that_cannot_be_escaped_is_normalised_at_construction ... ok
-test xml_spec::declaration::tests::encoding_names_are_case_insensitive ... ok
-test xml_spec::g3_tests::language_tags ... ok
-test tests::test_create_element ... ok
+test qualified_name::tests::test_resolve_with_parent_ns ... ok
+test qualified_name::tests::test_resolve_with_prefix ... ok
+test tests::test_dropping_a_document_frees_its_nodes ... ok
 test xml_spec::g3_tests::line_end_normalisation ... ok
+test tests::test_qualified_name_resolution ... ok
+test qualified_name::tests::test_resolve_attribute_with_prefix ... ok
+test qualified_name::tests::test_resolve_attribute_with_map_prefixed ... ok
+test qualified_name::tests::test_resolve_no_prefix ... ok
+test qualified_name::tests::test_resolve_with_map_prefixed ... ok
+test qualified_name::tests::test_resolve_undefined_prefix ... ok
+test qualified_name::tests::test_resolve_xmlns_prefix_rejected ... ok
+test xml_spec::g3_tests::language_tags ... ok
+test qualified_name::tests::test_qualified_name_string_no_prefix_ns ... ok
+test qualified_name::tests::test_resolve_with_map_xml_prefix_auto ... ok
+test xml_spec::declaration::tests::encoding_names_are_case_insensitive ... ok
+test qualified_name::tests::test_resolve_with_map_undefined_prefix ... ok
 test xml_spec::g3_tests::xml_space_values ... ok
-test xml_spec::rules::tests::the_rules_directory_is_where_we_think_it_is ... ok
 test xml_spec::tests::test_cdata_wrapper ... ok
+test xml_spec::rules::tests::the_rules_directory_is_where_we_think_it_is ... ok
 test xml_spec::tests::test_comment_wrapper ... ok
 test xml_spec::tests::test_namespace_validation ... ok
 test xml_spec::tests::test_ncname_helper ... ok
 test xml_spec::tests::test_pi_data_wrapper ... ok
-test qualified_name::tests::test_resolve_attribute_with_prefix ... ok
-test tests::test_dropping_a_document_frees_its_nodes ... ok
-test qualified_name::tests::test_resolve_with_parent_ns ... ok
-test xml_spec::tests::test_prefix_ncname_validation ... ok
 test xml_spec::tests::test_pi_target_wrapper ... ok
+test xml_spec::tests::test_prefix_ncname_validation ... ok
 test xml_spec::tests::test_reserved_xml_prefix ... ok
 test xml_spec::tests::test_reserved_xmlns_prefix ... ok
 test xml_spec::tests::test_split_qname_invalid ... ok
@@ -606,9 +609,6 @@ test xml_spec::validation::tests::inner_declarations_shadow_outer_ones ... ok
 test xml_spec::validation::tests::prefixed_names_must_be_declared ... ok
 test xml_spec::validation::tests::the_xml_prefix_needs_no_declaration ... ok
 test xml_spec::validation::tests::the_xmlns_prefix_can_never_become_a_name_prefix ... ok
-test tests::test_add_children ... ok
-test tests::test_qualified_name_resolution ... ok
-test tests::test_namespace_declaration ... ok
 
 test result: ok. 83 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -617,14 +617,14 @@ test result: ok. 83 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 15 tests
 test a_deep_clone_is_cheap_because_names_are_shared ... ok
 test cloning_a_handle_refers_to_the_same_node ... ok
-test a_copied_subtree_can_be_attached_in_the_target_document ... ok
 test a_deep_copy_can_be_edited_independently_of_its_source ... ok
-test deep_clone_copies_the_whole_subtree ... ok
+test a_copied_subtree_can_be_attached_in_the_target_document ... ok
 test deep_clone_into_another_document_rebuilds_the_tree_there ... ok
+test deep_clone_copies_the_whole_subtree ... ok
 test deep_clone_into_the_same_document_behaves_like_deep_clone ... ok
 test display_of_non_element_nodes ... ok
-test display_renders_the_subtree_as_xml ... ok
 test node_content_exposes_every_kind ... ok
+test display_renders_the_subtree_as_xml ... ok
 test non_element_nodes_can_be_copied_between_documents ... ok
 test shallow_clone_copies_the_payload_but_not_the_children ... ok
 test shallow_clone_into_another_document_keeps_only_the_node ... ok
@@ -649,13 +649,13 @@ test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 9 tests
 test an_empty_default_declaration_removes_the_default_namespace ... ok
 test attribute_crud_is_keyed_by_expanded_name ... ok
-test invalid_attribute_values_are_rejected ... ok
 test declarations_are_inherited_and_shadowed ... ok
+test invalid_attribute_values_are_rejected ... ok
 test names_accessors_agree ... ok
 test namespace_declarations_can_be_added_changed_and_removed ... ok
-test removing_a_declaration_is_silent_even_though_the_subtree_relies_on_it ... ok
 test resolution_uses_the_in_scope_declarations ... ok
 test namespaced_documents_round_trip_through_the_parser ... ok
+test removing_a_declaration_is_silent_even_though_the_subtree_relies_on_it ... ok
 
 test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -668,8 +668,8 @@ test insert_child_errors ... ok
 test namespace_construction_errors ... ok
 test node_construction_errors ... ok
 test parse_file_reports_io_errors ... ok
-test parse_errors ... ok
 test qualified_name_construction_errors ... ok
+test parse_errors ... ok
 test qualified_name_resolution_errors ... ok
 test relative_insertion_errors ... ok
 test replace_with_errors ... ok
@@ -681,15 +681,15 @@ test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/io.rs (target/release/deps/io-39af72257fdb05d1)
 
 running 35 tests
-test a_document_without_a_root_serializes_to_nothing_useful_but_does_not_fail ... ok
 test a_declaration_must_be_the_very_first_thing ... ok
+test a_document_without_a_root_serializes_to_nothing_useful_but_does_not_fail ... ok
 test a_literal_carriage_return_in_text_round_trips ... ok
 test adjacent_text_nodes_are_merged_on_output ... ok
-test an_optional_utf8_byte_order_mark_is_accepted ... ok
 test an_empty_default_declaration_removes_the_default_namespace ... ok
+test an_optional_utf8_byte_order_mark_is_accepted ... ok
+test attribute_value_normalisation_in_both_directions ... ok
 test cdata_and_processing_instructions_must_be_well_formed ... ok
 test character_references_are_expanded ... ok
-test attribute_value_normalisation_in_both_directions ... ok
 test comments_cdata_and_processing_instructions_are_written_verbatim ... ok
 test comments_must_be_well_formed ... ok
 test declaration_style_is_honoured ... ok
@@ -702,15 +702,15 @@ test line_ends_are_normalised_in_text ... ok
 test namespace_declarations_are_never_invented_or_removed ... ok
 test namespaces_are_resolved_and_reported ... ok
 test predefined_entities_are_expanded ... ok
-test parser_never_panics_on_odd_input ... ok
 test prefixes_are_preserved ... ok
+test parser_never_panics_on_odd_input ... ok
 test processing_instruction_content_is_kept_verbatim ... ok
-test text_containing_a_cdata_close_round_trips ... ok
 test tags_must_nest_and_close ... ok
-test text_is_escaped_so_that_it_round_trips ... ok
-test rules_referenced_by_the_parser_and_serializer_exist ... ok
-test there_must_be_exactly_one_root_element ... ok
+test text_containing_a_cdata_close_round_trips ... ok
 test the_declaration_is_interpreted_and_preserved ... ok
+test text_is_escaped_so_that_it_round_trips ... ok
+test there_must_be_exactly_one_root_element ... ok
+test rules_referenced_by_the_parser_and_serializer_exist ... ok
 test top_level_content_policy ... ok
 test undeclared_entity_references_are_typed_errors_not_panics ... ok
 test unsupported_declarations_are_rejected ... ok
@@ -722,12 +722,12 @@ test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/properties.rs (target/release/deps/properties-62051133e5db9b0b)
 
 running 7 tests
-test arbitrary_strings_never_panic ... ok
 test arbitrary_bytes_never_panic ... ok
-test generated_documents_validate_clean ... ok
-test the_declaration_survives_a_round_trip ... ok
-test writing_is_idempotent ... ok
+test arbitrary_strings_never_panic ... ok
 test round_trip_preserves_the_document ... ok
+test the_declaration_survives_a_round_trip ... ok
+test generated_documents_validate_clean ... ok
+test writing_is_idempotent ... ok
 test mutated_well_formed_documents_never_panic ... ok
 
 test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
@@ -735,28 +735,28 @@ test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/structure.rs (target/release/deps/structure-9b2556c717bdc7e8)
 
 running 28 tests
-test a_detached_subtree_stays_editable_clonable_and_reattachable ... ok
 test a_foreign_element_cannot_become_the_root ... ok
+test a_detached_subtree_stays_editable_clonable_and_reattachable ... ok
+test attaching_and_detaching_keeps_the_tree_consistent ... ok
 test an_attached_element_cannot_become_the_root ... ok
 test attaching_a_detached_subtree_restores_it ... ok
-test attaching_and_detaching_keeps_the_tree_consistent ... ok
 test attachment_state_is_only_about_the_root_of_the_document ... ok
 test cycles_are_rejected ... ok
 test descendants_are_returned_in_document_pre_order ... ok
-test detaching_is_idempotent_and_returns_the_previous_parent ... ok
 test foreign_documents_are_rejected ... ok
+test detaching_is_idempotent_and_returns_the_previous_parent ... ok
 test insertion_positions_are_stable ... ok
-test mixed_content_node_kinds_are_preserved ... ok
-test out_of_range_insertions_are_rejected ... ok
 test non_elements_cannot_be_parents ... ok
-test panicking_append_child_on_a_foreign_document_leaves_everything_unchanged ... ok
-test panicking_append_child_leaves_the_document_unchanged ... ok
+test out_of_range_insertions_are_rejected ... ok
+test mixed_content_node_kinds_are_preserved ... ok
 test panicking_insert_child_leaves_the_document_unchanged ... ok
+test panicking_append_child_on_a_foreign_document_leaves_everything_unchanged ... ok
 test panicking_replace_with_leaves_the_document_unchanged ... ok
-test panicking_set_attribute_leaves_the_document_unchanged ... ok
-test relative_insertion_requires_a_sibling_of_the_same_parent ... ok
+test panicking_append_child_leaves_the_document_unchanged ... ok
 test panicking_set_root_leaves_the_document_unchanged ... ok
+test relative_insertion_requires_a_sibling_of_the_same_parent ... ok
 test remove_returns_the_detached_node_itself ... ok
+test panicking_set_attribute_leaves_the_document_unchanged ... ok
 test replacing_a_node_by_itself_is_a_documented_no_op ... ok
 test replacing_swaps_the_node_in_place ... ok
 test setting_the_root_returns_the_previous_one ... ok
@@ -770,25 +770,25 @@ test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 running 21 tests
 test a_consistent_document_has_no_structural_problems ... ok
-test a_detached_copy_does_not_conflict_with_its_original ... ok
 test a_prefix_bound_to_a_different_uri_is_reported ... ok
-test all_problems_are_reported_in_one_call ... ok
+test a_detached_copy_does_not_conflict_with_its_original ... ok
 test an_element_in_a_namespace_needs_it_declared ... ok
-test an_empty_document_has_no_root ... ok
+test all_problems_are_reported_in_one_call ... ok
 test attributes_are_not_affected_by_the_default_namespace ... ok
+test an_empty_document_has_no_root ... ok
 test detached_subtrees_are_validated_against_their_own_scope ... ok
 test default_namespace_scope_must_match_the_name ... ok
 test editing_is_silent_and_validation_is_what_reports ... ok
-test every_error_kind_names_an_existing_rule_file ... ok
 test moving_an_element_can_break_its_namespace_and_validation_says_so ... ok
 test the_error_type_is_a_std_error ... ok
+test every_error_kind_names_an_existing_rule_file ... ok
 test the_xml_id_policy_is_pinned_in_both_directions ... ok
-test every_parsed_fixture_is_valid ... ok
 test the_xml_prefix_is_always_available ... ok
 test validation_does_not_change_the_document ... ok
 test validation_is_deterministic ... ok
 test xml_id_values_must_be_names_and_unique ... ok
 test xml_lang_and_xml_space_values_are_checked ... ok
+test every_parsed_fixture_is_valid ... ok
 test consistent_documents_produce_no_structural_issues ... ok
 
 test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
@@ -799,8 +799,8 @@ running 6 tests
 test tests::handles_are_send_and_sync ... ok
 test tests::handles_can_be_moved_into_a_plain_rust_thread ... ok
 test tests::a_document_can_be_shared_by_several_threads ... ok
-test tests::a_validation_failure_carries_every_problem ... ok
 test tests::a_document_round_trips_through_the_bindings ... ok
+test tests::a_validation_failure_carries_every_problem ... ok
 test tests::a_parsed_document_is_the_same_tree_as_the_serialized_one ... ok
 
 test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -808,37 +808,37 @@ test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
    Doc-tests biodivine_lib_xml_dom
 
 running 27 tests
-test src/document.rs - document::Document::validate (line 390) ... ok
+test src/namespace.rs - namespace::Namespace::new (line 58) ... ok
 test src/lib.rs - (line 107) ... ok
-test src/lib.rs - (line 87) ... ok
+test src/document.rs - document::Document::validate (line 390) ... ok
 test src/lib.rs - (line 63) ... ok
 test src/lib.rs - (line 134) ... ok
-test src/namespace.rs - namespace::Namespace::prefix (line 136) ... ok
 test src/namespace.rs - namespace::Namespace::is_equal_ns (line 169) ... ok
-test src/namespace.rs - namespace::Namespace::prefix_str (line 153) ... ok
-test src/namespace.rs - namespace::Namespace::uri (line 122) ... ok
-test src/namespace.rs - namespace::Namespace::without_prefix (line 88) ... ok
 test src/namespace.rs - namespace::Namespace::prefixed (line 107) ... ok
+test src/namespace.rs - namespace::Namespace::prefix (line 136) ... ok
+test src/namespace.rs - namespace::Namespace::uri (line 122) ... ok
+test src/namespace.rs - namespace::Namespace::prefix_str (line 153) ... ok
+test src/namespace.rs - namespace::Namespace::without_prefix (line 88) ... ok
 test src/qualified_name.rs - qualified_name::QualifiedName (line 43) ... ok
-test src/namespace.rs - namespace::Namespace::new (line 58) ... ok
-test src/node.rs - node::Node (line 63) ... ok
+test src/lib.rs - (line 87) ... ok
 test src/qualified_name.rs - qualified_name::QualifiedName::resolve_attribute (line 195) ... ok
-test src/qualified_name.rs - qualified_name::QualifiedName::resolve_element (line 163) ... ok
 test src/qualified_name.rs - qualified_name::QualifiedName::resolve_attribute_with_namespace_map (line 347) ... ok
-test src/qualified_name.rs - qualified_name::QualifiedName::resolve_element_with_namespace_map (line 318) ... ok
+test src/node.rs - node::Node (line 63) ... ok
+test src/qualified_name.rs - qualified_name::QualifiedName::resolve_element (line 163) ... ok
 test src/qualified_name.rs - qualified_name::QualifiedName::with_namespace (line 105) ... ok
+test src/xml_spec.rs - xml_spec::CData (line 282) ... ok
 test src/qualified_name.rs - qualified_name::QualifiedName::without_namespace (line 87) ... ok
 test src/xml_spec.rs - xml_spec::Comment (line 313) ... ok
-test src/xml_spec.rs - xml_spec::CData (line 282) ... ok
-test src/xml_spec.rs - xml_spec::NCName (line 193) ... ok
+test src/qualified_name.rs - qualified_name::QualifiedName::resolve_element_with_namespace_map (line 318) ... ok
 test src/xml_spec.rs - xml_spec::NCName::as_str (line 220) ... ok
-test src/xml_spec.rs - xml_spec::PiTarget (line 348) ... ok
-test src/xml_spec.rs - xml_spec::Text (line 239) ... ok
 test src/xml_spec.rs - xml_spec::PiData (line 380) ... ok
+test src/xml_spec.rs - xml_spec::Text (line 239) ... ok
+test src/xml_spec.rs - xml_spec::NCName (line 193) ... ok
+test src/xml_spec.rs - xml_spec::PiTarget (line 348) ... ok
 
 test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-all doctests ran in 0.15s; merged doctests compilation took 0.15s
+all doctests ran in 0.15s; merged doctests compilation took 0.14s
    Doc-tests biodivine_lib_xml_dom_sys
 
 running 0 tests
@@ -848,23 +848,22 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 -> exit 0
 
 $ cargo +1.88.0 test --workspace
-   Compiling biodivine-lib-xml-dom v0.2.0 (/sandbox/biodivine-lib-xml-dom)
    Compiling biodivine-lib-xml-dom-py-sys v0.2.0 (/sandbox/biodivine-lib-xml-dom/biodivine-lib-xml-dom-py-sys)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.77s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.40s
      Running unittests src/lib.rs (target/debug/deps/biodivine_lib_xml_dom-24225d7e2074f8a2)
 
 running 84 tests
-test arena::tests::cyclic_attachments_are_rejected ... ok
 test arena::tests::attach_and_detach_maintain_both_directions ... ok
-test arena::tests::detaching_a_detached_node_is_a_no_op ... ok
 test arena::tests::attached_root_cannot_be_reset_as_root ... ok
+test arena::tests::cyclic_attachments_are_rejected ... ok
+test arena::tests::detaching_a_detached_node_is_a_no_op ... ok
 test arena::tests::out_of_range_index_is_an_error_and_changes_nothing ... ok
+test arena::tests::relative_insertion ... ok
 test arena::tests::namespaces_in_scope_shadow_outer_declarations ... ok
 test arena::tests::exceeding_the_arena_capacity_panics_instead_of_wrapping - should panic ... ok
 test arena::tests::replace_by_self_is_a_no_op ... ok
-test arena::tests::relative_insertion ... ok
-test arena::tests::replace_keeps_links_consistent ... ok
 test arena::tests::replace_rejects_an_ancestor_of_the_replaced_node ... ok
+test arena::tests::replace_keeps_links_consistent ... ok
 test arena::tests::root_cannot_be_attached ... ok
 test arena::tests::the_capacity_guard_allows_everything_below_the_limit ... ok
 test arena::tests::snapshot_round_trip_preserves_the_subtree ... ok
@@ -873,70 +872,70 @@ test document::tests::documents_are_equal_by_identity ... ok
 test document::tests::empty_documents_have_no_root ... ok
 test document::tests::handles_are_send_and_sync ... ok
 test document::tests::nesting_access_to_two_different_documents_is_allowed ... ok
+test document::tests::re_entrant_access_to_the_same_document_panics_in_debug_builds - should panic ... ok
 test interner::tests::interning_deduplicates_by_value ... ok
 test interner::tests::interning_never_rewrites_a_prefix ... ok
-test document::tests::re_entrant_access_to_the_same_document_panics_in_debug_builds - should panic ... ok
 test namespace::tests::test_namespace_equality ... ok
 test namespace::tests::test_namespace_is_equal_ns ... ok
-test namespace::tests::test_unicode_prefixes ... ok
 test namespace::tests::test_namespace_support ... ok
+test namespace::tests::test_unicode_prefixes ... ok
 test node::tests::interning_does_not_change_equality ... ok
 test qualified_name::tests::test_creation_and_error ... ok
 test node::tests::re_interns_names_in_the_target_document ... ok
-test qualified_name::tests::test_hashing_semantic_equality ... ok
 test qualified_name::tests::test_equality_and_ordering ... ok
+test qualified_name::tests::test_hashing_semantic_equality ... ok
 test qualified_name::tests::test_ord_consistent_with_partial_eq ... ok
 test qualified_name::tests::test_qualified_name_string_no_prefix_ns ... ok
 test qualified_name::tests::test_resolve_attribute_ignores_default_ns ... ok
 test qualified_name::tests::test_resolve_attribute_with_map_ignores_default_ns ... ok
 test qualified_name::tests::test_resolve_attribute_with_map_prefixed ... ok
 test qualified_name::tests::test_resolve_attribute_xml_prefix_auto ... ok
-test qualified_name::tests::test_resolve_with_map_undefined_prefix ... ok
-test qualified_name::tests::test_resolve_with_map_xml_prefix_auto ... ok
-test qualified_name::tests::test_resolve_with_prefix ... ok
 test qualified_name::tests::test_resolve_attribute_with_prefix ... ok
-test tests::test_document_reference ... ok
+test qualified_name::tests::test_resolve_no_prefix ... ok
+test qualified_name::tests::test_resolve_undefined_prefix ... ok
+test qualified_name::tests::test_resolve_with_map_prefixed ... ok
+test qualified_name::tests::test_resolve_with_map_xml_prefix_auto ... ok
+test qualified_name::tests::test_resolve_with_map_undefined_prefix ... ok
+test qualified_name::tests::test_resolve_with_parent_ns ... ok
+test qualified_name::tests::test_resolve_with_prefix ... ok
+test qualified_name::tests::test_resolve_xml_prefix_auto ... ok
+test qualified_name::tests::test_resolve_xmlns_prefix_rejected ... ok
+test tests::test_create_element ... ok
 test tests::test_create_document ... ok
 test tests::test_add_children ... ok
-test xml_spec::declaration::tests::accessors ... ok
-test xml_spec::declaration::tests::pseudo_attributes ... ok
-test qualified_name::tests::test_resolve_undefined_prefix ... ok
-test xml_spec::g3_tests::line_end_normalisation ... ok
-test qualified_name::tests::test_resolve_with_map_prefixed ... ok
-test qualified_name::tests::test_resolve_xmlns_prefix_rejected ... ok
-test xml_spec::tests::test_cdata_wrapper ... ok
-test qualified_name::tests::test_resolve_with_parent_ns ... ok
-test xml_spec::tests::test_namespace_validation ... ok
-test xml_spec::tests::test_comment_wrapper ... ok
-test qualified_name::tests::test_resolve_no_prefix ... ok
-test xml_spec::tests::test_pi_data_wrapper ... ok
-test xml_spec::tests::test_ncname_helper ... ok
-test qualified_name::tests::test_resolve_xml_prefix_auto ... ok
-test tests::test_qualified_name_resolution ... ok
 test tests::test_dropping_a_document_frees_its_nodes ... ok
+test xml_spec::declaration::tests::accessors ... ok
 test tests::test_namespace_declaration ... ok
-test xml_spec::g3_tests::language_tags ... ok
-test xml_spec::declaration::tests::encoding_names_are_case_insensitive ... ok
-test xml_spec::g3_tests::content_that_cannot_be_escaped_is_normalised_at_construction ... ok
-test xml_spec::tests::test_pi_target_wrapper ... ok
-test xml_spec::g3_tests::xml_space_values ... ok
-test xml_spec::tests::test_prefix_ncname_validation ... ok
-test xml_spec::rules::tests::the_rules_directory_is_where_we_think_it_is ... ok
-test xml_spec::tests::test_reserved_xml_prefix ... ok
+test tests::test_qualified_name_resolution ... ok
+test tests::test_document_reference ... ok
 test xml_spec::declaration::tests::declaration_rendering ... ok
+test xml_spec::declaration::tests::encoding_names_are_case_insensitive ... ok
+test xml_spec::declaration::tests::pseudo_attributes ... ok
+test xml_spec::g3_tests::content_that_cannot_be_escaped_is_normalised_at_construction ... ok
+test xml_spec::g3_tests::line_end_normalisation ... ok
+test xml_spec::g3_tests::xml_space_values ... ok
+test xml_spec::g3_tests::language_tags ... ok
+test xml_spec::rules::tests::the_rules_directory_is_where_we_think_it_is ... ok
+test xml_spec::tests::test_cdata_wrapper ... ok
+test xml_spec::tests::test_comment_wrapper ... ok
+test xml_spec::tests::test_namespace_validation ... ok
+test xml_spec::tests::test_ncname_helper ... ok
+test xml_spec::tests::test_pi_data_wrapper ... ok
+test xml_spec::tests::test_pi_target_wrapper ... ok
+test xml_spec::tests::test_prefix_ncname_validation ... ok
+test xml_spec::tests::test_reserved_xml_prefix ... ok
 test xml_spec::tests::test_reserved_xmlns_prefix ... ok
 test xml_spec::tests::test_split_qname_invalid ... ok
 test xml_spec::tests::test_split_qname_valid ... ok
-test xml_spec::tests::test_text_wrapper ... ok
 test xml_spec::tests::test_uri_comparison_case_sensitive ... ok
-test tests::test_create_element ... ok
-test xml_spec::validation::tests::default_namespace_rules ... ok
-test xml_spec::validation::tests::inner_declarations_shadow_outer_ones ... ok
+test xml_spec::tests::test_text_wrapper ... ok
 test xml_spec::tests::test_validate_resolved_prefix ... ok
-test xml_spec::validation::tests::prefixed_names_must_be_declared ... ok
-test xml_spec::validation::tests::the_xmlns_prefix_can_never_become_a_name_prefix ... ok
-test xml_spec::validation::tests::the_xml_prefix_needs_no_declaration ... ok
 test xml_spec::validation::tests::attributes_ignore_the_default_namespace ... ok
+test xml_spec::validation::tests::default_namespace_rules ... ok
+test xml_spec::validation::tests::prefixed_names_must_be_declared ... ok
+test xml_spec::validation::tests::inner_declarations_shadow_outer_ones ... ok
+test xml_spec::validation::tests::the_xml_prefix_needs_no_declaration ... ok
+test xml_spec::validation::tests::the_xmlns_prefix_can_never_become_a_name_prefix ... ok
 test node::tests::repeated_names_share_one_allocation ... ok
 
 test result: ok. 84 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -949,15 +948,15 @@ test a_deep_clone_is_cheap_because_names_are_shared ... ok
 test a_deep_copy_can_be_edited_independently_of_its_source ... ok
 test a_copied_subtree_can_be_attached_in_the_target_document ... ok
 test display_of_non_element_nodes ... ok
-test deep_clone_into_the_same_document_behaves_like_deep_clone ... ok
-test deep_clone_copies_the_whole_subtree ... ok
 test deep_clone_into_another_document_rebuilds_the_tree_there ... ok
+test deep_clone_into_the_same_document_behaves_like_deep_clone ... ok
 test node_content_exposes_every_kind ... ok
-test non_element_nodes_can_be_copied_between_documents ... ok
 test display_renders_the_subtree_as_xml ... ok
+test non_element_nodes_can_be_copied_between_documents ... ok
 test shallow_clone_copies_the_payload_but_not_the_children ... ok
 test shallow_clone_of_a_text_node_copies_the_content ... ok
 test shallow_clone_into_another_document_keeps_only_the_node ... ok
+test deep_clone_copies_the_whole_subtree ... ok
 test copying_while_the_source_is_mutated_produces_consistent_copies ... ok
 
 test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
@@ -976,13 +975,13 @@ test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/element.rs (target/debug/deps/element-d7fced86236f1bdd)
 
 running 9 tests
+test names_accessors_agree ... ok
 test an_empty_default_declaration_removes_the_default_namespace ... ok
 test declarations_are_inherited_and_shadowed ... ok
 test attribute_crud_is_keyed_by_expanded_name ... ok
-test names_accessors_agree ... ok
 test invalid_attribute_values_are_rejected ... ok
-test resolution_uses_the_in_scope_declarations ... ok
 test namespace_declarations_can_be_added_changed_and_removed ... ok
+test resolution_uses_the_in_scope_declarations ... ok
 test removing_a_declaration_is_silent_even_though_the_subtree_relies_on_it ... ok
 test namespaced_documents_round_trip_through_the_parser ... ok
 
@@ -991,16 +990,16 @@ test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/errors.rs (target/debug/deps/errors-c4d43ca35311bdf4)
 
 running 13 tests
+test namespace_construction_errors ... ok
 test insert_child_errors ... ok
 test append_child_errors ... ok
-test namespace_construction_errors ... ok
-test element_errors ... ok
 test node_construction_errors ... ok
-test qualified_name_construction_errors ... ok
+test element_errors ... ok
 test parse_file_reports_io_errors ... ok
+test qualified_name_construction_errors ... ok
 test parse_errors ... ok
-test relative_insertion_errors ... ok
 test qualified_name_resolution_errors ... ok
+test relative_insertion_errors ... ok
 test replace_with_errors ... ok
 test set_root_errors ... ok
 test unclosed_elements_and_xml_target_pis_are_rejected ... ok
@@ -1012,37 +1011,37 @@ test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 35 tests
 test a_document_without_a_root_serializes_to_nothing_useful_but_does_not_fail ... ok
 test a_declaration_must_be_the_very_first_thing ... ok
-test a_literal_carriage_return_in_text_round_trips ... ok
 test adjacent_text_nodes_are_merged_on_output ... ok
-test an_optional_utf8_byte_order_mark_is_accepted ... ok
+test a_literal_carriage_return_in_text_round_trips ... ok
 test cdata_and_processing_instructions_must_be_well_formed ... ok
+test an_optional_utf8_byte_order_mark_is_accepted ... ok
 test an_empty_default_declaration_removes_the_default_namespace ... ok
-test character_references_are_expanded ... ok
-test comments_must_be_well_formed ... ok
 test comments_cdata_and_processing_instructions_are_written_verbatim ... ok
 test declaration_style_is_honoured ... ok
-test empty_text_nodes_have_no_representation_and_are_omitted ... ok
-test attribute_value_normalisation_in_both_directions ... ok
+test comments_must_be_well_formed ... ok
+test character_references_are_expanded ... ok
 test empty_elements_and_write_options ... ok
-test illegal_character_references_are_rejected ... ok
+test attribute_value_normalisation_in_both_directions ... ok
 test invalid_utf8_is_a_typed_error ... ok
-test less_than_is_rejected_in_attribute_values ... ok
+test illegal_character_references_are_rejected ... ok
+test empty_text_nodes_have_no_representation_and_are_omitted ... ok
 test line_ends_are_normalised_in_text ... ok
+test less_than_is_rejected_in_attribute_values ... ok
 test namespace_declarations_are_never_invented_or_removed ... ok
 test predefined_entities_are_expanded ... ok
 test namespaces_are_resolved_and_reported ... ok
+test tags_must_nest_and_close ... ok
 test prefixes_are_preserved ... ok
 test text_containing_a_cdata_close_round_trips ... ok
-test tags_must_nest_and_close ... ok
+test text_is_escaped_so_that_it_round_trips ... ok
 test rules_referenced_by_the_parser_and_serializer_exist ... ok
 test there_must_be_exactly_one_root_element ... ok
-test text_is_escaped_so_that_it_round_trips ... ok
-test the_declaration_is_interpreted_and_preserved ... ok
 test undeclared_entity_references_are_typed_errors_not_panics ... ok
-test parser_never_panics_on_odd_input ... ok
-test unsupported_declarations_are_rejected ... ok
-test processing_instruction_content_is_kept_verbatim ... ok
 test top_level_content_policy ... ok
+test parser_never_panics_on_odd_input ... ok
+test the_declaration_is_interpreted_and_preserved ... ok
+test processing_instruction_content_is_kept_verbatim ... ok
+test unsupported_declarations_are_rejected ... ok
 test xml_lang_and_xml_space_round_trip_with_the_implicit_xml_prefix ... ok
 test a_deeply_nested_document_round_trips ... ok
 
@@ -1053,44 +1052,44 @@ test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 7 tests
 test arbitrary_strings_never_panic ... ok
 test arbitrary_bytes_never_panic ... ok
-test the_declaration_survives_a_round_trip ... ok
-test round_trip_preserves_the_document ... ok
 test writing_is_idempotent ... ok
 test generated_documents_validate_clean ... ok
+test the_declaration_survives_a_round_trip ... ok
+test round_trip_preserves_the_document ... ok
 test mutated_well_formed_documents_never_panic ... ok
 
-test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s
 
      Running tests/structure.rs (target/debug/deps/structure-5cbfe486d4dd8df8)
 
 running 28 tests
 test a_foreign_element_cannot_become_the_root ... ok
 test a_detached_subtree_stays_editable_clonable_and_reattachable ... ok
-test attachment_state_is_only_about_the_root_of_the_document ... ok
-test attaching_and_detaching_keeps_the_tree_consistent ... ok
 test an_attached_element_cannot_become_the_root ... ok
 test attaching_a_detached_subtree_restores_it ... ok
+test attaching_and_detaching_keeps_the_tree_consistent ... ok
 test cycles_are_rejected ... ok
-test descendants_are_returned_in_document_pre_order ... ok
+test attachment_state_is_only_about_the_root_of_the_document ... ok
 test detaching_is_idempotent_and_returns_the_previous_parent ... ok
+test descendants_are_returned_in_document_pre_order ... ok
 test foreign_documents_are_rejected ... ok
-test insertion_positions_are_stable ... ok
 test non_elements_cannot_be_parents ... ok
 test mixed_content_node_kinds_are_preserved ... ok
 test out_of_range_insertions_are_rejected ... ok
+test insertion_positions_are_stable ... ok
 test panicking_append_child_on_a_foreign_document_leaves_everything_unchanged ... ok
-test panicking_set_attribute_leaves_the_document_unchanged ... ok
 test panicking_insert_child_leaves_the_document_unchanged ... ok
+test panicking_set_attribute_leaves_the_document_unchanged ... ok
 test relative_insertion_requires_a_sibling_of_the_same_parent ... ok
 test panicking_append_child_leaves_the_document_unchanged ... ok
-test remove_returns_the_detached_node_itself ... ok
 test panicking_replace_with_leaves_the_document_unchanged ... ok
 test panicking_set_root_leaves_the_document_unchanged ... ok
-test replacing_a_node_by_itself_is_a_documented_no_op ... ok
-test the_root_cannot_be_attached_as_a_child ... ok
-test setting_the_root_returns_the_previous_one ... ok
+test remove_returns_the_detached_node_itself ... ok
 test replacing_swaps_the_node_in_place ... ok
+test setting_the_root_returns_the_previous_one ... ok
+test the_root_cannot_be_attached_as_a_child ... ok
 test sibling_and_index_queries_agree_with_the_child_list ... ok
+test replacing_a_node_by_itself_is_a_documented_no_op ... ok
 test a_deeply_nested_document_does_not_overflow_the_stack ... ok
 
 test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
@@ -1098,25 +1097,25 @@ test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/validation.rs (target/debug/deps/validation-f720c61abd33e25e)
 
 running 21 tests
-test a_consistent_document_has_no_structural_problems ... ok
-test a_prefix_bound_to_a_different_uri_is_reported ... ok
-test a_detached_copy_does_not_conflict_with_its_original ... ok
 test an_empty_document_has_no_root ... ok
+test a_detached_copy_does_not_conflict_with_its_original ... ok
 test an_element_in_a_namespace_needs_it_declared ... ok
+test a_prefix_bound_to_a_different_uri_is_reported ... ok
+test a_consistent_document_has_no_structural_problems ... ok
 test all_problems_are_reported_in_one_call ... ok
 test attributes_are_not_affected_by_the_default_namespace ... ok
-test default_namespace_scope_must_match_the_name ... ok
 test detached_subtrees_are_validated_against_their_own_scope ... ok
-test the_error_type_is_a_std_error ... ok
 test every_error_kind_names_an_existing_rule_file ... ok
+test the_error_type_is_a_std_error ... ok
+test default_namespace_scope_must_match_the_name ... ok
 test editing_is_silent_and_validation_is_what_reports ... ok
-test moving_an_element_can_break_its_namespace_and_validation_says_so ... ok
 test the_xml_prefix_is_always_available ... ok
-test xml_id_values_must_be_names_and_unique ... ok
-test xml_lang_and_xml_space_values_are_checked ... ok
+test moving_an_element_can_break_its_namespace_and_validation_says_so ... ok
 test validation_is_deterministic ... ok
-test validation_does_not_change_the_document ... ok
 test the_xml_id_policy_is_pinned_in_both_directions ... ok
+test xml_lang_and_xml_space_values_are_checked ... ok
+test xml_id_values_must_be_names_and_unique ... ok
+test validation_does_not_change_the_document ... ok
 test every_parsed_fixture_is_valid ... ok
 test consistent_documents_produce_no_structural_issues ... ok
 
@@ -1137,33 +1136,33 @@ test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
    Doc-tests biodivine_lib_xml_dom
 
 running 27 tests
-test src/namespace.rs - namespace::Namespace::prefix (line 136) ... ok
-test src/namespace.rs - namespace::Namespace::new (line 58) ... ok
-test src/qualified_name.rs - qualified_name::QualifiedName (line 43) ... ok
 test src/lib.rs - (line 107) ... ok
-test src/namespace.rs - namespace::Namespace::prefixed (line 107) ... ok
 test src/document.rs - document::Document::validate (line 390) ... ok
-test src/namespace.rs - namespace::Namespace::prefix_str (line 153) ... ok
-test src/lib.rs - (line 134) ... ok
-test src/lib.rs - (line 87) ... ok
-test src/namespace.rs - namespace::Namespace::is_equal_ns (line 169) ... ok
-test src/namespace.rs - namespace::Namespace::without_prefix (line 88) ... ok
-test src/lib.rs - (line 63) ... ok
-test src/qualified_name.rs - qualified_name::QualifiedName::resolve_attribute (line 195) ... ok
-test src/qualified_name.rs - qualified_name::QualifiedName::resolve_attribute_with_namespace_map (line 347) ... ok
-test src/node.rs - node::Node (line 63) ... ok
+test src/namespace.rs - namespace::Namespace::prefixed (line 107) ... ok
 test src/namespace.rs - namespace::Namespace::uri (line 122) ... ok
+test src/qualified_name.rs - qualified_name::QualifiedName (line 43) ... ok
+test src/lib.rs - (line 134) ... ok
+test src/qualified_name.rs - qualified_name::QualifiedName::resolve_attribute (line 195) ... ok
+test src/namespace.rs - namespace::Namespace::is_equal_ns (line 169) ... ok
+test src/lib.rs - (line 87) ... ok
+test src/lib.rs - (line 63) ... ok
+test src/namespace.rs - namespace::Namespace::prefix_str (line 153) ... ok
+test src/namespace.rs - namespace::Namespace::new (line 58) ... ok
+test src/namespace.rs - namespace::Namespace::prefix (line 136) ... ok
+test src/namespace.rs - namespace::Namespace::without_prefix (line 88) ... ok
+test src/node.rs - node::Node (line 63) ... ok
+test src/qualified_name.rs - qualified_name::QualifiedName::resolve_attribute_with_namespace_map (line 347) ... ok
+test src/qualified_name.rs - qualified_name::QualifiedName::resolve_element_with_namespace_map (line 318) ... ok
 test src/qualified_name.rs - qualified_name::QualifiedName::resolve_element (line 163) ... ok
+test src/xml_spec.rs - xml_spec::CData (line 282) ... ok
 test src/qualified_name.rs - qualified_name::QualifiedName::without_namespace (line 87) ... ok
 test src/qualified_name.rs - qualified_name::QualifiedName::with_namespace (line 105) ... ok
-test src/xml_spec.rs - xml_spec::CData (line 282) ... ok
-test src/qualified_name.rs - qualified_name::QualifiedName::resolve_element_with_namespace_map (line 318) ... ok
+test src/xml_spec.rs - xml_spec::Comment (line 313) ... ok
+test src/xml_spec.rs - xml_spec::NCName (line 193) ... ok
+test src/xml_spec.rs - xml_spec::Text (line 239) ... ok
 test src/xml_spec.rs - xml_spec::PiData (line 380) ... ok
 test src/xml_spec.rs - xml_spec::PiTarget (line 348) ... ok
-test src/xml_spec.rs - xml_spec::NCName (line 193) ... ok
 test src/xml_spec.rs - xml_spec::NCName::as_str (line 220) ... ok
-test src/xml_spec.rs - xml_spec::Text (line 239) ... ok
-test src/xml_spec.rs - xml_spec::Comment (line 313) ... ok
 
 test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -1176,96 +1175,95 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 -> exit 0
 
 $ cargo +1.95.0 test --workspace
-   Compiling biodivine-lib-xml-dom v0.2.0 (/sandbox/biodivine-lib-xml-dom)
    Compiling biodivine-lib-xml-dom-py-sys v0.2.0 (/sandbox/biodivine-lib-xml-dom/biodivine-lib-xml-dom-py-sys)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.14s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
      Running unittests src/lib.rs (target/debug/deps/biodivine_lib_xml_dom-cc4c35bad89bdcfe)
 
 running 84 tests
+test arena::tests::attached_root_cannot_be_reset_as_root ... ok
 test arena::tests::attach_and_detach_maintain_both_directions ... ok
-test arena::tests::detaching_a_detached_node_is_a_no_op ... ok
 test arena::tests::cyclic_attachments_are_rejected ... ok
-test arena::tests::exceeding_the_arena_capacity_panics_instead_of_wrapping - should panic ... ok
 test arena::tests::namespaces_in_scope_shadow_outer_declarations ... ok
 test arena::tests::out_of_range_index_is_an_error_and_changes_nothing ... ok
-test arena::tests::relative_insertion ... ok
 test arena::tests::replace_by_self_is_a_no_op ... ok
-test arena::tests::attached_root_cannot_be_reset_as_root ... ok
+test arena::tests::exceeding_the_arena_capacity_panics_instead_of_wrapping - should panic ... ok
+test arena::tests::relative_insertion ... ok
+test arena::tests::detaching_a_detached_node_is_a_no_op ... ok
 test arena::tests::replace_keeps_links_consistent ... ok
-test arena::tests::root_cannot_be_attached ... ok
 test arena::tests::replace_rejects_an_ancestor_of_the_replaced_node ... ok
-test arena::tests::snapshot_round_trip_preserves_the_subtree ... ok
+test arena::tests::root_cannot_be_attached ... ok
 test arena::tests::the_capacity_guard_allows_everything_below_the_limit ... ok
-test arena::tests::the_index_is_interpreted_after_detaching ... ok
 test document::tests::documents_are_equal_by_identity ... ok
+test arena::tests::the_index_is_interpreted_after_detaching ... ok
+test arena::tests::snapshot_round_trip_preserves_the_subtree ... ok
 test document::tests::empty_documents_have_no_root ... ok
 test document::tests::handles_are_send_and_sync ... ok
 test document::tests::nesting_access_to_two_different_documents_is_allowed ... ok
-test document::tests::re_entrant_access_to_the_same_document_panics_in_debug_builds - should panic ... ok
-test interner::tests::interning_never_rewrites_a_prefix ... ok
 test interner::tests::interning_deduplicates_by_value ... ok
-test namespace::tests::test_namespace_is_equal_ns ... ok
+test document::tests::re_entrant_access_to_the_same_document_panics_in_debug_builds - should panic ... ok
 test namespace::tests::test_namespace_equality ... ok
+test interner::tests::interning_never_rewrites_a_prefix ... ok
+test namespace::tests::test_namespace_is_equal_ns ... ok
 test namespace::tests::test_unicode_prefixes ... ok
 test namespace::tests::test_namespace_support ... ok
 test node::tests::interning_does_not_change_equality ... ok
-test node::tests::re_interns_names_in_the_target_document ... ok
 test qualified_name::tests::test_creation_and_error ... ok
-test qualified_name::tests::test_equality_and_ordering ... ok
+test node::tests::re_interns_names_in_the_target_document ... ok
 test qualified_name::tests::test_hashing_semantic_equality ... ok
 test qualified_name::tests::test_ord_consistent_with_partial_eq ... ok
+test qualified_name::tests::test_equality_and_ordering ... ok
 test qualified_name::tests::test_qualified_name_string_no_prefix_ns ... ok
+test qualified_name::tests::test_resolve_attribute_ignores_default_ns ... ok
 test qualified_name::tests::test_resolve_attribute_with_map_ignores_default_ns ... ok
 test qualified_name::tests::test_resolve_attribute_with_map_prefixed ... ok
-test qualified_name::tests::test_resolve_attribute_ignores_default_ns ... ok
+test qualified_name::tests::test_resolve_with_map_undefined_prefix ... ok
+test qualified_name::tests::test_resolve_with_map_prefixed ... ok
 test qualified_name::tests::test_resolve_attribute_with_prefix ... ok
 test qualified_name::tests::test_resolve_no_prefix ... ok
 test qualified_name::tests::test_resolve_attribute_xml_prefix_auto ... ok
-test qualified_name::tests::test_resolve_undefined_prefix ... ok
-test qualified_name::tests::test_resolve_with_map_prefixed ... ok
-test qualified_name::tests::test_resolve_with_parent_ns ... ok
-test qualified_name::tests::test_resolve_xml_prefix_auto ... ok
-test qualified_name::tests::test_resolve_with_map_undefined_prefix ... ok
-test qualified_name::tests::test_resolve_xmlns_prefix_rejected ... ok
-test tests::test_create_document ... ok
-test tests::test_add_children ... ok
 test qualified_name::tests::test_resolve_with_map_xml_prefix_auto ... ok
+test qualified_name::tests::test_resolve_with_parent_ns ... ok
+test qualified_name::tests::test_resolve_undefined_prefix ... ok
 test qualified_name::tests::test_resolve_with_prefix ... ok
-test tests::test_qualified_name_resolution ... ok
-test tests::test_dropping_a_document_frees_its_nodes ... ok
-test xml_spec::declaration::tests::declaration_rendering ... ok
-test xml_spec::tests::test_ncname_helper ... ok
-test xml_spec::tests::test_pi_target_wrapper ... ok
-test xml_spec::g3_tests::language_tags ... ok
-test xml_spec::declaration::tests::encoding_names_are_case_insensitive ... ok
+test tests::test_create_document ... ok
 test tests::test_create_element ... ok
-test tests::test_namespace_declaration ... ok
-test tests::test_document_reference ... ok
-test xml_spec::g3_tests::xml_space_values ... ok
+test qualified_name::tests::test_resolve_xmlns_prefix_rejected ... ok
+test tests::test_add_children ... ok
 test xml_spec::declaration::tests::pseudo_attributes ... ok
-test xml_spec::declaration::tests::accessors ... ok
-test xml_spec::tests::test_cdata_wrapper ... ok
+test xml_spec::g3_tests::language_tags ... ok
+test xml_spec::tests::test_comment_wrapper ... ok
 test xml_spec::tests::test_namespace_validation ... ok
+test tests::test_document_reference ... ok
+test qualified_name::tests::test_resolve_xml_prefix_auto ... ok
+test tests::test_qualified_name_resolution ... ok
+test xml_spec::declaration::tests::accessors ... ok
+test xml_spec::tests::test_ncname_helper ... ok
+test tests::test_namespace_declaration ... ok
 test xml_spec::tests::test_pi_data_wrapper ... ok
+test xml_spec::tests::test_pi_target_wrapper ... ok
 test xml_spec::tests::test_reserved_xml_prefix ... ok
-test xml_spec::tests::test_prefix_ncname_validation ... ok
 test xml_spec::tests::test_text_wrapper ... ok
+test xml_spec::g3_tests::content_that_cannot_be_escaped_is_normalised_at_construction ... ok
 test xml_spec::g3_tests::line_end_normalisation ... ok
+test xml_spec::g3_tests::xml_space_values ... ok
+test xml_spec::rules::tests::the_rules_directory_is_where_we_think_it_is ... ok
+test xml_spec::declaration::tests::encoding_names_are_case_insensitive ... ok
+test xml_spec::tests::test_split_qname_valid ... ok
+test tests::test_dropping_a_document_frees_its_nodes ... ok
+test xml_spec::tests::test_cdata_wrapper ... ok
 test xml_spec::tests::test_uri_comparison_case_sensitive ... ok
+test xml_spec::declaration::tests::declaration_rendering ... ok
 test xml_spec::tests::test_validate_resolved_prefix ... ok
+test xml_spec::tests::test_prefix_ncname_validation ... ok
 test xml_spec::validation::tests::attributes_ignore_the_default_namespace ... ok
 test xml_spec::validation::tests::default_namespace_rules ... ok
 test xml_spec::validation::tests::inner_declarations_shadow_outer_ones ... ok
-test xml_spec::validation::tests::the_xml_prefix_needs_no_declaration ... ok
 test xml_spec::validation::tests::prefixed_names_must_be_declared ... ok
-test xml_spec::rules::tests::the_rules_directory_is_where_we_think_it_is ... ok
+test xml_spec::validation::tests::the_xml_prefix_needs_no_declaration ... ok
 test xml_spec::validation::tests::the_xmlns_prefix_can_never_become_a_name_prefix ... ok
-test xml_spec::tests::test_split_qname_valid ... ok
-test xml_spec::g3_tests::content_that_cannot_be_escaped_is_normalised_at_construction ... ok
-test xml_spec::tests::test_split_qname_invalid ... ok
-test xml_spec::tests::test_reserved_xmlns_prefix ... ok
 test node::tests::repeated_names_share_one_allocation ... ok
-test xml_spec::tests::test_comment_wrapper ... ok
+test xml_spec::tests::test_reserved_xmlns_prefix ... ok
+test xml_spec::tests::test_split_qname_invalid ... ok
 
 test result: ok. 84 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -1276,16 +1274,16 @@ test cloning_a_handle_refers_to_the_same_node ... ok
 test a_deep_clone_is_cheap_because_names_are_shared ... ok
 test a_deep_copy_can_be_edited_independently_of_its_source ... ok
 test a_copied_subtree_can_be_attached_in_the_target_document ... ok
-test deep_clone_copies_the_whole_subtree ... ok
-test deep_clone_into_another_document_rebuilds_the_tree_there ... ok
 test display_of_non_element_nodes ... ok
 test deep_clone_into_the_same_document_behaves_like_deep_clone ... ok
-test display_renders_the_subtree_as_xml ... ok
+test deep_clone_copies_the_whole_subtree ... ok
+test deep_clone_into_another_document_rebuilds_the_tree_there ... ok
 test node_content_exposes_every_kind ... ok
+test display_renders_the_subtree_as_xml ... ok
 test non_element_nodes_can_be_copied_between_documents ... ok
 test shallow_clone_copies_the_payload_but_not_the_children ... ok
-test shallow_clone_of_a_text_node_copies_the_content ... ok
 test shallow_clone_into_another_document_keeps_only_the_node ... ok
+test shallow_clone_of_a_text_node_copies_the_content ... ok
 test copying_while_the_source_is_mutated_produces_consistent_copies ... ok
 
 test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
@@ -1299,7 +1297,7 @@ test structural_edits_stay_consistent_under_contention ... ok
 test readers_and_writers_do_not_deadlock ... ok
 test two_threads_adding_opposite_children_never_create_a_cycle ... ok
 
-test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
 
      Running tests/element.rs (target/debug/deps/element-6e450ca5bb1739fb)
 
@@ -1310,8 +1308,8 @@ test attribute_crud_is_keyed_by_expanded_name ... ok
 test names_accessors_agree ... ok
 test invalid_attribute_values_are_rejected ... ok
 test namespace_declarations_can_be_added_changed_and_removed ... ok
-test removing_a_declaration_is_silent_even_though_the_subtree_relies_on_it ... ok
 test resolution_uses_the_in_scope_declarations ... ok
+test removing_a_declaration_is_silent_even_though_the_subtree_relies_on_it ... ok
 test namespaced_documents_round_trip_through_the_parser ... ok
 
 test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -1319,19 +1317,19 @@ test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/errors.rs (target/debug/deps/errors-333e2e796641fc33)
 
 running 13 tests
-test append_child_errors ... ok
-test insert_child_errors ... ok
-test element_errors ... ok
 test namespace_construction_errors ... ok
+test insert_child_errors ... ok
+test append_child_errors ... ok
 test node_construction_errors ... ok
+test element_errors ... ok
 test parse_file_reports_io_errors ... ok
 test qualified_name_construction_errors ... ok
 test qualified_name_resolution_errors ... ok
 test relative_insertion_errors ... ok
-test replace_with_errors ... ok
-test set_root_errors ... ok
-test unclosed_elements_and_xml_target_pis_are_rejected ... ok
 test parse_errors ... ok
+test set_root_errors ... ok
+test replace_with_errors ... ok
+test unclosed_elements_and_xml_target_pis_are_rejected ... ok
 
 test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -1343,16 +1341,16 @@ test a_declaration_must_be_the_very_first_thing ... ok
 test a_literal_carriage_return_in_text_round_trips ... ok
 test adjacent_text_nodes_are_merged_on_output ... ok
 test an_optional_utf8_byte_order_mark_is_accepted ... ok
+test an_empty_default_declaration_removes_the_default_namespace ... ok
 test character_references_are_expanded ... ok
 test cdata_and_processing_instructions_must_be_well_formed ... ok
 test comments_cdata_and_processing_instructions_are_written_verbatim ... ok
-test attribute_value_normalisation_in_both_directions ... ok
-test declaration_style_is_honoured ... ok
 test comments_must_be_well_formed ... ok
+test declaration_style_is_honoured ... ok
+test attribute_value_normalisation_in_both_directions ... ok
 test empty_elements_and_write_options ... ok
 test empty_text_nodes_have_no_representation_and_are_omitted ... ok
 test illegal_character_references_are_rejected ... ok
-test an_empty_default_declaration_removes_the_default_namespace ... ok
 test invalid_utf8_is_a_typed_error ... ok
 test less_than_is_rejected_in_attribute_values ... ok
 test line_ends_are_normalised_in_text ... ok
@@ -1363,14 +1361,14 @@ test prefixes_are_preserved ... ok
 test text_containing_a_cdata_close_round_trips ... ok
 test tags_must_nest_and_close ... ok
 test rules_referenced_by_the_parser_and_serializer_exist ... ok
-test text_is_escaped_so_that_it_round_trips ... ok
 test there_must_be_exactly_one_root_element ... ok
 test processing_instruction_content_is_kept_verbatim ... ok
-test the_declaration_is_interpreted_and_preserved ... ok
+test text_is_escaped_so_that_it_round_trips ... ok
 test parser_never_panics_on_odd_input ... ok
 test unsupported_declarations_are_rejected ... ok
-test undeclared_entity_references_are_typed_errors_not_panics ... ok
 test top_level_content_policy ... ok
+test the_declaration_is_interpreted_and_preserved ... ok
+test undeclared_entity_references_are_typed_errors_not_panics ... ok
 test xml_lang_and_xml_space_round_trip_with_the_implicit_xml_prefix ... ok
 test a_deeply_nested_document_round_trips ... ok
 
@@ -1383,68 +1381,68 @@ test arbitrary_strings_never_panic ... ok
 test arbitrary_bytes_never_panic ... ok
 test round_trip_preserves_the_document ... ok
 test writing_is_idempotent ... ok
-test generated_documents_validate_clean ... ok
 test the_declaration_survives_a_round_trip ... ok
+test generated_documents_validate_clean ... ok
 test mutated_well_formed_documents_never_panic ... ok
 
-test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s
 
      Running tests/structure.rs (target/debug/deps/structure-ad68daaf7e0e18fe)
 
 running 28 tests
 test a_foreign_element_cannot_become_the_root ... ok
-test a_detached_subtree_stays_editable_clonable_and_reattachable ... ok
 test an_attached_element_cannot_become_the_root ... ok
 test attaching_and_detaching_keeps_the_tree_consistent ... ok
+test a_detached_subtree_stays_editable_clonable_and_reattachable ... ok
 test attaching_a_detached_subtree_restores_it ... ok
 test attachment_state_is_only_about_the_root_of_the_document ... ok
-test cycles_are_rejected ... ok
-test detaching_is_idempotent_and_returns_the_previous_parent ... ok
 test descendants_are_returned_in_document_pre_order ... ok
+test detaching_is_idempotent_and_returns_the_previous_parent ... ok
+test cycles_are_rejected ... ok
 test foreign_documents_are_rejected ... ok
-test mixed_content_node_kinds_are_preserved ... ok
-test non_elements_cannot_be_parents ... ok
 test insertion_positions_are_stable ... ok
+test non_elements_cannot_be_parents ... ok
+test mixed_content_node_kinds_are_preserved ... ok
 test out_of_range_insertions_are_rejected ... ok
 test panicking_append_child_on_a_foreign_document_leaves_everything_unchanged ... ok
-test panicking_insert_child_leaves_the_document_unchanged ... ok
-test panicking_append_child_leaves_the_document_unchanged ... ok
-test panicking_set_attribute_leaves_the_document_unchanged ... ok
 test relative_insertion_requires_a_sibling_of_the_same_parent ... ok
-test panicking_replace_with_leaves_the_document_unchanged ... ok
-test replacing_a_node_by_itself_is_a_documented_no_op ... ok
+test remove_returns_the_detached_node_itself ... ok
+test panicking_insert_child_leaves_the_document_unchanged ... ok
+test panicking_set_attribute_leaves_the_document_unchanged ... ok
 test replacing_swaps_the_node_in_place ... ok
 test setting_the_root_returns_the_previous_one ... ok
-test remove_returns_the_detached_node_itself ... ok
 test panicking_set_root_leaves_the_document_unchanged ... ok
+test panicking_replace_with_leaves_the_document_unchanged ... ok
+test panicking_append_child_leaves_the_document_unchanged ... ok
 test sibling_and_index_queries_agree_with_the_child_list ... ok
+test replacing_a_node_by_itself_is_a_documented_no_op ... ok
 test the_root_cannot_be_attached_as_a_child ... ok
 test a_deeply_nested_document_does_not_overflow_the_stack ... ok
 
-test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
 
      Running tests/validation.rs (target/debug/deps/validation-7ea8e33840eb447f)
 
 running 21 tests
+test a_consistent_document_has_no_structural_problems ... ok
 test a_prefix_bound_to_a_different_uri_is_reported ... ok
 test a_detached_copy_does_not_conflict_with_its_original ... ok
 test all_problems_are_reported_in_one_call ... ok
-test a_consistent_document_has_no_structural_problems ... ok
 test an_empty_document_has_no_root ... ok
-test an_element_in_a_namespace_needs_it_declared ... ok
 test attributes_are_not_affected_by_the_default_namespace ... ok
-test every_error_kind_names_an_existing_rule_file ... ok
-test detached_subtrees_are_validated_against_their_own_scope ... ok
+test an_element_in_a_namespace_needs_it_declared ... ok
 test default_namespace_scope_must_match_the_name ... ok
+test detached_subtrees_are_validated_against_their_own_scope ... ok
 test the_error_type_is_a_std_error ... ok
-test moving_an_element_can_break_its_namespace_and_validation_says_so ... ok
 test editing_is_silent_and_validation_is_what_reports ... ok
+test every_error_kind_names_an_existing_rule_file ... ok
+test moving_an_element_can_break_its_namespace_and_validation_says_so ... ok
 test the_xml_prefix_is_always_available ... ok
-test the_xml_id_policy_is_pinned_in_both_directions ... ok
-test xml_id_values_must_be_names_and_unique ... ok
-test validation_does_not_change_the_document ... ok
-test xml_lang_and_xml_space_values_are_checked ... ok
 test validation_is_deterministic ... ok
+test the_xml_id_policy_is_pinned_in_both_directions ... ok
+test xml_lang_and_xml_space_values_are_checked ... ok
+test validation_does_not_change_the_document ... ok
+test xml_id_values_must_be_names_and_unique ... ok
 test every_parsed_fixture_is_valid ... ok
 test consistent_documents_produce_no_structural_issues ... ok
 
@@ -1456,8 +1454,8 @@ running 6 tests
 test tests::handles_are_send_and_sync ... ok
 test tests::handles_can_be_moved_into_a_plain_rust_thread ... ok
 test tests::a_document_can_be_shared_by_several_threads ... ok
-test tests::a_validation_failure_carries_every_problem ... ok
 test tests::a_document_round_trips_through_the_bindings ... ok
+test tests::a_validation_failure_carries_every_problem ... ok
 test tests::a_parsed_document_is_the_same_tree_as_the_serialized_one ... ok
 
 test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -1465,37 +1463,37 @@ test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
    Doc-tests biodivine_lib_xml_dom
 
 running 27 tests
-test src/lib.rs - (line 107) ... ok
 test src/document.rs - document::Document::validate (line 390) ... ok
+test src/lib.rs - (line 107) ... ok
+test src/lib.rs - (line 87) ... ok
 test src/namespace.rs - namespace::Namespace::is_equal_ns (line 169) ... ok
 test src/lib.rs - (line 63) ... ok
+test src/namespace.rs - namespace::Namespace::prefix (line 136) ... ok
 test src/namespace.rs - namespace::Namespace::new (line 58) ... ok
-test src/namespace.rs - namespace::Namespace::prefix_str (line 153) ... ok
 test src/namespace.rs - namespace::Namespace::prefixed (line 107) ... ok
-test src/lib.rs - (line 87) ... ok
-test src/lib.rs - (line 134) ... ok
+test src/namespace.rs - namespace::Namespace::prefix_str (line 153) ... ok
 test src/namespace.rs - namespace::Namespace::without_prefix (line 88) ... ok
 test src/namespace.rs - namespace::Namespace::uri (line 122) ... ok
-test src/qualified_name.rs - qualified_name::QualifiedName (line 43) ... ok
 test src/node.rs - node::Node (line 63) ... ok
-test src/namespace.rs - namespace::Namespace::prefix (line 136) ... ok
-test src/qualified_name.rs - qualified_name::QualifiedName::resolve_attribute (line 195) ... ok
-test src/qualified_name.rs - qualified_name::QualifiedName::resolve_attribute_with_namespace_map (line 347) ... ok
 test src/qualified_name.rs - qualified_name::QualifiedName::resolve_element_with_namespace_map (line 318) ... ok
+test src/qualified_name.rs - qualified_name::QualifiedName (line 43) ... ok
+test src/qualified_name.rs - qualified_name::QualifiedName::resolve_element (line 163) ... ok
+test src/qualified_name.rs - qualified_name::QualifiedName::resolve_attribute (line 195) ... ok
+test src/lib.rs - (line 134) ... ok
+test src/qualified_name.rs - qualified_name::QualifiedName::resolve_attribute_with_namespace_map (line 347) ... ok
+test src/xml_spec.rs - xml_spec::Comment (line 313) ... ok
+test src/xml_spec.rs - xml_spec::NCName (line 193) ... ok
 test src/qualified_name.rs - qualified_name::QualifiedName::with_namespace (line 105) ... ok
 test src/qualified_name.rs - qualified_name::QualifiedName::without_namespace (line 87) ... ok
-test src/xml_spec.rs - xml_spec::CData (line 282) ... ok
 test src/xml_spec.rs - xml_spec::PiData (line 380) ... ok
-test src/xml_spec.rs - xml_spec::PiTarget (line 348) ... ok
-test src/qualified_name.rs - qualified_name::QualifiedName::resolve_element (line 163) ... ok
-test src/xml_spec.rs - xml_spec::NCName::as_str (line 220) ... ok
-test src/xml_spec.rs - xml_spec::NCName (line 193) ... ok
-test src/xml_spec.rs - xml_spec::Comment (line 313) ... ok
 test src/xml_spec.rs - xml_spec::Text (line 239) ... ok
+test src/xml_spec.rs - xml_spec::PiTarget (line 348) ... ok
+test src/xml_spec.rs - xml_spec::NCName::as_str (line 220) ... ok
+test src/xml_spec.rs - xml_spec::CData (line 282) ... ok
 
 test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-all doctests ran in 0.14s; merged doctests compilation took 0.14s
+all doctests ran in 0.14s; merged doctests compilation took 0.13s
    Doc-tests biodivine_lib_xml_dom_sys
 
 running 0 tests
@@ -1505,8 +1503,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 -> exit 0
 
 $ cargo build --examples
-   Compiling biodivine-lib-xml-dom v0.2.0 (/sandbox/biodivine-lib-xml-dom)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.17s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
 -> exit 0
 
 $ cargo run --quiet --example book_editing
@@ -1578,17 +1575,16 @@ imported subtree has 2 children in the target document
 -> exit 0
 
 $ env RUSTDOCFLAGS=-D warnings cargo doc --no-deps --workspace
-    Checking biodivine-lib-xml-dom v0.2.0 (/sandbox/biodivine-lib-xml-dom)
  Documenting biodivine-lib-xml-dom v0.2.0 (/sandbox/biodivine-lib-xml-dom)
    Compiling pyo3 v0.29.3
  Documenting biodivine-lib-xml-dom-py-sys v0.2.0 (/sandbox/biodivine-lib-xml-dom/biodivine-lib-xml-dom-py-sys)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.05s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.07s
    Generated /sandbox/biodivine-lib-xml-dom/target/doc/biodivine_lib_xml_dom/index.html and 1 other file
 -> exit 0
 
 $ /sandbox/biodivine-lib-xml-dom/.venv/bin/python docs/check_doc_sections.py --self-test
-self-test corpus: inspected 3 public functions in /tmp/tmp2cv56c6i
-self-test corpus: inspected 1 public functions in /tmp/tmp2cv56c6i
+self-test corpus: inspected 3 public functions in /tmp/tmpu42md5ey
+self-test corpus: inspected 1 public functions in /tmp/tmpu42md5ey
 self-test: the checker reports missing sections and enforces its floor
 -> exit 0
 
@@ -1622,8 +1618,8 @@ maturin 1.15.0
 rustdoc: 8 index pages under target/doc
 
 === 2. documentation sections (# Errors / # Panics)
-self-test corpus: inspected 3 public functions in /tmp/tmpna11v6g9
-self-test corpus: inspected 1 public functions in /tmp/tmpna11v6g9
+self-test corpus: inspected 3 public functions in /tmp/tmpsq4y1mg6
+self-test corpus: inspected 1 public functions in /tmp/tmpsq4y1mg6
 self-test: the checker reports missing sections and enforces its floor
 the core crate: inspected 145 public functions in src
 the binding crate: inspected 156 public functions in biodivine-lib-xml-dom-py-sys/src
@@ -1641,7 +1637,7 @@ Running Sphinx v9.0.4
 loading translations [en]... done
 making output directory... done
 loading intersphinx inventory 'python' from https://docs.python.org/3/objects.inv ...
-myst v5.1.0: MdParserConfig(commonmark_only=False, gfm_only=False, enable_extensions={'colon_fence', 'deflist'}, disable_syntax=[], all_links_external=False, links_external_new_tab=False, url_schemes=('http', 'https', 'mailto', 'ftp'), ref_domains=None, fence_as_directive=set(), number_code_blocks=[], title_to_header=False, heading_anchors=0, heading_slug_func=None, html_meta={}, footnote_sort=True, footnote_transition=True, words_per_minute=200, substitutions={}, linkify_fuzzy_links=True, dmath_allow_labels=True, dmath_allow_space=True, dmath_allow_digits=True, dmath_double_inline=False, update_mathjax=True, mathjax_classes='tex2jax_process|mathjax_process|math|output_area', enable_checkboxes=False, strikethrough_single_tilde=False, colon_fence_exact_match=False, suppress_warnings=[], highlight_code_blocks=True)
+myst v5.1.0: MdParserConfig(commonmark_only=False, gfm_only=False, enable_extensions={'deflist', 'colon_fence'}, disable_syntax=[], all_links_external=False, links_external_new_tab=False, url_schemes=('http', 'https', 'mailto', 'ftp'), ref_domains=None, fence_as_directive=set(), number_code_blocks=[], title_to_header=False, heading_anchors=0, heading_slug_func=None, html_meta={}, footnote_sort=True, footnote_transition=True, words_per_minute=200, substitutions={}, linkify_fuzzy_links=True, dmath_allow_labels=True, dmath_allow_space=True, dmath_allow_digits=True, dmath_double_inline=False, update_mathjax=True, mathjax_classes='tex2jax_process|mathjax_process|math|output_area', enable_checkboxes=False, strikethrough_single_tilde=False, colon_fence_exact_match=False, suppress_warnings=[], highlight_code_blocks=True)
 building [mo]: targets for 0 po files that are out of date
 writing output... 
 building [html]: targets for 2 source files that are out of date
@@ -1679,7 +1675,7 @@ python api docs: 5 HTML files
 Running Sphinx v9.0.4
 loading translations [en]... done
 making output directory... done
-myst v5.1.0: MdParserConfig(commonmark_only=False, gfm_only=False, enable_extensions={'attrs_inline', 'colon_fence', 'deflist'}, disable_syntax=[], all_links_external=False, links_external_new_tab=False, url_schemes=('http', 'https', 'mailto', 'ftp'), ref_domains=None, fence_as_directive=set(), number_code_blocks=[], title_to_header=False, heading_anchors=3, heading_slug_func=None, html_meta={}, footnote_sort=True, footnote_transition=True, words_per_minute=200, substitutions={}, linkify_fuzzy_links=True, dmath_allow_labels=True, dmath_allow_space=True, dmath_allow_digits=True, dmath_double_inline=False, update_mathjax=True, mathjax_classes='tex2jax_process|mathjax_process|math|output_area', enable_checkboxes=False, strikethrough_single_tilde=False, colon_fence_exact_match=False, suppress_warnings=[], highlight_code_blocks=True)
+myst v5.1.0: MdParserConfig(commonmark_only=False, gfm_only=False, enable_extensions={'colon_fence', 'deflist', 'attrs_inline'}, disable_syntax=[], all_links_external=False, links_external_new_tab=False, url_schemes=('http', 'https', 'mailto', 'ftp'), ref_domains=None, fence_as_directive=set(), number_code_blocks=[], title_to_header=False, heading_anchors=3, heading_slug_func=None, html_meta={}, footnote_sort=True, footnote_transition=True, words_per_minute=200, substitutions={}, linkify_fuzzy_links=True, dmath_allow_labels=True, dmath_allow_space=True, dmath_allow_digits=True, dmath_double_inline=False, update_mathjax=True, mathjax_classes='tex2jax_process|mathjax_process|math|output_area', enable_checkboxes=False, strikethrough_single_tilde=False, colon_fence_exact_match=False, suppress_warnings=[], highlight_code_blocks=True)
 building [mo]: targets for 0 po files that are out of date
 writing output... 
 building [html]: targets for 12 source files that are out of date

@@ -278,6 +278,14 @@ impl QualifiedName {
             if prefix == "xml" {
                 return Self::resolve_xml_prefix(local_name);
             }
+            // `xmlns` is reserved for declarations and can never be used as a QName prefix,
+            // whether or not something claims to declare it
+            // (`rule.namespace-basics.xmlns-not-element-prefix`).
+            if prefix == "xmlns" {
+                return Err(XmlError::ReservedPrefix(
+                    "the prefix `xmlns` cannot be used in a qualified name".to_string(),
+                ));
+            }
 
             let ns = lookup_prefix(&prefix)
                 .ok_or_else(|| XmlError::UndeclaredPrefix(prefix.to_string()))?;
@@ -539,7 +547,7 @@ mod tests {
         let doc = Document::empty();
         let el = doc.create_element(q_name("foo").unwrap());
         let err = QualifiedName::resolve_element(&el, "xmlns:bar").unwrap_err();
-        assert!(matches!(err, XmlError::UndeclaredPrefix(_)));
+        assert!(matches!(err, XmlError::ReservedPrefix(_)));
     }
 
     #[test]

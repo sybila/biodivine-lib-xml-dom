@@ -28,14 +28,15 @@ pub fn rule_summary_exists(rule: &str) -> bool {
 
 /// Asserts that a summary file exists for `rule`.
 ///
-/// Only used by tests: it turns "this code implements rule X" from a comment into something the
-/// test suite checks, so a renamed or deleted rule file cannot go unnoticed.
+/// This turns "this code implements rule X" from a comment into something the test suite checks, so
+/// a renamed or deleted rule file cannot go unnoticed. It is public because the check is just as
+/// useful from this crate's own integration tests (which only see the public API) and from
+/// downstream crates that want to assert their own rule anchors.
 ///
 /// # Panics
 ///
 /// Panics if `specification/rules/<rule>` does not exist.
-#[cfg(test)]
-pub(crate) fn assert_rule_exists(rule: &str) {
+pub fn assert_rule_exists(rule: &str) {
     assert!(
         rule_summary_exists(rule),
         "the code claims to implement `{rule}`, but {} does not exist",

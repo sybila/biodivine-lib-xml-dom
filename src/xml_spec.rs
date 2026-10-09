@@ -261,7 +261,7 @@ fn is_valid_text(s: &str) -> bool {
 
 /// Check if a char is a legal XML character per the Char production.
 /// Char ::= #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
-fn is_legal_char(c: char) -> bool {
+pub(crate) fn is_legal_char(c: char) -> bool {
     let cp = c as u32;
     matches!(cp, 0x9 | 0xA | 0xD | 0x20..=0xD7FF | 0xE000..=0xFFFD | 0x10000..=0x10FFFF)
 }

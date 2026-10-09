@@ -161,7 +161,7 @@ mod document;
 mod element;
 mod error;
 mod interner;
-mod io;
+pub mod io;
 mod namespace;
 mod node;
 mod qualified_name;
@@ -184,7 +184,9 @@ pub use crate::document::Document;
 pub use crate::element::Element;
 pub use crate::error::{XmlError, XmlResult};
 pub use crate::io::{
-    parse_file, parse_reader, parse_string, write_file, write_string, write_writer,
+    DeclarationStyle, EmptyElementStyle, WriteOptions, parse_bytes, parse_file, parse_reader,
+    parse_string, write_file, write_file_with, write_string, write_string_with, write_writer,
+    write_writer_with,
 };
 pub use crate::namespace::Namespace;
 pub use crate::node::{Node, NodeContent, NodeKind};

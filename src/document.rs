@@ -25,7 +25,7 @@ use crate::element::Element;
 use crate::error::{XmlError, XmlResult};
 use crate::node::Node;
 use crate::qualified_name::QualifiedName;
-use crate::xml_spec::{CData, Comment, PiData, PiTarget, Text};
+use crate::xml_spec::{CData, Comment, PiData, PiTarget, Text, XmlDeclaration};
 
 /// Debug-only detector for re-entrant access to one document's lock.
 ///
@@ -196,6 +196,27 @@ impl Document {
     /// Whether two handles refer to the same document.
     pub fn ptr_eq(&self, other: &Document) -> bool {
         Arc::ptr_eq(&self.inner, &other.inner)
+    }
+
+    /// The XML declaration of this document, if it was parsed from a document that had one (or set
+    /// explicitly with [`Document::set_xml_declaration`]).
+    ///
+    /// The declaration is metadata about the document, not a node: it is not part of the tree, it
+    /// is not a child of anything, and it is written back by the serializer according to
+    /// [`crate::io::WriteOptions`].
+    pub fn xml_declaration(&self) -> Option<XmlDeclaration> {
+        self.read_arena("Document::xml_declaration", |arena| arena.declaration())
+    }
+
+    /// Replaces the XML declaration of this document.
+    ///
+    /// The declaration is not validated here; use
+    /// [`crate::xml_spec::declaration::encoding_is_utf8`] and compare
+    /// [`crate::xml_spec::XML_VERSION`] if the value does not come from this crate's parser.
+    pub fn set_xml_declaration(&self, declaration: Option<XmlDeclaration>) {
+        self.write_arena("Document::set_xml_declaration", |arena| {
+            arena.set_declaration(declaration);
+        });
     }
 
     /// The root element of this document, if it has one.

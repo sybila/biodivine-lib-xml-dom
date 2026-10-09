@@ -3,6 +3,9 @@ name = "biodivine-lib-xml-dom"
 version = "0.1.0"
 edition = "2024"
 
+[dev-dependencies]
+proptest = "1"
+
 [dependencies]
 parking_lot = "0.12"
 quick-xml = "0.41"

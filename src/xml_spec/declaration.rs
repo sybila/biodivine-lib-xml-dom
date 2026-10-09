@@ -70,6 +70,23 @@ impl XmlDeclaration {
     pub fn standalone(&self) -> Option<bool> {
         self.standalone
     }
+
+    /// The pseudo-attributes of the declaration, without the surrounding `<?xml` and `?>`.
+    ///
+    /// This is the form the serializer needs: `quick-xml` writes `<?`, the content and `?>`
+    /// around a declaration event, so the content must be exactly `version="…" …`.
+    pub fn pseudo_attributes(&self) -> String {
+        let mut result = format!("version=\"{}\"", self.version);
+        if let Some(encoding) = &self.encoding {
+            result.push_str(&format!(" encoding=\"{encoding}\""));
+        }
+        match self.standalone {
+            Some(true) => result.push_str(" standalone=\"yes\""),
+            Some(false) => result.push_str(" standalone=\"no\""),
+            None => {}
+        }
+        result
+    }
 }
 
 impl fmt::Display for XmlDeclaration {
@@ -121,6 +138,18 @@ mod tests {
         assert_eq!(
             XmlDeclaration::new("1.0", Some("UTF-8"), Some(false)).to_string(),
             "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>"
+        );
+    }
+
+    #[test]
+    fn pseudo_attributes() {
+        assert_eq!(
+            XmlDeclaration::utf8().pseudo_attributes(),
+            "version=\"1.0\" encoding=\"UTF-8\""
+        );
+        assert_eq!(
+            XmlDeclaration::new("1.0", None::<String>, Some(false)).pseudo_attributes(),
+            "version=\"1.0\" standalone=\"no\""
         );
     }
 

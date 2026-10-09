@@ -31,7 +31,7 @@ use crate::error::{XmlError, XmlResult};
 use crate::interner::Interner;
 use crate::namespace::Namespace;
 use crate::qualified_name::QualifiedName;
-use crate::xml_spec::{CData, Comment, NCName, PiData, PiTarget, Text};
+use crate::xml_spec::{CData, Comment, NCName, PiData, PiTarget, Text, XmlDeclaration};
 
 /// The maximum number of nodes a single document can hold.
 ///
@@ -116,35 +116,6 @@ pub(crate) struct NodeSlot {
     pub(crate) data: NodeData,
 }
 
-/// A detached, fully owned copy of a subtree.
-///
-/// Used by the clone operations: a copy is always created through this intermediate
-/// representation, which lets [`Arena::insert_snapshot`] rebuild it with the target document's
-/// interner. For same-document clones the snapshot never leaves the arena lock.
-///
-/// It is also what makes cross-document copies deadlock-free: the source subtree is snapshotted
-/// under a read lock of the source document, that lock is released, and only then is the snapshot
-/// inserted under a write lock of the target document. Two document locks are therefore never
-/// held at the same time (see `docs/design/PLAN.md` §3.1).
-#[derive(Debug, Clone)]
-pub(crate) enum Snapshot {
-    /// An element with its children (possibly empty for a shallow clone).
-    Element {
-        name: QualifiedName,
-        attributes: BTreeMap<QualifiedName, Arc<str>>,
-        namespace_declarations: BTreeMap<Option<NCName>, Option<Namespace>>,
-        children: Vec<Snapshot>,
-    },
-    /// A text node.
-    Text(Text),
-    /// A comment node.
-    Comment(Comment),
-    /// A CDATA section.
-    CData(CData),
-    /// A processing instruction.
-    ProcessingInstruction(PiTarget, PiData),
-}
-
 /// Checks that one more node can be allocated.
 ///
 /// `NodeId` is a `u32` index, so the number of slots is bounded by [`MAX_NODES`]; the bound is
@@ -161,11 +132,56 @@ fn ensure_capacity(used: usize) {
     );
 }
 
-/// All nodes of one document, plus its root and its name interner.
+/// A detached, fully owned copy of a subtree.
+///
+/// The representation is deliberately *flat*: nodes are stored in a `Vec` (in an order where a
+/// child always has a larger index than its parent) and the parent/child relation is a list of
+/// indices rather than nested values. Two things follow, and both matter for the same reason:
+///
+/// * taking and rebuilding a snapshot is iterative, so it cannot overflow the stack on a deeply
+///   nested document — a stack overflow aborts the process and could therefore not be reported as
+///   a typed error (see `docs/design/PLAN.md` §16, advisor condition C2);
+/// * dropping a snapshot is a flat `Vec` drop rather than a recursive one.
+///
+/// Snapshots are also what makes cross-document copies deadlock-free: the source subtree is
+/// snapshotted under a read lock of the source document, that lock is released, and only then is
+/// the snapshot inserted under a write lock of the target document.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Snapshot {
+    /// The node payloads. See [`SnapshotNode`].
+    nodes: Vec<SnapshotNode>,
+    /// `children[i]` lists the indices in `nodes` that are children of `nodes[i]`, in document
+    /// order. Only elements can have children, so the entries of non-elements are empty.
+    children: Vec<Vec<usize>>,
+    /// The index of the copied subtree's root.
+    root: usize,
+}
+
+/// The payload of one node of a [`Snapshot`].
+#[derive(Debug, Clone)]
+pub(crate) enum SnapshotNode {
+    /// An element, without its children (they live in [`Snapshot::children`]).
+    Element {
+        name: QualifiedName,
+        attributes: BTreeMap<QualifiedName, Arc<str>>,
+        namespace_declarations: BTreeMap<Option<NCName>, Option<Namespace>>,
+    },
+    /// A text node.
+    Text(Text),
+    /// A comment node.
+    Comment(Comment),
+    /// A CDATA section.
+    CData(CData),
+    /// A processing instruction.
+    ProcessingInstruction(PiTarget, PiData),
+}
+
+/// All nodes of one document, plus its root, its XML declaration and its name interner.
 #[derive(Debug, Default)]
 pub(crate) struct Arena {
     nodes: Vec<NodeSlot>,
     root: Option<NodeId>,
+    declaration: Option<XmlDeclaration>,
     interner: Interner,
 }
 
@@ -598,33 +614,44 @@ impl Arena {
 
     /// Creates an owned copy of the subtree rooted at `id`.
     ///
-    /// When `with_children` is `false` the copy contains no children (a shallow clone). The copy
-    /// is detached and is not the document root. Shared `Arc` payloads (`QualifiedName`,
+    /// When `with_children` is `false` the copy contains no children (a shallow clone). The copy is
+    /// detached and is not the document root. Shared `Arc` payloads (`QualifiedName`,
     /// `Namespace`, `Arc<str>`) are reused as-is, which is what makes cloning cheap.
+    ///
+    /// The traversal is iterative (see [`Snapshot`]), so a deeply nested document cannot overflow
+    /// the stack.
     pub(crate) fn snapshot(&self, id: NodeId, with_children: bool) -> Snapshot {
-        match self.data(id) {
-            NodeData::Element(element) => {
-                let children = if with_children {
-                    element
-                        .children
-                        .iter()
-                        .map(|&child| self.snapshot(child, true))
-                        .collect()
-                } else {
-                    Vec::new()
-                };
-                Snapshot::Element {
-                    name: element.name.clone(),
-                    attributes: element.attributes.clone(),
-                    namespace_declarations: element.namespace_declarations.clone(),
-                    children,
+        let mut snapshot = Snapshot::default();
+        snapshot.nodes.push(self.snapshot_payload(id));
+        snapshot.children.push(Vec::new());
+        let mut work: Vec<(NodeId, usize)> = vec![(id, 0)];
+        if with_children {
+            while let Some((source, index)) = work.pop() {
+                for &child in self.children(source) {
+                    let child_index = snapshot.nodes.len();
+                    snapshot.nodes.push(self.snapshot_payload(child));
+                    snapshot.children.push(Vec::new());
+                    snapshot.children[index].push(child_index);
+                    work.push((child, child_index));
                 }
             }
-            NodeData::Text(text) => Snapshot::Text(text.clone()),
-            NodeData::Comment(comment) => Snapshot::Comment(comment.clone()),
-            NodeData::CData(cdata) => Snapshot::CData(cdata.clone()),
+        }
+        snapshot
+    }
+
+    /// Copies the payload of one node (without children).
+    fn snapshot_payload(&self, id: NodeId) -> SnapshotNode {
+        match self.data(id) {
+            NodeData::Element(element) => SnapshotNode::Element {
+                name: element.name.clone(),
+                attributes: element.attributes.clone(),
+                namespace_declarations: element.namespace_declarations.clone(),
+            },
+            NodeData::Text(text) => SnapshotNode::Text(text.clone()),
+            NodeData::Comment(comment) => SnapshotNode::Comment(comment.clone()),
+            NodeData::CData(cdata) => SnapshotNode::CData(cdata.clone()),
             NodeData::ProcessingInstruction { target, data } => {
-                Snapshot::ProcessingInstruction(target.clone(), data.clone())
+                SnapshotNode::ProcessingInstruction(target.clone(), data.clone())
             }
         }
     }
@@ -636,42 +663,65 @@ impl Arena {
     /// document (using the source's shared `Arc` payloads) and rebuilt here, so the copy shares no
     /// arena-internal structure with the source while still reusing the immutable `Arc` payloads
     /// until the interner replaces them with this document's canonical values.
+    ///
+    /// The rebuild is iterative too: nodes are allocated from the last index to the first (which
+    /// works because every child has a larger index than its parent), and the parent links are
+    /// written in a second pass.
     pub(crate) fn insert_snapshot(&mut self, snapshot: Snapshot) -> NodeId {
-        match snapshot {
-            Snapshot::Element {
-                name,
-                attributes,
-                namespace_declarations,
-                children,
-            } => {
-                let children = children
-                    .into_iter()
-                    .map(|child| self.insert_snapshot(child))
-                    .collect::<Vec<_>>();
-                let id = self.alloc_element(ElementData {
+        let count = snapshot.nodes.len();
+        let mut ids: Vec<NodeId> = vec![NodeId(0); count];
+        for index in (0..count).rev() {
+            ids[index] = match &snapshot.nodes[index] {
+                SnapshotNode::Element {
                     name,
                     attributes,
                     namespace_declarations,
-                    children: children.clone(),
-                });
-                for child in children {
-                    self.slot_mut(child).parent = Some(id);
+                } => self.alloc_element(ElementData {
+                    name: name.clone(),
+                    attributes: attributes.clone(),
+                    namespace_declarations: namespace_declarations.clone(),
+                    children: Vec::new(),
+                }),
+                SnapshotNode::Text(text) => self.alloc(NodeData::Text(text.clone())),
+                SnapshotNode::Comment(comment) => self.alloc(NodeData::Comment(comment.clone())),
+                SnapshotNode::CData(cdata) => self.alloc(NodeData::CData(cdata.clone())),
+                SnapshotNode::ProcessingInstruction(target, data) => {
+                    self.alloc(NodeData::ProcessingInstruction {
+                        target: target.clone(),
+                        data: data.clone(),
+                    })
                 }
-                id
+            };
+        }
+        for index in 0..count {
+            let children: Vec<NodeId> = snapshot.children[index]
+                .iter()
+                .map(|&child| ids[child])
+                .collect();
+            if !children.is_empty() {
+                self.element_mut(ids[index]).children = children.clone();
             }
-            Snapshot::Text(text) => self.alloc(NodeData::Text(text)),
-            Snapshot::Comment(comment) => self.alloc(NodeData::Comment(comment)),
-            Snapshot::CData(cdata) => self.alloc(NodeData::CData(cdata)),
-            Snapshot::ProcessingInstruction(target, data) => {
-                self.alloc(NodeData::ProcessingInstruction { target, data })
+            for child in children {
+                self.slot_mut(child).parent = Some(ids[index]);
             }
         }
+        ids[snapshot.root]
     }
 
     /// Creates a copy of the subtree rooted at `id` inside this same arena.
     pub(crate) fn copy_within(&mut self, id: NodeId, with_children: bool) -> NodeId {
         let snapshot = self.snapshot(id, with_children);
         self.insert_snapshot(snapshot)
+    }
+
+    /// The XML declaration stored for this document, if any.
+    pub(crate) fn declaration(&self) -> Option<XmlDeclaration> {
+        self.declaration.clone()
+    }
+
+    /// Replaces the stored XML declaration.
+    pub(crate) fn set_declaration(&mut self, declaration: Option<XmlDeclaration>) {
+        self.declaration = declaration;
     }
 }
 

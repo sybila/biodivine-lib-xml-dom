@@ -467,35 +467,29 @@ fn parse_file_reports_io_errors() {
     );
 }
 
-/// **Known gap, fixed by G3.** An unclosed start tag is currently accepted rather than reported as
-/// malformed (`rule.elements-and-tags.every-start-tag-must-have-end-tag`, listed as D8 in
-/// `docs/design/REVIEW.md`). This characterisation test pins the current behaviour so that the
-/// stricter parser cannot change it silently.
+/// The two parser gaps the G2 audit found are now errors (fixed in G3).
+///
+/// This test used to be a characterisation test that pinned the *wrong* behaviour, precisely so
+/// that the fix could not happen silently. It is now the positive counterpart; the corresponding
+/// rows in `docs/design/REVIEW.md` (D8) record the fix.
 #[test]
-fn unclosed_elements_are_currently_accepted() {
-    // Note: CDATA content that contains `]]>` is not a *parse* error — the first `]]>` simply
-    // closes the section, which is exactly what XML requires. The `]]>` rejection happens when a
-    // CDATA section is built through the API (`Document::create_cdata`), covered above.
-    // Mismatched tags *are* detected (delegated to the underlying parser).
+fn unclosed_elements_and_xml_target_pis_are_rejected() {
     assert_variant(
         "parse_string('<a><b></a>')",
         parse_string("<a><b></a>"),
         "MalformedXml",
         |error| matches!(error, XmlError::MalformedXml(_)),
     );
-
-    // An unclosed element is not.
-    assert!(
-        parse_string("<a>").is_ok(),
-        "G3 must make this an error; update this test and REVIEW D8"
+    assert_variant(
+        "parse_string('<a>')",
+        parse_string("<a>"),
+        "MalformedXml",
+        |error| matches!(error, XmlError::MalformedXml(_)),
     );
-
-    // A processing instruction whose target is `xml` (case-insensitively) must be rejected
-    // (`rule.well-formedness.pi-target-not-xml`), and it must not silently disappear.
-    let with_xml_target = parse_string("<a><?xml target?></a>").expect("currently accepted");
-    assert_eq!(
-        with_xml_target.root().unwrap().children().len(),
-        0,
-        "G3 must reject this; update this test and REVIEW D8"
+    assert_variant(
+        "parse_string('<a><?xml target?></a>')",
+        parse_string("<a><?xml target?></a>"),
+        "InvalidProcessingInstruction",
+        |error| matches!(error, XmlError::InvalidProcessingInstruction(_)),
     );
 }

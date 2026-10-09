@@ -13,13 +13,16 @@
 
 use crate::namespace::Namespace;
 use crate::qualified_name::QualifiedName;
+use crate::xml_spec::NCName;
 use std::collections::HashMap;
 
 /// Deduplicates the [`Namespace`] and [`QualifiedName`] values stored in one document.
 #[derive(Debug, Default)]
 pub(crate) struct Interner {
     namespaces: HashMap<Namespace, Namespace>,
-    names: HashMap<QualifiedName, QualifiedName>,
+    /// Keyed by the *structural* name, i.e. local name plus namespace *including* its prefix; see
+    /// the module documentation for why the prefix has to be part of the key.
+    names: HashMap<(NCName, Option<Namespace>), QualifiedName>,
 }
 
 impl Interner {
@@ -32,8 +35,11 @@ impl Interner {
     }
 
     /// Returns the document's canonical value for `name`, inserting it if necessary.
+    ///
+    /// The returned name is value-equal to the argument *and* carries the same prefix.
     pub(crate) fn name(&mut self, name: QualifiedName) -> QualifiedName {
-        self.names.entry(name.clone()).or_insert(name).clone()
+        let key = (name.local_name().clone(), name.namespace().cloned());
+        self.names.entry(key).or_insert(name).clone()
     }
 
     /// Number of distinct namespaces currently interned.
@@ -52,6 +58,34 @@ impl Interner {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Interning must never change the name it is given: two names that are value-equal but carry
+    /// different prefixes must both come back unchanged, or a document would silently lose (or
+    /// gain) a prefix. Found through the Python bindings, where the rewritten prefix was visible.
+    #[test]
+    fn interning_never_rewrites_a_prefix() {
+        let mut interner = Interner::default();
+        let prefixed = QualifiedName::with_namespace(
+            "a",
+            &Namespace::prefixed("http://example.com", "ex").unwrap(),
+        )
+        .unwrap();
+        let default = QualifiedName::with_namespace(
+            "a",
+            &Namespace::without_prefix("http://example.com").unwrap(),
+        )
+        .unwrap();
+
+        let first = interner.name(prefixed.clone());
+        let second = interner.name(default.clone());
+        assert_eq!(first.to_string(), "ex:a");
+        assert_eq!(second.to_string(), "a");
+        // The same pair in the other order gives the same answer.
+        let mut interner = Interner::default();
+        interner.name(default.clone());
+        assert_eq!(interner.name(prefixed.clone()).to_string(), "ex:a");
+        assert_eq!(interner.name(default).to_string(), "a");
+    }
 
     #[test]
     fn interning_deduplicates_by_value() {

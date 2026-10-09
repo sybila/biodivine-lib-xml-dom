@@ -142,7 +142,23 @@ cargo test --workspace                      # also runs the in-process binding t
 `cargo test` links the crate into a test binary that needs libpython while a wheel must not link it.
 The crate's `dev-dependencies` enable `pyo3/auto-initialize` for the same reason.
 
-## 8. Known gaps
+## 8. What building the Python layer found in the Rust core
+
+Writing the wrapper tests surfaced a real defect in the core, which is worth recording because it
+is exactly the kind of thing a second layer notices and a single layer does not.
+
+`Arena` interns the qualified names of a document to avoid duplicate allocations. The interner was
+keyed by `QualifiedName`'s own equality, which compares the local name and the namespace *URI* and
+deliberately ignores the prefix — that is the right notion for the attribute maps, but using it as
+the interner key meant that interning *rewrote* the prefix of a name to whatever prefix was stored
+first. A user could ask for `a` in the default namespace and get `ex:a`, or vice versa, and since the
+prefix is what the serializer writes, the document's output (and possibly its validity) changed
+without any operation reporting anything. Found by
+`tests-python/test_public_surface.py::test_argument_coercion_is_part_of_the_surface`, fixed in
+`src/interner.rs` by keying names structurally (local name plus namespace *including* the prefix),
+and pinned by `src/interner.rs::interning_never_rewrites_a_prefix`.
+
+## 9. Known gaps
 
 * None of the *functional* API is missing: the gaps listed in §1 (`NodeContent`, the `xml_spec`
   newtypes, `MAX_NODES`) are deliberate and each has a reason.

@@ -257,8 +257,12 @@ def test_cross_document_copies() -> None:
 
     copy = source.root.deep_clone_into(target)
     wrapper.append_child(copy)
-    assert copy.document() is not source
-    assert copy.document() == target
+    # `document` is a property, so it compares like any other handle ...
+    assert copy.document == target
+    assert copy.document != source
+    # ... and `Node.document` holds for elements as well, since `Element` subclasses `Node`.
+    assert isinstance(copy.document, xml.Document)
+    assert copy.node.document == copy.document
     assert target.is_valid()
     assert str(copy.children()[0].qualified_name) == "ex:item"
     assert copy.children()[0].get("a") == "1"

@@ -1,5 +1,8 @@
 # Python bindings: build and test transcript
 
+Every command below was run in this sandbox; the outputs are verbatim. The pytest run covers both
+test modules (`test_xml_dom.py` for behaviour, `test_public_surface.py` for the exported surface).
+
 Toolchain and pins:
 
 ```
@@ -38,71 +41,78 @@ $ .venv/bin/python -m pytest biodivine-lib-xml-dom-py-sys/tests-python
 platform linux -- Python 3.11.2, pytest-9.1.1, pluggy-1.6.0
 rootdir: /sandbox/biodivine-lib-xml-dom/biodivine-lib-xml-dom-py-sys
 configfile: pyproject.toml
-collected 25 items
+collected 32 items
 
-biodivine-lib-xml-dom-py-sys/tests-python/test_xml_dom.py .............. [ 56%]
+biodivine-lib-xml-dom-py-sys/tests-python/test_public_surface.py ....... [ 21%]
+                                                                         [ 21%]
+biodivine-lib-xml-dom-py-sys/tests-python/test_xml_dom.py .............. [ 65%]
 ...........                                                              [100%]
 
-============================== 25 passed in 0.05s ==============================
+============================== 32 passed in 0.06s ==============================
 ```
 
 ## Workspace gates on both toolchains
 
 $ cargo test --workspace
 ```
-     Running unittests src/lib.rs (target/debug/deps/biodivine_lib_xml_dom-4df520ea80dac325)
-test result: ok. 83 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-     Running tests/cloning.rs (target/debug/deps/cloning-0beb9c154f17fe8a)
+test result: ok. 84 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
-     Running tests/concurrency.rs (target/debug/deps/concurrency-e840ef759e868816)
-test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
-     Running tests/element.rs (target/debug/deps/element-6e93e1a1f40c4a10)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
 test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-     Running tests/errors.rs (target/debug/deps/errors-b6eaedf3db463830)
 test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-     Running tests/io.rs (target/debug/deps/io-81923a9d8b390184)
-test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
-     Running tests/properties.rs (target/debug/deps/properties-7959541fe3fb2956)
-test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
-     Running tests/structure.rs (target/debug/deps/structure-ad3fa8bd84bfbee0)
+test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
 test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
-     Running tests/validation.rs (target/debug/deps/validation-5bebe8e350287266)
 test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
-     Running unittests src/lib.rs (target/debug/deps/biodivine_lib_xml_dom_sys-7020e76c8dafe61f)
 test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-   Doc-tests biodivine_lib_xml_dom
 test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-   Doc-tests biodivine_lib_xml_dom_sys
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src/lib.rs (target/debug/deps/biodivine_lib_xml_dom-4df520ea80dac325)
+     Running tests/cloning.rs (target/debug/deps/cloning-0beb9c154f17fe8a)
+     Running tests/concurrency.rs (target/debug/deps/concurrency-e840ef759e868816)
+     Running tests/element.rs (target/debug/deps/element-6e93e1a1f40c4a10)
+     Running tests/errors.rs (target/debug/deps/errors-b6eaedf3db463830)
+     Running tests/io.rs (target/debug/deps/io-81923a9d8b390184)
+     Running tests/properties.rs (target/debug/deps/properties-7959541fe3fb2956)
+     Running tests/structure.rs (target/debug/deps/structure-ad3fa8bd84bfbee0)
+     Running tests/validation.rs (target/debug/deps/validation-5bebe8e350287266)
+     Running unittests src/lib.rs (target/debug/deps/biodivine_lib_xml_dom_sys-7020e76c8dafe61f)
+   Doc-tests biodivine_lib_xml_dom
+   Doc-tests biodivine_lib_xml_dom_sys
 ```
+
 $ cargo +1.95.0 test --workspace
 ```
-test result: ok. 83 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 84 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
-test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
 test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
-test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
-test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.43s
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
 test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
 test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ```
+
 $ cargo clippy --workspace --all-targets
 ```
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+
 ```
+
 $ cargo fmt --check
 ```
 (no output: clean)
 ```
+
 $ RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p biodivine-lib-xml-dom -p biodivine-lib-xml-dom-py-sys
 ```
- Documenting biodivine-lib-xml-dom v0.1.0 (/sandbox/biodivine-lib-xml-dom)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.15s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
    Generated /sandbox/biodivine-lib-xml-dom/target/doc/biodivine_lib_xml_dom/index.html and 1 other file
+
 ```
 
 ## Proof that the core crate has no PyO3 dependency

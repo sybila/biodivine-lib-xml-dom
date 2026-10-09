@@ -50,13 +50,34 @@ def unwrap_element(value: Any) -> Any:
 def unwrap_name(value: Any) -> Any:
     """Returns the native qualified name behind ``value``.
 
-    A plain string stands for a name with no namespace, which is by far the common case.
+    Three spellings are accepted wherever a name is expected:
+
+    * ``QualifiedName`` - the explicit form;
+    * ``str`` - a name with no namespace, which is by far the common case;
+    * ``(local_name, namespace)`` - a tuple, where the namespace may be a :class:`Namespace`, a
+      URI string, or ``None`` for no namespace::
+
+          document.create_element(("child", Namespace("http://example.com", "ex")))
+          document.create_element(("child", "http://example.com"))
+          element.set_attribute(("class", None), "main")
     """
     inner = getattr(value, "_name", None)
     if inner is not None:
         return inner
     from . import _sys
 
+    if isinstance(value, _sys.QualifiedName):
+        # Already native: this happens when a caller mixes the two layers explicitly.
+        return value
+    if isinstance(value, tuple):
+        if len(value) != 2:
+            raise TypeError(
+                "a name given as a tuple must be (local_name, namespace_or_uri), got "
+                f"{len(value)} elements"
+            )
+        from .name import QualifiedName
+
+        return QualifiedName(value[0], value[1])._name
     return _sys.QualifiedName.without_namespace(value)
 
 
@@ -67,6 +88,8 @@ def unwrap_namespace(value: Any) -> Any:
         return inner
     from . import _sys
 
+    if isinstance(value, _sys.Namespace):
+        return value
     return _sys.Namespace(value)
 
 

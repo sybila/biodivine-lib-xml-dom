@@ -78,36 +78,33 @@ class Element(Node):
             QualifiedName._wrap(name): value for name, value in self._element.attributes()
         }
 
-    def attribute(self, name: Union[QualifiedName, str]) -> Optional[str]:
-        """The value of the attribute with the given expanded name (a ``str`` means "no
-        namespace"), or ``None``."""
-        if isinstance(name, str):
-            return self._element.attribute_local(name)
-        return self._element.attribute(name._name)
+    def attribute(self, name: Union[QualifiedName, str, tuple]) -> Optional[str]:
+        """The value of the attribute with the given expanded name, or ``None``.
 
-    def get(self, name: Union[QualifiedName, str], default: Optional[str] = None) -> Optional[str]:
+        Accepts the same three spellings as every other name argument: a ``QualifiedName``, a plain
+        ``str`` (meaning "no namespace"), or a ``(local_name, namespace_or_uri)`` tuple.
+        """
+        return self._element.attribute(_convert.unwrap_name(name))
+
+    def get(self, name: Union[QualifiedName, str, tuple], default: Optional[str] = None) -> Optional[str]:
         """Like :meth:`attribute`, but with a default instead of ``None``."""
         value = self.attribute(name)
         return default if value is None else value
 
-    def has_attribute(self, name: Union[QualifiedName, str]) -> bool:
+    def has_attribute(self, name: Union[QualifiedName, str, tuple]) -> bool:
         """Whether an attribute with that expanded name exists."""
         return self.attribute(name) is not None
 
-    def set_attribute(self, name: Union[QualifiedName, str], value: str) -> None:
+    def set_attribute(self, name: Union[QualifiedName, str, tuple], value: str) -> None:
         """Sets an attribute, overwriting any previous value with the same expanded name.
 
         Raises `XmlSyntaxError` if the value contains characters that are not legal in XML.
         """
         self._element.set_attribute(_convert.unwrap_name(name), value)
 
-    def remove_attribute(self, name: Union[QualifiedName, str]) -> Optional[str]:
+    def remove_attribute(self, name: Union[QualifiedName, str, tuple]) -> Optional[str]:
         """Removes an attribute and returns its previous value, or ``None``."""
-        if isinstance(name, str):
-            name = _sys.QualifiedName.without_namespace(name)
-        else:
-            name = name._name
-        return self._element.remove_attribute(name)
+        return self._element.remove_attribute(_convert.unwrap_name(name))
 
     def clear_attributes(self) -> None:
         """Removes all attributes."""

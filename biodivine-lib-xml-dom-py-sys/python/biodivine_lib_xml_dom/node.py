@@ -61,8 +61,14 @@ class Node:
         """The arena id of this node (meaningful only together with its document)."""
         return NodeId._wrap(self._node.id())
 
+    @property
     def document(self) -> "Document":
-        """The document this node belongs to."""
+        """The document this node belongs to.
+
+        A property (like :attr:`id`, :attr:`kind`, :attr:`parent` and the sibling accessors), so
+        ``node.document == document`` works; the native ``_sys.Node.document()`` stays a method
+        because there the point is to mirror the Rust API.
+        """
         from .document import Document
 
         return Document._wrap(self._node.document())

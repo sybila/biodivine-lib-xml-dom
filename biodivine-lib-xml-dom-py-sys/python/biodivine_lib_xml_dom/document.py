@@ -69,12 +69,18 @@ class Document:
         return None if inner is None else Element._wrap(inner)
 
     # -- node creation --------------------------------------------------------------------
-    def create_element(self, name: Union[str, QualifiedName]) -> Element:
+    def create_element(self, name: Union[str, QualifiedName, tuple]) -> Element:
         """Creates a new, detached element with the given expanded name.
 
-        A plain string stands for a name with no namespace; use
-        :meth:`QualifiedName.with_namespace` (or ``create_element(("name", namespace))`` via
-        :meth:`Element.set_qualified_name`) for a namespaced element.
+        The name may be given in three ways::
+
+            document.create_element("child")                              # no namespace
+            document.create_element(("child", "http://example.com"))      # default namespace
+            document.create_element(("child", Namespace(uri, "ex")))      # prefix + URI
+            document.create_element(QualifiedName("child", Namespace(...)))
+
+        The same three spellings are accepted by every other argument that takes a name
+        (:meth:`Element.set_attribute`, :meth:`Element.attribute`, :meth:`Element.get`, ...).
         """
         return Element._wrap(self._document.create_element(_convert.unwrap_name(name)))
 

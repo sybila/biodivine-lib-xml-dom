@@ -65,8 +65,10 @@ from .write_options import DeclarationStyle, EmptyElementStyle, WriteOptions, Xm
 __version__ = "0.1.0"
 
 __all__ = [
+    "DeclarationStyle",
     "Document",
     "Element",
+    "EmptyElementStyle",
     "Namespace",
     "Node",
     "NodeId",
@@ -75,8 +77,6 @@ __all__ = [
     "ValidationError",
     "ValidationErrors",
     "WriteOptions",
-    "DeclarationStyle",
-    "EmptyElementStyle",
     "XmlDeclaration",
     "XmlDocumentError",
     "XmlError",
@@ -84,9 +84,9 @@ __all__ = [
     "XmlNamespaceError",
     "XmlSyntaxError",
     "XmlValidationError",
+    "__version__",
     "parse",
     "parse_file",
     "write",
     "write_file",
-    "__version__",
 ]

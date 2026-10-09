@@ -910,5 +910,21 @@ Recorded as the plan is executed; each entry says what changed and why.
   `python3-dev` for the CPython 3.11 headers. The recipe is in `BINDINGS.md` §7 and the transcripts
   are in the goal result. `cargo tree -p biodivine-lib-xml-dom --edges normal` still lists only
   `parking_lot`, `quick-xml` and `thiserror`.
+* **Building the Python layer found three defects, all fixed** (advisor review round): a real bug in
+  the Rust core, and two Python-layer inconsistencies.
+  The core bug: `Arena`'s name interner was keyed by `QualifiedName`'s own equality, which ignores
+  the prefix (correctly, for the attribute maps), so interning *rewrote* the prefix of a name to
+  whichever prefix was stored first — observable in the serialized output and able to turn a valid
+  document into an invalid one. The interner now keys names structurally, and
+  `interning_never_rewrites_a_prefix` pins it; the Python test that exposed it is
+  `test_argument_coercion_is_part_of_the_surface`. The Python-layer fixes: `Node.document` is a
+  property (consistent with every sibling accessor, so `node.document == document` holds), and the
+  name coercion advertised in `Document.create_element`'s docstring is implemented for real in
+  `_convert.unwrap_name` — `str`, `(local_name, namespace_or_uri)` tuple or `QualifiedName`, for
+  every argument that takes a name. The public surface itself is now a checked property:
+  `tests-python/test_public_surface.py` enumerates `__all__`, asserts that every name resolves, that
+  each exported class is either a wrapper defined by this package or one of ten explicitly
+  allow-listed native value types/exceptions, that no `_sys`-internal name leaks, and that every
+  class is constructible or produced by a documented factory.
 * **Deliberately not done here**: `abi3` (a packaging decision, recorded in `BINDINGS.md` §8) and the
   Sphinx site / tutorial book (goal G6, which generates them from the docstrings added here).

@@ -73,6 +73,30 @@ else
     failures=$((failures + 1))
 fi
 
+# --- Miri (undefined behaviour in the data structures) ----------------------------------------
+# Miri needs a nightly toolchain with the `miri` component; when it is not installed the run is
+# reported as skipped rather than as a pass, so an unverified claim is never presented as verified.
+# Miri only ships for nightly (`rustup component add miri`), so it is looked for on the pinned
+# toolchain first and on nightly after that.
+MIRI_TOOLCHAIN=""
+for toolchain in "$Pinned" nightly; do
+    if cargo "+$toolchain" miri --version >/dev/null 2>&1; then
+        MIRI_TOOLCHAIN="$toolchain"
+        break
+    fi
+done
+if [ -n "$MIRI_TOOLCHAIN" ]; then
+    printf '\n=== Miri (toolchain %s)\n' "$MIRI_TOOLCHAIN"
+    run env MIRIFLAGS="-Zmiri-disable-isolation" cargo "+$MIRI_TOOLCHAIN" miri test --lib
+    # The two-thread garbage-collection test cannot run under Miri: parking_lot aborts in Miri's
+    # futex shim. Everything else in that file is single-threaded and does run.
+    run cargo "+$MIRI_TOOLCHAIN" miri test --test gc -- --skip handles_released_by_another_thread
+else
+    printf '\n!!! miri is not installed for any toolchain: the undefined-behaviour runs are SKIPPED\n'
+    printf '    install it with: rustup toolchain install nightly --component miri,rust-src\n'
+    failures=$((failures + 1))
+fi
+
 # --- examples (the ones the book includes) -----------------------------------------------------
 run cargo build --examples
 for example in $(ls examples/book_*.rs examples/tour.rs | sed 's|examples/||; s|\.rs||'); do

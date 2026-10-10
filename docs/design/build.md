@@ -113,7 +113,43 @@ Narrower targets:
 | `python3 docs/audit_docs.py --self-test` | the documentation sweep still detects every category it looks for |
 | `python3 docs/check_facts.py` | the numbers stated in the documents match the artifacts |
 
-## 6. Make targets
+## 6. Verifying a case-sensitive checkout
+
+The filesystems these instructions are usually followed on are **case-insensitive**: `README.md` and
+`readme.md` are the same file there, so a path whose case is wrong compiles and is found anyway. A
+case-sensitive checkout is the only way to catch that class of mistake, and two things help:
+
+* `docs/audit_docs.py` compares every path an `include_str!` directive names against `git ls-files`,
+  so a wrong-case include is reported even on a case-insensitive filesystem;
+* clone the repository onto a case-sensitive filesystem and run the gate there, which exercises every
+  path the build reads:
+
+```sh
+git clone . /tmp/checkout && cd /tmp/checkout
+python3 -m venv .venv && .venv/bin/pip install maturin pytest -r docs/requirements.txt
+( cd biodivine-lib-xml-dom-py-sys && VIRTUAL_ENV="$PWD/../.venv" ../.venv/bin/maturin develop --release )
+VENV="$PWD/.venv" PATH="$HOME/.cargo/bin:$PATH" bash scripts/verify.sh
+```
+
+## 7. Undefined behaviour (Miri)
+
+The data structures are exercised under [Miri](https://github.com/rust-lang/miri), which needs a
+nightly toolchain with the `miri` component:
+
+```sh
+rustup toolchain install nightly --profile minimal --component miri,rust-src
+cargo +nightly miri setup
+MIRIFLAGS="-Zmiri-disable-isolation" cargo +nightly miri test --lib
+cargo +nightly miri test --test gc -- --skip handles_released_by_another_thread
+```
+
+`scripts/verify.sh` runs both when the component is available and reports the run as *skipped* when
+it is not, so a missing component is never mistaken for a pass. The two-thread garbage-collection
+test is excluded from the second command: `parking_lot` aborts inside Miri's futex shim, so lock
+contention cannot be checked there. `-Zmiri-disable-isolation` is only needed because a test helper
+reads the rule summaries from the working tree.
+
+## 8. Make targets
 
 | target | runs |
 | --- | --- |

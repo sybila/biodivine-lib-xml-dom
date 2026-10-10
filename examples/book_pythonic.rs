@@ -9,7 +9,8 @@ use biodivine_lib_xml_dom::Document;
 
 fn main() {
     let document =
-        Document::parse_string(r#"<root><child class="a"/><child class="b"/></root>"#).unwrap();
+        Document::parse_string(r#"<root><child class="a"/><child class="b"/></root>"#)
+            .unwrap();
     let root = document.root().unwrap();
 
     // The Python layer offers `for child in node` and `node["class"]`; the Rust API spells the same

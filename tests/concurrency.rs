@@ -21,9 +21,9 @@ const WATCHDOG: Duration = Duration::from_secs(60);
 /// Waits for `count` workers to report completion, failing the test on a timeout.
 fn wait_for(receiver: &Receiver<()>, count: usize) {
     for _ in 0..count {
-        receiver
-            .recv_timeout(WATCHDOG)
-            .expect("a worker did not finish in time: the document lock is deadlocked or stuck");
+        receiver.recv_timeout(WATCHDOG).expect(
+            "a worker did not finish in time: the document lock is deadlocked or stuck",
+        );
     }
 }
 
@@ -219,7 +219,8 @@ fn handles_can_be_moved_between_threads() {
         let sender = sender.clone();
         std::thread::spawn(move || {
             let (index, name) = &shared[worker];
-            let child = document.create_element(QualifiedName::without_namespace(name).unwrap());
+            let child = document
+                .create_element(QualifiedName::without_namespace(name).unwrap());
             root.append_child_checked(child.clone()).unwrap();
             let _ = index;
             sender.send(()).unwrap();

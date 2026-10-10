@@ -11,11 +11,13 @@ fn main() {
     assert!(document.root().is_none());
 
     let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
-    let root = document.create_element(QualifiedName::with_namespace("root", &ex).unwrap());
+    let root =
+        document.create_element(QualifiedName::with_namespace("root", &ex).unwrap());
     root.declare_namespace(ex.clone());
     document.set_root(root.clone());
 
-    let child = document.create_element(QualifiedName::with_namespace("child", &ex).unwrap());
+    let child =
+        document.create_element(QualifiedName::with_namespace("child", &ex).unwrap());
     child.set_attribute(QualifiedName::without_namespace("id").unwrap(), "first");
     child.append_child(document.create_text("Hello, World!").unwrap());
     root.append_child(child);

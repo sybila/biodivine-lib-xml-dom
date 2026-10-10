@@ -10,8 +10,8 @@ mod common;
 
 use biodivine_lib_xml_dom::xml_spec::rules;
 use biodivine_lib_xml_dom::{
-    DeclarationStyle, Document, EmptyElementStyle, Namespace, NodeContent, QualifiedName,
-    WriteOptions, XmlError,
+    DeclarationStyle, Document, EmptyElementStyle, Namespace, NodeContent,
+    QualifiedName, WriteOptions, XmlError,
 };
 
 use common::element;
@@ -100,7 +100,9 @@ fn undeclared_entity_references_are_typed_errors_not_panics() {
 #[test]
 fn line_ends_are_normalised_in_text() {
     // rule: rule.document-structure.processor-must-normalize-line-breaks
-    rules::assert_rule_exists("rule.document-structure.processor-must-normalize-line-breaks");
+    rules::assert_rule_exists(
+        "rule.document-structure.processor-must-normalize-line-breaks",
+    );
     assert_eq!(root_text("<a>x\r\ny</a>"), "x\ny");
     assert_eq!(root_text("<a>x\ry</a>"), "x\ny");
     assert_eq!(root_text("<a>x\r\r\ny</a>"), "x\n\ny");
@@ -184,9 +186,10 @@ fn the_declaration_is_interpreted_and_preserved() {
         assert!(document.xml_declaration().is_some(), "encoding {encoding}");
     }
 
-    let document =
-        Document::parse_string(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a/>"#)
-            .unwrap();
+    let document = Document::parse_string(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a/>"#,
+    )
+    .unwrap();
     let declaration = document.xml_declaration().unwrap();
     assert_eq!(declaration.version(), "1.0");
     assert_eq!(declaration.encoding(), Some("UTF-8"));
@@ -239,7 +242,8 @@ fn a_declaration_must_be_the_very_first_thing() {
         XmlError::InvalidProcessingInstruction(_)
     ));
     // `<?xml-stylesheet?>` is an ordinary processing instruction, not a declaration.
-    let document = Document::parse_string(r#"<?xml-stylesheet href="a.css"?><a/>"#).unwrap();
+    let document =
+        Document::parse_string(r#"<?xml-stylesheet href="a.css"?><a/>"#).unwrap();
     assert!(document.xml_declaration().is_none());
 }
 
@@ -355,7 +359,9 @@ fn tags_must_nest_and_close() {
     // rule: rule.elements-and-tags.every-start-tag-must-have-end-tag
     rules::assert_rule_exists("rule.elements-and-tags.end-tag-must-match-start-tag");
     rules::assert_rule_exists("rule.well-formedness.elements-nest-properly");
-    rules::assert_rule_exists("rule.elements-and-tags.every-start-tag-must-have-end-tag");
+    rules::assert_rule_exists(
+        "rule.elements-and-tags.every-start-tag-must-have-end-tag",
+    );
 
     assert!(matches!(parse_error("<a>"), XmlError::MalformedXml(_)));
     assert!(matches!(
@@ -429,9 +435,10 @@ fn namespaces_are_resolved_and_reported() {
 fn an_empty_default_declaration_removes_the_default_namespace() {
     // rule: rule.namespace-usage.empty-default-namespace
     rules::assert_rule_exists("rule.namespace-usage.empty-default-namespace");
-    let document =
-        Document::parse_string(r#"<root xmlns="http://d"><inner xmlns=""><leaf/></inner></root>"#)
-            .unwrap();
+    let document = Document::parse_string(
+        r#"<root xmlns="http://d"><inner xmlns=""><leaf/></inner></root>"#,
+    )
+    .unwrap();
     let root = document.root().unwrap();
     assert_eq!(root.namespace().unwrap().uri(), "http://d");
     let inner = root.child_elements()[0].clone();
@@ -457,7 +464,9 @@ fn xml_lang_and_xml_space_round_trip_with_the_implicit_xml_prefix() {
     // rule: rule.document-structure.xml-lang-must-be-bcp47-or-empty
     // rule: rule.document-structure.xml-space-must-be-enumerated-default-preserve
     rules::assert_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding");
-    rules::assert_rule_exists("rule.document-structure.xml-lang-must-be-bcp47-or-empty");
+    rules::assert_rule_exists(
+        "rule.document-structure.xml-lang-must-be-bcp47-or-empty",
+    );
     rules::assert_rule_exists(
         "rule.document-structure.xml-space-must-be-enumerated-default-preserve",
     );
@@ -567,7 +576,9 @@ fn cdata_and_processing_instructions_must_be_well_formed() {
     // rule: rule.document-structure.cdata-section-must-not-contain-cdend
     // rule: rule.well-formedness.pi-target-is-name
     // rule: rule.well-formedness.pi-no-contains-close
-    rules::assert_rule_exists("rule.document-structure.cdata-section-must-not-contain-cdend");
+    rules::assert_rule_exists(
+        "rule.document-structure.cdata-section-must-not-contain-cdend",
+    );
     rules::assert_rule_exists("rule.well-formedness.pi-target-is-name");
     rules::assert_rule_exists("rule.well-formedness.pi-no-contains-close");
 
@@ -649,7 +660,8 @@ fn prefixes_are_preserved() {
 fn namespace_declarations_are_never_invented_or_removed() {
     let document = Document::empty();
     let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
-    let root = document.create_element(QualifiedName::with_namespace("item", &ex).unwrap());
+    let root =
+        document.create_element(QualifiedName::with_namespace("item", &ex).unwrap());
     document.set_root(root.clone());
 
     // The name carries the namespace, but nothing declares the prefix: the serializer writes what
@@ -700,7 +712,8 @@ fn empty_elements_and_write_options() {
 #[test]
 fn declaration_style_is_honoured() {
     let with_declaration =
-        Document::parse_string(r#"<?xml version="1.0" encoding="UTF-8"?><a/>"#).unwrap();
+        Document::parse_string(r#"<?xml version="1.0" encoding="UTF-8"?><a/>"#)
+            .unwrap();
     let without = Document::parse_string("<a/>").unwrap();
 
     assert_eq!(
@@ -722,11 +735,13 @@ fn declaration_style_is_honoured() {
         r#"<?xml version="1.0" encoding="UTF-8"?><a/>"#
     );
     // Explicit setting is preserved.
-    without.set_xml_declaration(Some(biodivine_lib_xml_dom::xml_spec::XmlDeclaration::new(
-        "1.0",
-        Some("UTF-8"),
-        Some(false),
-    )));
+    without.set_xml_declaration(Some(
+        biodivine_lib_xml_dom::xml_spec::XmlDeclaration::new(
+            "1.0",
+            Some("UTF-8"),
+            Some(false),
+        ),
+    ));
     assert_eq!(
         without.write_string().unwrap(),
         r#"<?xml version="1.0" encoding="UTF-8" standalone="no"?><a/>"#
@@ -894,7 +909,9 @@ fn comments_cdata_and_processing_instructions_are_written_verbatim() {
 fn a_document_without_a_root_serializes_to_nothing_useful_but_does_not_fail() {
     let document = Document::empty();
     assert_eq!(document.write_string().unwrap(), "");
-    document.set_xml_declaration(Some(biodivine_lib_xml_dom::xml_spec::XmlDeclaration::utf8()));
+    document.set_xml_declaration(Some(
+        biodivine_lib_xml_dom::xml_spec::XmlDeclaration::utf8(),
+    ));
     assert_eq!(
         document.write_string().unwrap(),
         r#"<?xml version="1.0" encoding="UTF-8"?>"#

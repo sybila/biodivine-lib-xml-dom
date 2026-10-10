@@ -514,7 +514,10 @@ fn is_language_subtag(subtag: &str) -> bool {
 }
 
 /// Validate the URI and prefix according to XML namespace rules.
-pub(crate) fn validate_namespace(uri: &str, prefix: Option<&NCName>) -> Result<(), XmlError> {
+pub(crate) fn validate_namespace(
+    uri: &str,
+    prefix: Option<&NCName>,
+) -> Result<(), XmlError> {
     // URI must not be empty
     if uri.is_empty() {
         return Err(XmlError::InvalidNamespace(
@@ -626,7 +629,8 @@ pub(crate) fn validate_resolved_prefix(
 ) -> Result<(), XmlError> {
     if prefix == "xmlns" {
         return Err(XmlError::ReservedPrefix(
-            "the prefix `xmlns` is reserved and cannot be used in a qualified name".to_string(),
+            "the prefix `xmlns` is reserved and cannot be used in a qualified name"
+                .to_string(),
         ));
     }
 
@@ -757,7 +761,9 @@ mod tests {
         assert!(validate_namespace(RESERVED_XML_URI, Some(&nc_name("xml"))).is_ok());
 
         // `xml` prefix with a different URI is invalid
-        assert!(validate_namespace("http://example.com", Some(&nc_name("xml"))).is_err());
+        assert!(
+            validate_namespace("http://example.com", Some(&nc_name("xml"))).is_err()
+        );
 
         // Any other prefix with the reserved XML URI is invalid
         assert!(validate_namespace(RESERVED_XML_URI, Some(&nc_name("ex"))).is_err());
@@ -776,8 +782,12 @@ mod tests {
         // rule: rule.namespace-basics.xmlns-namespace-not-default
         verify_rule_exists("rule.namespace-basics.xmlns-namespace-not-default");
         // `xmlns` prefix must never be declared
-        assert!(validate_namespace("http://example.com", Some(&nc_name("xmlns"))).is_err());
-        assert!(validate_namespace(RESERVED_XMLNS_URI, Some(&nc_name("xmlns"))).is_err());
+        assert!(
+            validate_namespace("http://example.com", Some(&nc_name("xmlns"))).is_err()
+        );
+        assert!(
+            validate_namespace(RESERVED_XMLNS_URI, Some(&nc_name("xmlns"))).is_err()
+        );
 
         // The reserved xmlns URI cannot be bound to any prefix
         assert!(validate_namespace(RESERVED_XMLNS_URI, Some(&nc_name("ex"))).is_err());
@@ -797,11 +807,23 @@ mod tests {
         verify_rule_exists("rule.well-formedness.name-valid-chars");
         // Valid prefixes
         assert!(validate_namespace("http://example.com", Some(&nc_name("ex"))).is_ok());
-        assert!(validate_namespace("http://example.com", Some(&nc_name("ex_1"))).is_ok());
-        assert!(validate_namespace("http://example.com", Some(&nc_name("_private"))).is_ok());
-        assert!(validate_namespace("http://example.com", Some(&nc_name("a-b"))).is_ok());
-        assert!(validate_namespace("http://example.com", Some(&nc_name("a.b"))).is_ok());
-        assert!(validate_namespace("http://example.com", Some(&nc_name("A1_B-c.d"))).is_ok());
+        assert!(
+            validate_namespace("http://example.com", Some(&nc_name("ex_1"))).is_ok()
+        );
+        assert!(
+            validate_namespace("http://example.com", Some(&nc_name("_private")))
+                .is_ok()
+        );
+        assert!(
+            validate_namespace("http://example.com", Some(&nc_name("a-b"))).is_ok()
+        );
+        assert!(
+            validate_namespace("http://example.com", Some(&nc_name("a.b"))).is_ok()
+        );
+        assert!(
+            validate_namespace("http://example.com", Some(&nc_name("A1_B-c.d")))
+                .is_ok()
+        );
         assert!(validate_namespace(RESERVED_XML_URI, Some(&nc_name("xml"))).is_ok());
         assert!(validate_namespace("http://example.com", None).is_ok());
 
@@ -816,9 +838,15 @@ mod tests {
     #[test]
     fn test_uri_comparison_case_sensitive() {
         // rule: rule.namespace-basics.uri-comparison-literal-case-sensitive
-        verify_rule_exists("rule.namespace-basics.uri-comparison-literal-case-sensitive");
-        assert!(validate_namespace("http://example.org/ns", Some(&nc_name("ex"))).is_ok());
-        assert!(validate_namespace("http://example.org/NS", Some(&nc_name("ex"))).is_ok());
+        verify_rule_exists(
+            "rule.namespace-basics.uri-comparison-literal-case-sensitive",
+        );
+        assert!(
+            validate_namespace("http://example.org/ns", Some(&nc_name("ex"))).is_ok()
+        );
+        assert!(
+            validate_namespace("http://example.org/NS", Some(&nc_name("ex"))).is_ok()
+        );
     }
 
     #[test]
@@ -920,7 +948,9 @@ mod tests {
     #[test]
     fn test_cdata_wrapper() {
         // rule: rule.document-structure.cdata-section-must-not-contain-cdend
-        verify_rule_exists("rule.document-structure.cdata-section-must-not-contain-cdend");
+        verify_rule_exists(
+            "rule.document-structure.cdata-section-must-not-contain-cdend",
+        );
         // Valid CDATA
         let cdata: CData = "This is safe content".try_into().unwrap();
         assert_eq!(cdata.as_str(), "This is safe content");
@@ -1009,7 +1039,9 @@ mod g3_tests {
     #[test]
     fn line_end_normalisation() {
         // rule: rule.document-structure.processor-must-normalize-line-breaks
-        rules::assert_rule_exists("rule.document-structure.processor-must-normalize-line-breaks");
+        rules::assert_rule_exists(
+            "rule.document-structure.processor-must-normalize-line-breaks",
+        );
 
         assert_eq!(normalize_line_ends("plain"), "plain");
         assert_eq!(normalize_line_ends("a\r\nb"), "a\nb");
@@ -1056,7 +1088,9 @@ mod g3_tests {
     #[test]
     fn language_tags() {
         // rule: rule.document-structure.xml-lang-must-be-bcp47-or-empty
-        rules::assert_rule_exists("rule.document-structure.xml-lang-must-be-bcp47-or-empty");
+        rules::assert_rule_exists(
+            "rule.document-structure.xml-lang-must-be-bcp47-or-empty",
+        );
 
         // The empty string is explicitly allowed.
         assert!(is_valid_language_tag(""));

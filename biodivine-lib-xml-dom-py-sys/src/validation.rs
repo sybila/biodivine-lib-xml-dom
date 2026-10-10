@@ -141,7 +141,9 @@ impl PyXmlValidationErrors {
             .get(index)
             .cloned()
             .map(PyXmlValidationError::from)
-            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("no such validation error"))
+            .ok_or_else(|| {
+                pyo3::exceptions::PyIndexError::new_err("no such validation error")
+            })
     }
 
     /// The problems, as a list.
@@ -180,9 +182,15 @@ fn kind_name(kind: &ValidationErrorKind) -> &'static str {
         ValidationErrorKind::ParentChildMismatch => "parent_child_mismatch",
         ValidationErrorKind::CyclicStructure => "cyclic_structure",
         ValidationErrorKind::UndeclaredPrefix { .. } => "undeclared_prefix",
-        ValidationErrorKind::PrefixBoundToDifferentUri { .. } => "prefix_bound_to_different_uri",
-        ValidationErrorKind::MissingDefaultNamespace { .. } => "missing_default_namespace",
-        ValidationErrorKind::DefaultNamespaceMismatch { .. } => "default_namespace_mismatch",
+        ValidationErrorKind::PrefixBoundToDifferentUri { .. } => {
+            "prefix_bound_to_different_uri"
+        }
+        ValidationErrorKind::MissingDefaultNamespace { .. } => {
+            "missing_default_namespace"
+        }
+        ValidationErrorKind::DefaultNamespaceMismatch { .. } => {
+            "default_namespace_mismatch"
+        }
         ValidationErrorKind::UnprefixedNameTakesDefaultNamespace { .. } => {
             "unprefixed_name_takes_default_namespace"
         }
@@ -190,7 +198,9 @@ fn kind_name(kind: &ValidationErrorKind) -> &'static str {
             "attribute_namespace_without_prefix"
         }
         ValidationErrorKind::ReservedPrefix { .. } => "reserved_prefix",
-        ValidationErrorKind::IllegalNamespaceDeclaration { .. } => "illegal_namespace_declaration",
+        ValidationErrorKind::IllegalNamespaceDeclaration { .. } => {
+            "illegal_namespace_declaration"
+        }
         ValidationErrorKind::XmlIdIsNotAName { .. } => "xml_id_is_not_a_name",
         ValidationErrorKind::DuplicateXmlId { .. } => "duplicate_xml_id",
         ValidationErrorKind::InvalidXmlLang { .. } => "invalid_xml_lang",

@@ -48,7 +48,8 @@ use crate::node_id::NodeId;
 use crate::qualified_name::QualifiedName;
 use crate::xml_spec::validation::{
     NamespaceScope, ScopeViolation, check_attribute_name, check_element_name,
-    check_namespace_declaration, xml_id_attribute, xml_lang_attribute, xml_space_attribute,
+    check_namespace_declaration, xml_id_attribute, xml_lang_attribute,
+    xml_space_attribute,
 };
 use crate::xml_spec::{NCName, is_valid_language_tag, is_valid_xml_space_value};
 
@@ -194,7 +195,9 @@ impl ValidationErrorKind {
             Self::AttributeNamespaceWithoutPrefix { .. } => {
                 "rule.namespace-usage.default-namespace-not-attributes"
             }
-            Self::ReservedPrefix { .. } => "rule.namespace-basics.xmlns-not-element-prefix",
+            Self::ReservedPrefix { .. } => {
+                "rule.namespace-basics.xmlns-not-element-prefix"
+            }
             Self::IllegalNamespaceDeclaration { .. } => {
                 "rule.namespace-basics.xml-prefix-fixed-binding"
             }
@@ -259,7 +262,9 @@ impl XmlValidationError {
 impl fmt::Display for XmlValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.node {
-            Some(node) => write!(f, "node {node}: {} [{}]", self.message, self.kind.rule()),
+            Some(node) => {
+                write!(f, "node {node}: {} [{}]", self.message, self.kind.rule())
+            }
             None => write!(f, "{} [{}]", self.message, self.kind.rule()),
         }
     }
@@ -440,7 +445,8 @@ fn check_nodes(arena: &Arena, errors: &mut Vec<XmlValidationError>) {
         }
         for (prefix, namespace) in &element.namespace_declarations {
             if let Some(namespace) = namespace
-                && let Err(reason) = check_namespace_declaration(prefix.as_ref(), namespace.uri())
+                && let Err(reason) =
+                    check_namespace_declaration(prefix.as_ref(), namespace.uri())
             {
                 errors.push(XmlValidationError::at(
                     ValidationErrorKind::IllegalNamespaceDeclaration {
@@ -488,7 +494,9 @@ fn check_xml_attribute_values(
                 value: value.to_string(),
             },
             id,
-            format!("`xml:lang` value {value:?} is not a language tag and is not empty"),
+            format!(
+                "`xml:lang` value {value:?} is not a language tag and is not empty"
+            ),
         ));
     }
     if let Some(value) = xml_space_attribute(element)
@@ -519,7 +527,8 @@ fn check_xml_id_uniqueness(arena: &Arena, errors: &mut Vec<XmlValidationError>) 
     };
     // Breadth-first over the attached tree, so detached nodes are not compared: a detached
     // `deep_clone` of a subtree legitimately carries the same `xml:id` values as its original.
-    let mut seen: std::collections::BTreeMap<String, NodeId> = std::collections::BTreeMap::new();
+    let mut seen: std::collections::BTreeMap<String, NodeId> =
+        std::collections::BTreeMap::new();
     let mut queue = std::collections::VecDeque::new();
     queue.push_back(root);
     let mut visited = 0usize;
@@ -538,7 +547,9 @@ fn check_xml_id_uniqueness(arena: &Arena, errors: &mut Vec<XmlValidationError>) 
                 errors.push(XmlValidationError::at(
                     ValidationErrorKind::DuplicateXmlId { id: name },
                     id,
-                    format!("`xml:id` value {value:?} is already used by node {previous}"),
+                    format!(
+                        "`xml:id` value {value:?} is already used by node {previous}"
+                    ),
                 ));
             }
         }

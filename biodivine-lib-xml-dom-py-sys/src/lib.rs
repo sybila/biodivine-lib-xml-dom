@@ -70,7 +70,9 @@ pub use crate::node::{PyNode, PyNodeArg};
 pub use crate::node_id::PyNodeId;
 pub use crate::qualified_name::PyQualifiedName;
 pub use crate::validation::{PyNodeKind, PyXmlValidationError, PyXmlValidationErrors};
-pub use crate::write_options::{PyDeclarationStyle, PyEmptyElementStyle, PyWriteOptions};
+pub use crate::write_options::{
+    PyDeclarationStyle, PyEmptyElementStyle, PyWriteOptions,
+};
 
 /// The native module, imported by the pure-Python package as `biodivine_lib_xml_dom._sys`.
 ///

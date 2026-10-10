@@ -23,7 +23,10 @@ pub(crate) fn parse_string(py: Python<'_>, source: &str) -> PyResult<PyDocument>
 }
 
 /// Parses an XML document from bytes; see [`PyDocument::parse_bytes`].
-pub(crate) fn parse_bytes(py: Python<'_>, data: &Bound<'_, PyBytes>) -> PyResult<PyDocument> {
+pub(crate) fn parse_bytes(
+    py: Python<'_>,
+    data: &Bound<'_, PyBytes>,
+) -> PyResult<PyDocument> {
     let owned = data.as_bytes().to_vec();
     py.detach(move || xml::Document::parse_bytes(&owned))
         .map(PyDocument::from)

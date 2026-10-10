@@ -91,8 +91,10 @@ mod tests {
     fn interning_deduplicates_by_value() {
         let mut interner = Interner::default();
 
-        let first = interner.namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
-        let second = interner.namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
+        let first = interner
+            .namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
+        let second = interner
+            .namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
         assert_eq!(interner.namespace_count(), 1);
         // Both handles share one allocation.
         assert!(first.shares_data_with(&second));

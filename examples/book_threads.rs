@@ -6,7 +6,8 @@ use biodivine_lib_xml_dom::{Document, QualifiedName};
 
 fn main() {
     let document = Document::empty();
-    let root = document.create_element(QualifiedName::without_namespace("root").unwrap());
+    let root =
+        document.create_element(QualifiedName::without_namespace("root").unwrap());
     document.set_root(root.clone());
 
     // Handles are `Send + Sync`: pass the document, or a node, to another thread.
@@ -17,7 +18,8 @@ fn main() {
             std::thread::spawn(move || {
                 for item in 0..25 {
                     let node = document.create_element(
-                        QualifiedName::without_namespace(format!("item{index}_{item}")).unwrap(),
+                        QualifiedName::without_namespace(format!("item{index}_{item}"))
+                            .unwrap(),
                     );
                     node.append_child(document.create_text("payload").unwrap());
                     root.append_child(node);

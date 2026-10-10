@@ -21,11 +21,13 @@ fn namespaced_tree(document: &Document) -> (Element, Element) {
     let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
     let default = Namespace::without_prefix("http://default").unwrap();
 
-    let root = document.create_element(QualifiedName::with_namespace("root", &ex).unwrap());
+    let root =
+        document.create_element(QualifiedName::with_namespace("root", &ex).unwrap());
     root.declare_namespace(ex.clone());
     root.declare_namespace(default.clone());
 
-    let child = document.create_element(QualifiedName::with_namespace("child", &ex).unwrap());
+    let child =
+        document.create_element(QualifiedName::with_namespace("child", &ex).unwrap());
     child.set_attribute(QualifiedName::with_namespace("attr", &ex).unwrap(), "v");
     child.set_attribute(QualifiedName::without_namespace("attr").unwrap(), "plain");
     child.append_child(document.create_text("text").unwrap());

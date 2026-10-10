@@ -9,9 +9,11 @@ fn main() {
     // `validate` is where you ask.
     let document = Document::empty();
     let missing = Namespace::prefixed("http://example.com", "ex").unwrap();
-    let root = document.create_element(QualifiedName::with_namespace("root", &missing).unwrap());
+    let root = document
+        .create_element(QualifiedName::with_namespace("root", &missing).unwrap());
     document.set_root(root.clone());
-    let xml = Namespace::prefixed("http://www.w3.org/XML/1998/namespace", "xml").unwrap();
+    let xml =
+        Namespace::prefixed("http://www.w3.org/XML/1998/namespace", "xml").unwrap();
     root.set_attribute(
         QualifiedName::with_namespace("space", &xml).unwrap(),
         "preserve-everything",

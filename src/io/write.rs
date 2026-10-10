@@ -39,7 +39,9 @@
 //! a typed error.
 
 use quick_xml::Writer;
-use quick_xml::events::{BytesCData, BytesDecl, BytesEnd, BytesPI, BytesStart, BytesText, Event};
+use quick_xml::events::{
+    BytesCData, BytesDecl, BytesEnd, BytesPI, BytesStart, BytesText, Event,
+};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -109,11 +111,15 @@ pub(crate) fn write_string(doc: &Document) -> XmlResult<String> {
 /// # Errors
 ///
 /// As [`write_string`](crate::Document::write_string).
-pub(crate) fn write_string_with(doc: &Document, options: &WriteOptions) -> XmlResult<String> {
+pub(crate) fn write_string_with(
+    doc: &Document,
+    options: &WriteOptions,
+) -> XmlResult<String> {
     let mut buffer = Vec::new();
     doc.write_writer_with(&mut buffer, options)?;
-    String::from_utf8(buffer)
-        .map_err(|error| XmlError::InvalidUtf8(format!("invalid UTF-8 in output: {error}")))
+    String::from_utf8(buffer).map_err(|error| {
+        XmlError::InvalidUtf8(format!("invalid UTF-8 in output: {error}"))
+    })
 }
 
 /// Writes a document to a file with the default options; the implementation of
@@ -198,7 +204,9 @@ fn write_declaration<W: Write>(
     let (write, declaration) = match options.declaration {
         DeclarationStyle::Never => (false, None),
         DeclarationStyle::IfPresent => (stored.is_some(), stored),
-        DeclarationStyle::Always => (true, stored.or_else(|| Some(XmlDeclaration::utf8()))),
+        DeclarationStyle::Always => {
+            (true, stored.or_else(|| Some(XmlDeclaration::utf8())))
+        }
     };
     let Some(declaration) = declaration else {
         debug_assert!(!write);
@@ -243,7 +251,9 @@ fn write_subtree<W: Write>(
                 buffer.clear();
                 escape_text(&text, &mut buffer);
                 if !buffer.is_empty() {
-                    writer.write_event(Event::Text(BytesText::from_escaped(buffer.as_str())))?;
+                    writer.write_event(Event::Text(BytesText::from_escaped(
+                        buffer.as_str(),
+                    )))?;
                 }
             }
             Task::Enter(node) => {
@@ -254,18 +264,16 @@ fn write_subtree<W: Write>(
                         let mut pending_tasks: Vec<Task> = Vec::new();
                         push_children(&element, &mut pending_tasks);
                         let empty = pending_tasks.is_empty();
-                        let self_closing =
-                            empty && options.empty_elements == EmptyElementStyle::SelfClosing;
+                        let self_closing = empty
+                            && options.empty_elements == EmptyElementStyle::SelfClosing;
                         if self_closing {
-                            writer.write_event(Event::Empty(BytesStart::from_content(
-                                buffer.as_str(),
-                                name.len(),
-                            )))?;
+                            writer.write_event(Event::Empty(
+                                BytesStart::from_content(buffer.as_str(), name.len()),
+                            ))?;
                         } else {
-                            writer.write_event(Event::Start(BytesStart::from_content(
-                                buffer.as_str(),
-                                name.len(),
-                            )))?;
+                            writer.write_event(Event::Start(
+                                BytesStart::from_content(buffer.as_str(), name.len()),
+                            ))?;
                             tasks.push(Task::Exit(name));
                             tasks.append(&mut pending_tasks);
                         }
@@ -273,9 +281,9 @@ fn write_subtree<W: Write>(
                     NodeContent::Text(text) => {
                         escape_text(text.as_str(), &mut buffer);
                         if !buffer.is_empty() {
-                            writer.write_event(Event::Text(BytesText::from_escaped(
-                                buffer.as_str(),
-                            )))?;
+                            writer.write_event(Event::Text(
+                                BytesText::from_escaped(buffer.as_str()),
+                            ))?;
                         }
                     }
                     NodeContent::Comment(comment) => {
@@ -284,7 +292,9 @@ fn write_subtree<W: Write>(
                         )))?;
                     }
                     NodeContent::CData(cdata) => {
-                        writer.write_event(Event::CData(BytesCData::new(cdata.as_str())))?;
+                        writer.write_event(Event::CData(BytesCData::new(
+                            cdata.as_str(),
+                        )))?;
                     }
                     NodeContent::ProcessingInstruction(target, data) => {
                         let content = if data.as_str().is_empty() {

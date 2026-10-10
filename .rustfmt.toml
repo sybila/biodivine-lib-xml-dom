@@ -1,0 +1,7 @@
+# The formatting width is deliberately tighter than rustfmt's default of 100 columns: the examples
+# in this repository are also the examples of the documentation book, whose code blocks are narrower
+# than a terminal. Keeping the code at 88 columns means an example line can be shown in the book (and
+# in the rustdoc of the crate) without horizontal scrolling, and `cargo fmt` cannot reflow a line past
+# the budget that `docs/check_book.py` enforces.
+max_width = 88
+edition = "2024"

@@ -34,17 +34,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let paragraph = document.create_element(QualifiedName::with_namespace("p", &html)?);
     paragraph.set_attribute(QualifiedName::without_namespace("class")?, "example");
     paragraph.set_attribute(QualifiedName::without_namespace("id")?, "intro");
-    paragraph.append_child(
-        document.create_text(
-            "This document was created with the DOM API rather than parsed from text.",
-        )?,
-    );
+    paragraph.append_child(document.create_text(
+        "This document was created with the DOM API rather than parsed from text.",
+    )?);
     body.append_child(paragraph);
 
-    let circle = document.create_element(QualifiedName::with_namespace("circle", &svg)?);
+    let circle =
+        document.create_element(QualifiedName::with_namespace("circle", &svg)?);
     circle.set_attribute(QualifiedName::without_namespace("r")?, "40");
     circle.set_attribute(QualifiedName::without_namespace("fill")?, "blue");
-    let svg_element = document.create_element(QualifiedName::with_namespace("svg", &svg)?);
+    let svg_element =
+        document.create_element(QualifiedName::with_namespace("svg", &svg)?);
     svg_element.append_child(circle);
     body.append_child(svg_element);
     root.append_child(body);
@@ -94,8 +94,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("  {index}: element <{}>", element.local_name())
             }
             NodeContent::Text(text) => println!("  {index}: text {:?}", text.as_str()),
-            NodeContent::Comment(comment) => println!("  {index}: comment {:?}", comment.as_str()),
-            NodeContent::CData(cdata) => println!("  {index}: cdata {:?}", cdata.as_str()),
+            NodeContent::Comment(comment) => {
+                println!("  {index}: comment {:?}", comment.as_str())
+            }
+            NodeContent::CData(cdata) => {
+                println!("  {index}: cdata {:?}", cdata.as_str())
+            }
             NodeContent::ProcessingInstruction(target, data) => {
                 println!("  {index}: <?{} {}?>", target.as_str(), data.as_str());
             }
@@ -132,14 +136,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // --- 6: a comment-bearing document ------------------------------------------------------
     println!("\n6. Comments, CDATA and processing instructions");
     let annotated = Document::empty();
-    let annotated_root = annotated.create_element(QualifiedName::without_namespace("root")?);
+    let annotated_root =
+        annotated.create_element(QualifiedName::without_namespace("root")?);
     annotated.set_root(annotated_root.clone());
     annotated_root.append_child(annotated.create_comment(" a header comment ")?);
     annotated_root.append_child(annotated.create_cdata("raw <content> & text")?);
-    annotated_root.append_child(
-        annotated
-            .create_processing_instruction("xml-stylesheet", "type=\"text/css\" href=\"a.css\"")?,
-    );
+    annotated_root.append_child(annotated.create_processing_instruction(
+        "xml-stylesheet",
+        "type=\"text/css\" href=\"a.css\"",
+    )?);
     annotated_root.append_child(annotated.create_text("plain text")?);
 
     let serialized = annotated.write_string()?;

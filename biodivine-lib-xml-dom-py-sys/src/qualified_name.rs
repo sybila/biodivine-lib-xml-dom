@@ -41,7 +41,9 @@ impl PyQualifiedName {
     #[pyo3(signature = (local_name, namespace = None))]
     pub fn new(local_name: &str, namespace: Option<PyNamespace>) -> PyResult<Self> {
         match namespace {
-            Some(namespace) => QualifiedName::with_namespace(local_name, &namespace.inner),
+            Some(namespace) => {
+                QualifiedName::with_namespace(local_name, &namespace.inner)
+            }
             None => QualifiedName::without_namespace(local_name),
         }
         .map(Self::from)
@@ -87,7 +89,10 @@ impl PyQualifiedName {
     ///     XmlSyntaxError: if the name is malformed.
     ///     XmlNamespaceError: if the prefix is undeclared or reserved.
     #[staticmethod]
-    pub fn resolve_element(element: &crate::element::PyElement, name: &str) -> PyResult<Self> {
+    pub fn resolve_element(
+        element: &crate::element::PyElement,
+        name: &str,
+    ) -> PyResult<Self> {
         QualifiedName::resolve_element(&element.inner, name)
             .map(Self::from)
             .map_err(to_py_err)
@@ -99,7 +104,10 @@ impl PyQualifiedName {
     ///     XmlSyntaxError: if the name is malformed.
     ///     XmlNamespaceError: if the prefix is undeclared or reserved.
     #[staticmethod]
-    pub fn resolve_attribute(element: &crate::element::PyElement, name: &str) -> PyResult<Self> {
+    pub fn resolve_attribute(
+        element: &crate::element::PyElement,
+        name: &str,
+    ) -> PyResult<Self> {
         QualifiedName::resolve_attribute(&element.inner, name)
             .map(Self::from)
             .map_err(to_py_err)

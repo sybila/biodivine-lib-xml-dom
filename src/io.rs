@@ -18,6 +18,6 @@ pub(crate) mod write;
 pub(crate) use parse::{parse_bytes, parse_file, parse_reader, parse_string};
 pub use write::{DeclarationStyle, EmptyElementStyle, WriteOptions};
 pub(crate) use write::{
-    write_element_to_string, write_file, write_file_with, write_string, write_string_with,
-    write_writer, write_writer_with,
+    write_element_to_string, write_file, write_file_with, write_string,
+    write_string_with, write_writer, write_writer_with,
 };

@@ -8,7 +8,9 @@
 
 mod common;
 
-use biodivine_lib_xml_dom::{Document, Element, Node, NodeKind, QualifiedName, XmlError};
+use biodivine_lib_xml_dom::{
+    Document, Element, Node, NodeKind, QualifiedName, XmlError,
+};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use common::{assert_consistent, element, snapshot};

@@ -2,7 +2,9 @@
 //!
 //! Run with `cargo run --example book_parsing`.
 
-use biodivine_lib_xml_dom::{DeclarationStyle, Document, EmptyElementStyle, WriteOptions};
+use biodivine_lib_xml_dom::{
+    DeclarationStyle, Document, EmptyElementStyle, WriteOptions,
+};
 
 fn main() {
     // A round trip is faithful: prefixes, declarations, escaping and the XML declaration survive.

@@ -75,7 +75,9 @@ pub enum XmlError {
     UnsupportedXmlVersion(String),
     /// A general entity reference that is not one of the five predefined entities
     /// ([`rule.attributes.no-undeclared-entity-refs`](crate::xml_spec::rule_set::rule_attributes_no_undeclared_entity_refs), [`rule.entities.predefined-entities-recognized`](crate::xml_spec::rule_set::rule_entities_predefined_entities_recognized)).
-    #[error("undeclared entity reference `&{0};` (only the predefined entities are supported)")]
+    #[error(
+        "undeclared entity reference `&{0};` (only the predefined entities are supported)"
+    )]
     UndeclaredEntityReference(String),
     /// A character reference denotes a character that is not legal in XML
     /// ([`rule.entities.charref-legal-character`](crate::xml_spec::rule_set::rule_entities_charref_legal_character)).

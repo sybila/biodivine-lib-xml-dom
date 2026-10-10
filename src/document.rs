@@ -270,7 +270,9 @@ impl Document {
         self.read_arena(operation, |arena| {
             lookup(arena)
                 .into_iter()
-                .filter_map(|id| Some(Node::from_ref(self.clone(), id, arena.external_ref(id)?)))
+                .filter_map(|id| {
+                    Some(Node::from_ref(self.clone(), id, arena.external_ref(id)?))
+                })
                 .collect()
         })
     }

@@ -364,24 +364,32 @@ def sweep_rendered() -> None:
 # Self-test
 # --------------------------------------------------------------------------------------------
 
-def tracked_files() -> set[str]:
-    """Every file git tracks, with its exact spelling."""
+def tracked_files() -> set[str] | None:
+    """Every file git tracks, with its exact spelling, or `None` outside a git checkout."""
+    if not (ROOT / ".git").exists():
+        return None
     result = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True)
     if result.returncode != 0:
-        return set()
+        return None
     return set(result.stdout.split())
 
 
-def untracked_includes(text: str, source: Path, tracked: set[str]) -> list[str]:
-    """The `include_str!` paths of `text` that are not tracked under exactly that spelling."""
+def untracked_includes(text: str, source: Path, tracked: set[str] | None) -> list[str]:
+    """The `include_str!` paths of `text` that are not tracked under exactly that spelling.
+
+    Without a git checkout there is nothing to compare against, so the category accepts everything
+    and says so in the report.
+    """
+    if tracked is None:
+        return []
     return [relative for relative in include_paths(text, source) if relative not in tracked]
 
 
 def sweep_path_case(include_book: bool) -> None:
     """Every included file must be tracked under exactly the spelling the directive uses."""
     tracked = tracked_files()
-    if not tracked:
-        violations.append("path case: `git ls-files` produced nothing; is this a git checkout?")
+    if tracked is None:
+        print("path case: not a git checkout, the category is skipped")
         return
     for path in sources(include_book):
         if path.suffix != ".rs":
@@ -416,7 +424,9 @@ def self_test() -> int:
         ("ASCII art", ascii_art, "root\n├── child", "root (one child)"),
         (
             "path case",
-            lambda text: untracked_includes(text, ROOT / "src" / "lib.rs", tracked_files()),
+            lambda text: untracked_includes(
+                text, ROOT / "src" / "lib.rs", {"docs/assets/model.svg"}
+            ),
             'include_str!("../src/does-not-exist.rs")',
             'include_str!("../docs/assets/model.svg")',
         ),

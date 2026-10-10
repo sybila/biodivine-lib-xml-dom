@@ -208,7 +208,9 @@ impl Element {
     /// The key is the prefix (`None` for the default namespace); the value is the binding, where
     /// `Some(None)` denotes an empty declaration (`xmlns=""`) that removes the default namespace
     /// from scope ([`rule.namespace-usage.empty-default-namespace`](crate::xml_spec::rule_set::rule_namespace_usage_empty_default_namespace)).
-    pub fn namespace_declarations(&self) -> BTreeMap<Option<NCName>, Option<Namespace>> {
+    pub fn namespace_declarations(
+        &self,
+    ) -> BTreeMap<Option<NCName>, Option<Namespace>> {
         let id = self.0.id;
         self.0
             .document

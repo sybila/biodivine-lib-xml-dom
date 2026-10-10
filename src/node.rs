@@ -319,7 +319,8 @@ impl Node {
     pub fn descendants(&self) -> Vec<Node> {
         self.document.read_many("Node::descendants", |arena| {
             let mut result = Vec::new();
-            let mut stack: Vec<NodeId> = arena.children(self.id).iter().rev().copied().collect();
+            let mut stack: Vec<NodeId> =
+                arena.children(self.id).iter().rev().copied().collect();
             while let Some(current) = stack.pop() {
                 result.push(current);
                 for &child in arena.children(current).iter().rev() {
@@ -422,7 +423,11 @@ impl Node {
     /// # Errors
     ///
     /// As [`Node::append_child_checked`], plus [`XmlError::IndexOutOfBounds`].
-    pub fn insert_child_checked(&self, index: usize, child: impl Into<Node>) -> XmlResult<()> {
+    pub fn insert_child_checked(
+        &self,
+        index: usize,
+        child: impl Into<Node>,
+    ) -> XmlResult<()> {
         let child = child.into();
         self.check_attachable(&child)?;
         self.document
@@ -486,7 +491,12 @@ impl Node {
     }
 
     /// Shared implementation of the two relative insertions.
-    fn insert_relative_checked(&self, sibling: Node, child: Node, after: bool) -> XmlResult<()> {
+    fn insert_relative_checked(
+        &self,
+        sibling: Node,
+        child: Node,
+        after: bool,
+    ) -> XmlResult<()> {
         self.check_attachable(&child)?;
         if !sibling.belongs_to(&self.document) {
             return Err(XmlError::ForeignDocument);
@@ -734,7 +744,9 @@ mod tests {
         // Canonical values of the target document.
         let interned_name = target.create_element(source_name.clone()).qualified_name();
         let interned_namespace = target
-            .create_element(QualifiedName::with_namespace("other", &source_namespace).unwrap())
+            .create_element(
+                QualifiedName::with_namespace("other", &source_namespace).unwrap(),
+            )
             .qualified_name()
             .namespace()
             .cloned()
@@ -765,9 +777,11 @@ mod tests {
     #[test]
     fn repeated_names_share_one_allocation() {
         let document = Document::empty();
-        let first = document.create_element(QualifiedName::without_namespace("item").unwrap());
+        let first =
+            document.create_element(QualifiedName::without_namespace("item").unwrap());
         for _ in 0..1000 {
-            let other = document.create_element(QualifiedName::without_namespace("item").unwrap());
+            let other = document
+                .create_element(QualifiedName::without_namespace("item").unwrap());
             assert!(
                 first
                     .qualified_name()
@@ -781,8 +795,10 @@ mod tests {
     #[test]
     fn interning_does_not_change_equality() {
         let document = Document::empty();
-        let first = document.create_element(QualifiedName::without_namespace("x").unwrap());
-        let second = document.create_element(QualifiedName::without_namespace("x").unwrap());
+        let first =
+            document.create_element(QualifiedName::without_namespace("x").unwrap());
+        let second =
+            document.create_element(QualifiedName::without_namespace("x").unwrap());
         assert!(
             first
                 .qualified_name()

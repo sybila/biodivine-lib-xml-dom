@@ -44,7 +44,8 @@ fn main() {
     assert_eq!(root.children().len(), 4);
 
     // Replacing leaves the old node detached but alive.
-    let replacement = document.create_element(QualifiedName::without_namespace("y").unwrap());
+    let replacement =
+        document.create_element(QualifiedName::without_namespace("y").unwrap());
     let old = x.replace_with(replacement);
     assert!(!old.is_attached());
     assert_eq!(old.as_element().unwrap().local_name(), "x");
@@ -56,7 +57,8 @@ fn main() {
     assert!(root.append_child_checked(foreign).is_err());
 
     // A fresh node is detached (but already belongs to a document) until it is attached.
-    let detached = document.create_element(QualifiedName::without_namespace("d").unwrap());
+    let detached =
+        document.create_element(QualifiedName::without_namespace("d").unwrap());
     assert!(!detached.is_attached());
     root.append_child(detached.clone());
     assert!(detached.is_attached());
@@ -72,7 +74,8 @@ fn main() {
     let target = Document::empty();
     let imported = root.deep_clone_into(&target);
     assert!(imported.belongs_to(&target));
-    let new_root = target.create_element(QualifiedName::without_namespace("wrapper").unwrap());
+    let new_root =
+        target.create_element(QualifiedName::without_namespace("wrapper").unwrap());
     target.set_root(new_root.clone());
     new_root.append_child(imported);
     assert!(target.is_valid());

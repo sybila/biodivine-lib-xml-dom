@@ -60,9 +60,10 @@ fn main() {
     );
 
     // `xmlns=""` removes the default namespace from the element it is declared on.
-    let document =
-        Document::parse_string(r#"<root xmlns="http://d"><inner xmlns=""><leaf/></inner></root>"#)
-            .unwrap();
+    let document = Document::parse_string(
+        r#"<root xmlns="http://d"><inner xmlns=""><leaf/></inner></root>"#,
+    )
+    .unwrap();
     let inner = document.root().unwrap().child_elements()[0].clone();
     assert!(inner.namespace().is_none());
     assert!(inner.child_elements()[0].namespace().is_none());
@@ -70,11 +71,14 @@ fn main() {
 
     // Editing never synchronises declarations for you: removing one that a subtree relies on
     // succeeds silently, and `validate` is what reports the resulting inconsistency.
-    let document =
-        Document::parse_string(r#"<ex:root xmlns:ex="http://example.com"><ex:child/></ex:root>"#)
-            .unwrap();
+    let document = Document::parse_string(
+        r#"<ex:root xmlns:ex="http://example.com"><ex:child/></ex:root>"#,
+    )
+    .unwrap();
     let root = document.root().unwrap();
-    root.remove_namespace_declaration(Some(&biodivine_lib_xml_dom::xml_spec::nc_name("ex")));
+    root.remove_namespace_declaration(Some(&biodivine_lib_xml_dom::xml_spec::nc_name(
+        "ex",
+    )));
     assert_eq!(document.validate().unwrap_err().len(), 2);
     assert_eq!(
         document.write_string().unwrap(),

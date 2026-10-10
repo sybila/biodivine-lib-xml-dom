@@ -8,7 +8,8 @@ mod common;
 
 use biodivine_lib_xml_dom::xml_spec::{NCName, nc_name, rules};
 use biodivine_lib_xml_dom::{
-    Document, Element, Namespace, QualifiedName, ValidationErrorKind, XmlValidationError,
+    Document, Element, Namespace, QualifiedName, ValidationErrorKind,
+    XmlValidationError,
 };
 
 use common::element;
@@ -18,7 +19,8 @@ const XML_NS: &str = "http://www.w3.org/XML/1998/namespace";
 
 /// An `xml:*` qualified name.
 fn xml_name(local: &str) -> QualifiedName {
-    QualifiedName::with_namespace(local, &Namespace::prefixed(XML_NS, "xml").unwrap()).unwrap()
+    QualifiedName::with_namespace(local, &Namespace::prefixed(XML_NS, "xml").unwrap())
+        .unwrap()
 }
 
 /// Collects the kinds of the issues found, in order.
@@ -93,7 +95,9 @@ fn every_parsed_fixture_is_valid() {
         let document = Document::parse_string(fixture).unwrap();
         assert_valid(&document);
         // ... and the round trip stays valid.
-        assert_valid(&Document::parse_string(&document.write_string().unwrap()).unwrap());
+        assert_valid(
+            &Document::parse_string(&document.write_string().unwrap()).unwrap(),
+        );
     }
 }
 
@@ -108,7 +112,8 @@ fn an_element_in_a_namespace_needs_it_declared() {
 
     let document = Document::empty();
     let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
-    let root = document.create_element(QualifiedName::with_namespace("item", &ex).unwrap());
+    let root =
+        document.create_element(QualifiedName::with_namespace("item", &ex).unwrap());
     document.set_root(root.clone());
 
     assert_eq!(
@@ -135,8 +140,11 @@ fn a_prefix_bound_to_a_different_uri_is_reported() {
     root.declare_namespace(Namespace::prefixed("http://one", "ex").unwrap());
     // ... while the child's name claims another.
     let child = document.create_element(
-        QualifiedName::with_namespace("child", &Namespace::prefixed("http://two", "ex").unwrap())
-            .unwrap(),
+        QualifiedName::with_namespace(
+            "child",
+            &Namespace::prefixed("http://two", "ex").unwrap(),
+        )
+        .unwrap(),
     );
     root.append_child(child);
 
@@ -158,8 +166,11 @@ fn default_namespace_scope_must_match_the_name() {
     // (a) A name in the default namespace with no declaration in scope.
     let document = Document::empty();
     let root = document.create_element(
-        QualifiedName::with_namespace("a", &Namespace::without_prefix("http://d").unwrap())
-            .unwrap(),
+        QualifiedName::with_namespace(
+            "a",
+            &Namespace::without_prefix("http://d").unwrap(),
+        )
+        .unwrap(),
     );
     document.set_root(root.clone());
     assert_eq!(
@@ -175,14 +186,20 @@ fn default_namespace_scope_must_match_the_name() {
     //     applies to the element that carries it, so the root's own name has to match as well.
     let document = Document::empty();
     let root = document.create_element(
-        QualifiedName::with_namespace("a", &Namespace::without_prefix("http://d").unwrap())
-            .unwrap(),
+        QualifiedName::with_namespace(
+            "a",
+            &Namespace::without_prefix("http://d").unwrap(),
+        )
+        .unwrap(),
     );
     document.set_root(root.clone());
     root.declare_namespace(Namespace::without_prefix("http://d").unwrap());
     let child = document.create_element(
-        QualifiedName::with_namespace("b", &Namespace::without_prefix("http://other").unwrap())
-            .unwrap(),
+        QualifiedName::with_namespace(
+            "b",
+            &Namespace::without_prefix("http://other").unwrap(),
+        )
+        .unwrap(),
     );
     root.append_child(child);
     assert_eq!(
@@ -197,8 +214,11 @@ fn default_namespace_scope_must_match_the_name() {
     //     in `http://d`, which is exactly the "moving an element breaks its declarations" case.
     let document = Document::empty();
     let root = document.create_element(
-        QualifiedName::with_namespace("a", &Namespace::without_prefix("http://d").unwrap())
-            .unwrap(),
+        QualifiedName::with_namespace(
+            "a",
+            &Namespace::without_prefix("http://d").unwrap(),
+        )
+        .unwrap(),
     );
     document.set_root(root.clone());
     root.declare_namespace(Namespace::without_prefix("http://d").unwrap());
@@ -229,8 +249,11 @@ fn attributes_are_not_affected_by_the_default_namespace() {
     // An unprefixed attribute inside a default-namespace scope is perfectly fine.
     let document = Document::empty();
     let root = document.create_element(
-        QualifiedName::with_namespace("a", &Namespace::without_prefix("http://d").unwrap())
-            .unwrap(),
+        QualifiedName::with_namespace(
+            "a",
+            &Namespace::without_prefix("http://d").unwrap(),
+        )
+        .unwrap(),
     );
     document.set_root(root.clone());
     root.declare_namespace(Namespace::without_prefix("http://d").unwrap());
@@ -289,7 +312,8 @@ fn detached_subtrees_are_validated_against_their_own_scope() {
             prefix: nc_name("ex")
         }]
     );
-    detached.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
+    detached
+        .declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
     assert_valid(&document);
 }
 
@@ -527,7 +551,9 @@ fn consistent_documents_produce_no_structural_issues() {
 fn xml_lang_and_xml_space_values_are_checked() {
     // rule: rule.document-structure.xml-lang-must-be-bcp47-or-empty
     // rule: rule.document-structure.xml-space-must-be-enumerated-default-preserve
-    rules::assert_rule_exists("rule.document-structure.xml-lang-must-be-bcp47-or-empty");
+    rules::assert_rule_exists(
+        "rule.document-structure.xml-lang-must-be-bcp47-or-empty",
+    );
     rules::assert_rule_exists(
         "rule.document-structure.xml-space-must-be-enumerated-default-preserve",
     );
@@ -576,8 +602,11 @@ fn all_problems_are_reported_in_one_call() {
     // Now introduce four independent problems at once.
     // 2: an undeclared prefix on the root's name.
     root.set_qualified_name(
-        QualifiedName::with_namespace("root", &Namespace::prefixed("http://x", "missing").unwrap())
-            .unwrap(),
+        QualifiedName::with_namespace(
+            "root",
+            &Namespace::prefixed("http://x", "missing").unwrap(),
+        )
+        .unwrap(),
     );
     // 3: an invalid `xml:space` value.
     root.set_attribute(xml_name("space"), "nope");
@@ -647,8 +676,11 @@ fn every_error_kind_names_an_existing_rule_file() {
     let root = element(&document, "root");
     document.set_root(root.clone());
     root.set_qualified_name(
-        QualifiedName::with_namespace("root", &Namespace::prefixed("http://x", "missing").unwrap())
-            .unwrap(),
+        QualifiedName::with_namespace(
+            "root",
+            &Namespace::prefixed("http://x", "missing").unwrap(),
+        )
+        .unwrap(),
     );
     root.set_attribute(xml_name("space"), "nope");
     let child = element(&document, "child");
@@ -661,13 +693,13 @@ fn every_error_kind_names_an_existing_rule_file() {
         rules::assert_rule_exists(error.kind().rule());
     }
     // And the set of rules referenced covers the layer-C rules this goal implements.
-    let referenced: Vec<&str> = errors.iter().map(|error| error.kind().rule()).collect();
+    let referenced: Vec<&str> =
+        errors.iter().map(|error| error.kind().rule()).collect();
     assert!(referenced.contains(&"rule.namespace-usage.prefix-declared"));
     assert!(referenced.contains(&"rule.attributes.id-must-be-name"));
-    assert!(
-        referenced
-            .contains(&"rule.document-structure.xml-space-must-be-enumerated-default-preserve")
-    );
+    assert!(referenced.contains(
+        &"rule.document-structure.xml-space-must-be-enumerated-default-preserve"
+    ));
 
     // Missing-root is the only kind that can be reported without a node.
     let empty = Document::empty().validate().unwrap_err();
@@ -686,9 +718,10 @@ fn every_error_kind_names_an_existing_rule_file() {
 fn editing_is_silent_and_validation_is_what_reports() {
     // Removing a declaration that a subtree still relies on does not complain during the edit
     // even if some child nodes rely on that declaration."
-    let document =
-        Document::parse_string(r#"<ex:root xmlns:ex="http://example.com"><ex:child/></ex:root>"#)
-            .unwrap();
+    let document = Document::parse_string(
+        r#"<ex:root xmlns:ex="http://example.com"><ex:child/></ex:root>"#,
+    )
+    .unwrap();
     let root = document.root().unwrap();
     assert_valid(&document);
 
@@ -702,11 +735,10 @@ fn editing_is_silent_and_validation_is_what_reports() {
     // use the `ex` prefix.
     let errors = document.validate().unwrap_err();
     assert_eq!(errors.len(), 2, "{errors}");
-    assert!(
-        errors
-            .iter()
-            .all(|error| matches!(error.kind(), ValidationErrorKind::UndeclaredPrefix { .. }))
-    );
+    assert!(errors.iter().all(|error| matches!(
+        error.kind(),
+        ValidationErrorKind::UndeclaredPrefix { .. }
+    )));
 
     // Restoring the declaration makes the document valid again.
     root.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
@@ -723,8 +755,11 @@ fn moving_an_element_can_break_its_namespace_and_validation_says_so() {
     plain.set_qualified_name(QualifiedName::without_namespace("plain").unwrap());
 
     let elsewhere = document.create_element(
-        QualifiedName::with_namespace("elsewhere", &Namespace::without_prefix("http://d").unwrap())
-            .unwrap(),
+        QualifiedName::with_namespace(
+            "elsewhere",
+            &Namespace::without_prefix("http://d").unwrap(),
+        )
+        .unwrap(),
     );
     elsewhere.declare_namespace(Namespace::without_prefix("http://d").unwrap());
     root.append_child(elsewhere.clone());
@@ -747,9 +782,10 @@ fn moving_an_element_can_break_its_namespace_and_validation_says_so() {
 
 #[test]
 fn validation_does_not_change_the_document() {
-    let document =
-        Document::parse_string(r#"<ex:root xmlns:ex="http://example.com"><ex:b/></ex:root>"#)
-            .unwrap();
+    let document = Document::parse_string(
+        r#"<ex:root xmlns:ex="http://example.com"><ex:b/></ex:root>"#,
+    )
+    .unwrap();
     let before = document.write_string().unwrap();
     let _ = document.validate();
     let _ = document.is_valid();

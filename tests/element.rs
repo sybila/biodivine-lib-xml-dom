@@ -14,14 +14,16 @@ use common::element;
 
 /// A namespaced name built from `(uri, prefix, local)`.
 fn name(uri: &str, prefix: &str, local: &str) -> QualifiedName {
-    QualifiedName::with_namespace(local, &Namespace::prefixed(uri, prefix).unwrap()).unwrap()
+    QualifiedName::with_namespace(local, &Namespace::prefixed(uri, prefix).unwrap())
+        .unwrap()
 }
 
 #[test]
 fn names_accessors_agree() {
     let document = Document::empty();
     let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
-    let element = document.create_element(QualifiedName::with_namespace("item", &ex).unwrap());
+    let element =
+        document.create_element(QualifiedName::with_namespace("item", &ex).unwrap());
 
     assert_eq!(element.local_name(), "item");
     assert_eq!(element.namespace().unwrap().uri(), "http://example.com");

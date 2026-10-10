@@ -50,10 +50,9 @@ impl NamespaceScope {
     ) -> Self {
         let mut scope = Self::new();
         for (prefix, namespace) in declarations {
-            scope
-                .bindings
-                .entry(prefix)
-                .or_insert_with(|| namespace.map(|namespace| namespace.uri().to_string()));
+            scope.bindings.entry(prefix).or_insert_with(|| {
+                namespace.map(|namespace| namespace.uri().to_string())
+            });
         }
         scope
     }
@@ -161,9 +160,11 @@ pub fn check_element_name(
     match name.namespace() {
         None => match scope.resolve(None) {
             // rule: rule.namespace-usage.default-namespace-scope
-            Some(Some(default_uri)) => Err(ScopeViolation::UnprefixedNameTakesDefaultNamespace {
-                default_uri: default_uri.to_string(),
-            }),
+            Some(Some(default_uri)) => {
+                Err(ScopeViolation::UnprefixedNameTakesDefaultNamespace {
+                    default_uri: default_uri.to_string(),
+                })
+            }
             _ => Ok(()),
         },
         Some(namespace) => match namespace.prefix() {
@@ -208,7 +209,11 @@ pub fn check_attribute_name(
 }
 
 /// The shared prefix-resolution rule for names that carry a prefix.
-fn resolve(prefix: &NCName, uri: &str, scope: &NamespaceScope) -> Result<(), ScopeViolation> {
+fn resolve(
+    prefix: &NCName,
+    uri: &str,
+    scope: &NamespaceScope,
+) -> Result<(), ScopeViolation> {
     if prefix == "xmlns" {
         // rule: rule.namespace-basics.xmlns-not-element-prefix
         //
@@ -289,7 +294,10 @@ fn attribute_in_xml_namespace<'a>(
 ///
 /// Returns the reason as a [`String`] if the declaration is one the specification forbids; the
 /// caller turns it into a structured validation issue.
-pub fn check_namespace_declaration(prefix: Option<&NCName>, uri: &str) -> Result<(), String> {
+pub fn check_namespace_declaration(
+    prefix: Option<&NCName>,
+    uri: &str,
+) -> Result<(), String> {
     crate::xml_spec::validate_namespace(uri, prefix).map_err(|error| error.to_string())
 }
 
@@ -334,7 +342,10 @@ mod tests {
         assert_rule_exists("rule.namespace-usage.prefix-declared");
         let scope = scope(&[("ex", "http://example.com")]);
         assert_eq!(
-            check_element_name(&name(Some("ex"), Some("http://example.com"), "a"), &scope),
+            check_element_name(
+                &name(Some("ex"), Some("http://example.com"), "a"),
+                &scope
+            ),
             Ok(())
         );
         assert_eq!(
@@ -405,7 +416,8 @@ mod tests {
     fn attributes_ignore_the_default_namespace() {
         // rule: rule.namespace-usage.default-namespace-not-attributes
         assert_rule_exists("rule.namespace-usage.default-namespace-not-attributes");
-        let with_default = scope(&[("", "http://default"), ("ex", "http://example.com")]);
+        let with_default =
+            scope(&[("", "http://default"), ("ex", "http://example.com")]);
 
         // Unprefixed attribute: fine even inside a default-namespace scope.
         assert_eq!(
@@ -422,7 +434,10 @@ mod tests {
         );
         // An attribute carrying the default namespace without a prefix cannot be written.
         assert_eq!(
-            check_attribute_name(&name(None, Some("http://default"), "a"), &with_default),
+            check_attribute_name(
+                &name(None, Some("http://default"), "a"),
+                &with_default
+            ),
             Err(ScopeViolation::AttributeNamespaceWithoutPrefix {
                 uri: "http://default".to_string()
             })
@@ -444,7 +459,10 @@ mod tests {
 
         let scope = scope(&[("ex", "http://example.com")]);
         assert_eq!(
-            check_attribute_name(&name(Some("ex"), Some("http://example.com"), "a"), &scope),
+            check_attribute_name(
+                &name(Some("ex"), Some("http://example.com"), "a"),
+                &scope
+            ),
             Ok(())
         );
     }

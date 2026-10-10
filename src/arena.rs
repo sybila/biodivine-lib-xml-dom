@@ -217,7 +217,9 @@ impl Arena {
                 // The capacity is at `MAX_NODES` and the collection freed nothing, so there is
                 // nothing left to grow into. Panicking here is what makes the documented behaviour
                 // of [`Arena::alloc`] true instead of spinning forever.
-                panic!("document arena exhausted: a document can hold at most {MAX_NODES} nodes");
+                panic!(
+                    "document arena exhausted: a document can hold at most {MAX_NODES} nodes"
+                );
             }
         }
     }
@@ -468,7 +470,8 @@ impl Arena {
         for _ in 0..self.slots.len() {
             let Some(node) = current else { break };
             if let NodeData::Element(element) = self.data(node)
-                && let Some(binding) = element.namespace_declarations.get(&prefix.cloned())
+                && let Some(binding) =
+                    element.namespace_declarations.get(&prefix.cloned())
             {
                 return Some(binding.clone());
             }
@@ -513,7 +516,12 @@ impl Arena {
     /// - [`XmlError::IndexOutOfBounds`] if `index` is greater than the resulting child count.
     ///
     /// Nothing is modified when an error is returned.
-    pub(crate) fn attach(&mut self, parent: NodeId, index: usize, child: NodeId) -> XmlResult<()> {
+    pub(crate) fn attach(
+        &mut self,
+        parent: NodeId,
+        index: usize,
+        child: NodeId,
+    ) -> XmlResult<()> {
         self.check_attachable(parent, child)?;
 
         let same_parent = self.slot(child).parent == Some(parent);
@@ -765,8 +773,12 @@ impl Arena {
                     children: Vec::new(),
                 }),
                 SnapshotNode::Text(text) => self.alloc(NodeData::Text(text.clone())),
-                SnapshotNode::Comment(comment) => self.alloc(NodeData::Comment(comment.clone())),
-                SnapshotNode::CData(cdata) => self.alloc(NodeData::CData(cdata.clone())),
+                SnapshotNode::Comment(comment) => {
+                    self.alloc(NodeData::Comment(comment.clone()))
+                }
+                SnapshotNode::CData(cdata) => {
+                    self.alloc(NodeData::CData(cdata.clone()))
+                }
                 SnapshotNode::ProcessingInstruction(target, data) => {
                     self.alloc(NodeData::ProcessingInstruction {
                         target: target.clone(),
@@ -859,7 +871,8 @@ mod tests {
         assert_eq!(arena.capacity(), 9);
 
         // The capacity never exceeds the id space, so growth eventually reports failure.
-        let mut arena = Arena::with_config(GcConfig::new().with_initial_capacity(MAX_NODES));
+        let mut arena =
+            Arena::with_config(GcConfig::new().with_initial_capacity(MAX_NODES));
         assert_eq!(arena.capacity(), MAX_NODES);
         assert!(!arena.grow());
     }

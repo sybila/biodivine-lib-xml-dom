@@ -329,8 +329,9 @@ fn handles_released_by_another_thread_are_safe_while_collecting() {
                     let node = document
                         .create_text(format!("thread {index} round {round}"))
                         .unwrap();
-                    let child = document
-                        .create_element(QualifiedName::without_namespace("temporary").unwrap());
+                    let child = document.create_element(
+                        QualifiedName::without_namespace("temporary").unwrap(),
+                    );
                     child.append_child(node);
                     // Dropping both handles at the end of the iteration makes them collectable.
                 }
@@ -352,7 +353,8 @@ fn handles_released_by_another_thread_are_safe_while_collecting() {
     for worker in workers {
         worker.join().expect("a worker thread panicked");
     }
-    let collected_during_the_run = collector.join().expect("the collector thread panicked");
+    let collected_during_the_run =
+        collector.join().expect("the collector thread panicked");
 
     // The rooted tree is untouched by all that collecting and allocating.
     assert_eq!(document.root().unwrap().children().len(), 10);

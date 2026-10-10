@@ -109,7 +109,10 @@ impl QualifiedName {
     /// assert_eq!(qn.local_name_str(), "foo");
     /// assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
     /// ```
-    pub fn with_namespace<S: AsRef<str>>(name: S, namespace: &Namespace) -> XmlResult<Self> {
+    pub fn with_namespace<S: AsRef<str>>(
+        name: S,
+        namespace: &Namespace,
+    ) -> XmlResult<Self> {
         let ncname = NCName::try_from(name.as_ref())?;
         Ok(Self::new(ncname, Some(namespace.clone())))
     }
@@ -202,7 +205,10 @@ impl QualifiedName {
     /// assert_eq!(qn.local_name(), "bar");
     /// assert!(qn.namespace().is_none());
     /// ```
-    pub fn resolve_attribute(element: &Element, qualified_name: &str) -> XmlResult<Self> {
+    pub fn resolve_attribute(
+        element: &Element,
+        qualified_name: &str,
+    ) -> XmlResult<Self> {
         Self::resolve_qname(element, qualified_name, false)
     }
 
@@ -515,7 +521,8 @@ mod tests {
         // Test that a namespace declared on a parent element is used for resolution.
         let doc = Document::empty();
         let parent = doc.create_element(q_name("parent").unwrap());
-        parent.declare_namespace(Namespace::prefixed("http://parent.com", "ex").unwrap());
+        parent
+            .declare_namespace(Namespace::prefixed("http://parent.com", "ex").unwrap());
         let child = doc.create_element(q_name("child").unwrap());
         // Attach child to parent
         parent.append_child(child.clone());
@@ -601,7 +608,8 @@ mod tests {
     #[test]
     fn test_resolve_with_map_xml_prefix_auto() {
         let ns_map: HashMap<Option<NCName>, String> = HashMap::new();
-        let qn = QualifiedName::resolve_element_with_namespace_map("xml:lang", &ns_map).unwrap();
+        let qn = QualifiedName::resolve_element_with_namespace_map("xml:lang", &ns_map)
+            .unwrap();
         assert_eq!(qn.local_name(), "lang");
         assert_eq!(
             qn.namespace().unwrap().uri(),
@@ -613,7 +621,8 @@ mod tests {
     fn test_resolve_attribute_with_map_ignores_default_ns() {
         let mut ns_map: HashMap<Option<NCName>, String> = HashMap::new();
         ns_map.insert(None, "http://default.com".to_string());
-        let qn = QualifiedName::resolve_attribute_with_namespace_map("bar", &ns_map).unwrap();
+        let qn = QualifiedName::resolve_attribute_with_namespace_map("bar", &ns_map)
+            .unwrap();
         assert_eq!(qn.local_name(), "bar");
         assert!(qn.namespace().is_none());
     }
@@ -622,7 +631,8 @@ mod tests {
     fn test_resolve_with_map_prefixed() {
         let mut ns_map: HashMap<Option<NCName>, String> = HashMap::new();
         ns_map.insert(Some(nc_name("ex")), "http://example.com".to_string());
-        let qn = QualifiedName::resolve_element_with_namespace_map("ex:foo", &ns_map).unwrap();
+        let qn = QualifiedName::resolve_element_with_namespace_map("ex:foo", &ns_map)
+            .unwrap();
         assert_eq!(qn.local_name(), "foo");
         assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
         assert_eq!(qn.namespace().unwrap().prefix_str(), Some("ex"));
@@ -632,7 +642,8 @@ mod tests {
     fn test_resolve_attribute_with_map_prefixed() {
         let mut ns_map: HashMap<Option<NCName>, String> = HashMap::new();
         ns_map.insert(Some(nc_name("ex")), "http://example.com".to_string());
-        let qn = QualifiedName::resolve_attribute_with_namespace_map("ex:foo", &ns_map).unwrap();
+        let qn = QualifiedName::resolve_attribute_with_namespace_map("ex:foo", &ns_map)
+            .unwrap();
         assert_eq!(qn.local_name(), "foo");
         assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
         assert_eq!(qn.namespace().unwrap().prefix_str(), Some("ex"));
@@ -665,7 +676,8 @@ mod tests {
     #[test]
     fn test_resolve_with_map_undefined_prefix() {
         let ns_map = HashMap::new();
-        let err = QualifiedName::resolve_element_with_namespace_map("ex:bar", &ns_map).unwrap_err();
+        let err = QualifiedName::resolve_element_with_namespace_map("ex:bar", &ns_map)
+            .unwrap_err();
         assert!(matches!(err, XmlError::UndeclaredPrefix(_)));
     }
 }

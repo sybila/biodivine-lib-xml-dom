@@ -15,7 +15,9 @@
 //!    the input is valid.
 //! 3. **Idempotence.** `write(parse(write(d))) == write(d)`.
 
-use biodivine_lib_xml_dom::{Document, Element, Namespace, Node, NodeContent, QualifiedName};
+use biodivine_lib_xml_dom::{
+    Document, Element, Namespace, Node, NodeContent, QualifiedName,
+};
 use proptest::prelude::*;
 use std::collections::BTreeMap;
 
@@ -114,12 +116,16 @@ fn sig_children(children: &[Node]) -> Vec<Sig> {
                 };
                 previous.push_str(text.as_str());
             }
-            NodeContent::Text(text) => result.push(Sig::Text(text.as_str().to_string())),
+            NodeContent::Text(text) => {
+                result.push(Sig::Text(text.as_str().to_string()))
+            }
             NodeContent::Element(element) => result.push(sig_element(&element)),
             NodeContent::Comment(comment) => {
                 result.push(Sig::Comment(comment.as_str().to_string()))
             }
-            NodeContent::CData(cdata) => result.push(Sig::CData(cdata.as_str().to_string())),
+            NodeContent::CData(cdata) => {
+                result.push(Sig::CData(cdata.as_str().to_string()))
+            }
             NodeContent::ProcessingInstruction(target, data) => {
                 result.push(Sig::Pi(
                     target.as_str().to_string(),
@@ -279,13 +285,14 @@ fn arb_element(budget: u32, default_in_scope: bool) -> BoxedStrategy<GenElement>
         ]
         .boxed()
     };
-    let attributes = prop::collection::vec(arb_attribute(), 0..3).prop_map(|attributes| {
-        let mut unique = BTreeMap::new();
-        for (index, name, value) in attributes {
-            unique.insert(index, (index, name, value));
-        }
-        unique.into_values().collect::<Vec<_>>()
-    });
+    let attributes =
+        prop::collection::vec(arb_attribute(), 0..3).prop_map(|attributes| {
+            let mut unique = BTreeMap::new();
+            for (index, name, value) in attributes {
+                unique.insert(index, (index, name, value));
+            }
+            unique.into_values().collect::<Vec<_>>()
+        });
     let redeclare = (
         any::<bool>(),
         any::<bool>(),
@@ -387,16 +394,21 @@ fn arb_document_consistent() -> impl Strategy<Value = GenDocument> {
 fn qualified(name: &NameChoice, local: &str) -> QualifiedName {
     match name {
         NameChoice::None => QualifiedName::without_namespace(local).unwrap(),
-        NameChoice::P0 => {
-            QualifiedName::with_namespace(local, &Namespace::prefixed(NS_0, "p0").unwrap()).unwrap()
-        }
-        NameChoice::P1 => {
-            QualifiedName::with_namespace(local, &Namespace::prefixed(NS_1, "p1").unwrap()).unwrap()
-        }
-        NameChoice::Default => {
-            QualifiedName::with_namespace(local, &Namespace::without_prefix(NS_DEFAULT).unwrap())
-                .unwrap()
-        }
+        NameChoice::P0 => QualifiedName::with_namespace(
+            local,
+            &Namespace::prefixed(NS_0, "p0").unwrap(),
+        )
+        .unwrap(),
+        NameChoice::P1 => QualifiedName::with_namespace(
+            local,
+            &Namespace::prefixed(NS_1, "p1").unwrap(),
+        )
+        .unwrap(),
+        NameChoice::Default => QualifiedName::with_namespace(
+            local,
+            &Namespace::without_prefix(NS_DEFAULT).unwrap(),
+        )
+        .unwrap(),
     }
 }
 
@@ -445,9 +457,9 @@ fn build_element(
                 let child = build_element(document, child, in_default_scope, false);
                 element.append_child(child);
             }
-            GenNode::Text(text) => {
-                element.append_child(document.create_text(text).expect("generated text is legal"))
-            }
+            GenNode::Text(text) => element.append_child(
+                document.create_text(text).expect("generated text is legal"),
+            ),
             GenNode::Comment(comment) => element.append_child(
                 document
                     .create_comment(comment)

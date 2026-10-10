@@ -111,7 +111,10 @@ impl Namespace {
     /// let ns = Namespace::prefixed("http://example.com", "ex:bad");
     /// assert!(ns.is_err());
     /// ```
-    pub fn prefixed<U: AsRef<str>, P: AsRef<str>>(uri: U, prefix: P) -> Result<Self, XmlError> {
+    pub fn prefixed<U: AsRef<str>, P: AsRef<str>>(
+        uri: U,
+        prefix: P,
+    ) -> Result<Self, XmlError> {
         let prefix_ncname = NCName::try_from(prefix.as_ref())?;
         Self::new(uri.as_ref().to_string(), Some(prefix_ncname))
     }
@@ -199,8 +202,8 @@ mod tests {
     fn test_namespace_support() {
         let doc = Document::empty();
         let namespace = Namespace::prefixed("http://example.com", "ex").unwrap();
-        let element =
-            doc.create_element(QualifiedName::with_namespace("test", &namespace).unwrap());
+        let element = doc
+            .create_element(QualifiedName::with_namespace("test", &namespace).unwrap());
 
         assert_eq!(element.qualified_name().local_name(), "test");
         assert_eq!(element.qualified_name().namespace(), Some(&namespace));

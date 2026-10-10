@@ -196,7 +196,11 @@ impl Document {
     /// # Errors
     ///
     /// As [`Document::write_writer`].
-    pub fn write_writer_with<W: Write>(&self, writer: W, options: &WriteOptions) -> XmlResult<()> {
+    pub fn write_writer_with<W: Write>(
+        &self,
+        writer: W,
+        options: &WriteOptions,
+    ) -> XmlResult<()> {
         crate::io::write_writer_with(self, writer, options)
     }
 }

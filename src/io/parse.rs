@@ -138,8 +138,9 @@ pub(crate) fn parse_bytes(bytes: &[u8]) -> XmlResult<Document> {
         Some(stripped) => stripped,
         None => bytes,
     };
-    let input = std::str::from_utf8(bytes)
-        .map_err(|error| XmlError::InvalidUtf8(format!("the input is not valid UTF-8: {error}")))?;
+    let input = std::str::from_utf8(bytes).map_err(|error| {
+        XmlError::InvalidUtf8(format!("the input is not valid UTF-8: {error}"))
+    })?;
     Parser::new(input).run()
 }
 
@@ -174,13 +175,15 @@ fn quick_error(error: quick_xml::Error) -> XmlError {
 fn escape_error(error: quick_xml::escape::EscapeError) -> XmlError {
     use quick_xml::escape::EscapeError;
     match error {
-        EscapeError::UnrecognizedEntity(_, name) => XmlError::UndeclaredEntityReference(name),
+        EscapeError::UnrecognizedEntity(_, name) => {
+            XmlError::UndeclaredEntityReference(name)
+        }
         EscapeError::InvalidCharRef(inner) => {
             XmlError::InvalidCharacterReference(inner.to_string())
         }
-        EscapeError::UnterminatedEntity(_) => {
-            XmlError::MalformedXml("an entity reference is not terminated by `;`".to_string())
-        }
+        EscapeError::UnterminatedEntity(_) => XmlError::MalformedXml(
+            "an entity reference is not terminated by `;`".to_string(),
+        ),
         EscapeError::TooManyNestedEntities => {
             XmlError::MalformedXml("too many nested entity references".to_string())
         }
@@ -319,14 +322,19 @@ impl<'input> Parser<'input> {
                     // Same policy as for comments: discarded, see the module documentation.
                     return Ok(());
                 }
-                let target = decode_bytes(instruction.target(), "processing instruction target")?;
+                let target = decode_bytes(
+                    instruction.target(),
+                    "processing instruction target",
+                )?;
                 // `PI ::= '<?' PITarget (S (Char* - (Char* '?>' Char*)))? '?>'`: the whitespace
                 // that separates the target from the content is syntax, so exactly one character
                 // of it is removed. Everything else - including leading and trailing whitespace of
                 // the content itself - is data and is kept verbatim, which is what makes the
                 // content round-trip exactly (`rule.well-formedness.pi-pass-through`).
-                let content =
-                    decode_bytes(instruction.content(), "processing instruction content")?;
+                let content = decode_bytes(
+                    instruction.content(),
+                    "processing instruction content",
+                )?;
                 let content = content
                     .strip_prefix([' ', '\t', '\n', '\r'])
                     .unwrap_or(content);
@@ -360,11 +368,12 @@ impl<'input> Parser<'input> {
             ));
         }
 
-        let version = declaration
-            .version()
-            .map_err(|error| XmlError::MalformedXml(format!("invalid XML version: {error}")))?;
-        let version = std::str::from_utf8(&version)
-            .map_err(|error| XmlError::InvalidUtf8(format!("invalid XML version: {error}")))?;
+        let version = declaration.version().map_err(|error| {
+            XmlError::MalformedXml(format!("invalid XML version: {error}"))
+        })?;
+        let version = std::str::from_utf8(&version).map_err(|error| {
+            XmlError::InvalidUtf8(format!("invalid XML version: {error}"))
+        })?;
         if version != xml_spec::XML_VERSION {
             return Err(XmlError::UnsupportedXmlVersion(version.to_string()));
         }
@@ -403,8 +412,9 @@ impl<'input> Parser<'input> {
             }
         };
 
-        self.document
-            .set_xml_declaration(Some(XmlDeclaration::new(version, encoding, standalone)));
+        self.document.set_xml_declaration(Some(XmlDeclaration::new(
+            version, encoding, standalone,
+        )));
         Ok(())
     }
 
@@ -420,13 +430,16 @@ impl<'input> Parser<'input> {
 
         let scope = self.extended_scope(start)?;
         let name = decode_bytes(start.name().into_inner(), "element name")?;
-        let qualified_name = QualifiedName::resolve_element_with_namespace_map(name, &scope)?;
+        let qualified_name =
+            QualifiedName::resolve_element_with_namespace_map(name, &scope)?;
         let element = self.document.create_element(qualified_name);
 
         let declarations = Self::namespace_declarations(start)?;
         for (prefix, uri) in declarations {
             match prefix {
-                Some(prefix) => element.declare_namespace(Namespace::prefixed(&uri, &prefix)?),
+                Some(prefix) => {
+                    element.declare_namespace(Namespace::prefixed(&uri, &prefix)?)
+                }
                 None if uri.is_empty() => element.undeclare_default_namespace(),
                 None => element.declare_namespace(Namespace::without_prefix(&uri)?),
             }
@@ -449,9 +462,14 @@ impl<'input> Parser<'input> {
             // rule: rule.attributes.entity-refs-expanded
             // rule: rule.attributes.char-refs-expanded
             let value = attribute
-                .normalized_value_with(XmlVersion::Explicit1_0, 1, resolve_predefined_entity)
+                .normalized_value_with(
+                    XmlVersion::Explicit1_0,
+                    1,
+                    resolve_predefined_entity,
+                )
                 .map_err(quick_error)?;
-            let name = QualifiedName::resolve_attribute_with_namespace_map(key, &scope)?;
+            let name =
+                QualifiedName::resolve_attribute_with_namespace_map(key, &scope)?;
             if attributes.contains_key(&name) {
                 // rule: rule.namespace-usage.attributes-unique-expanded-name
                 return Err(XmlError::DuplicateAttribute(name.to_string()));
@@ -556,7 +574,10 @@ impl<'input> Parser<'input> {
 
     /// Returns the namespace scope that applies to `start`: the enclosing scope plus the element's
     /// own declarations.
-    fn extended_scope(&self, start: &BytesStart<'_>) -> XmlResult<HashMap<Option<NCName>, String>> {
+    fn extended_scope(
+        &self,
+        start: &BytesStart<'_>,
+    ) -> XmlResult<HashMap<Option<NCName>, String>> {
         let mut scope = self
             .scopes
             .last()
@@ -583,7 +604,9 @@ impl<'input> Parser<'input> {
     /// errors of [`NCName::try_from`] if a prefix is not a valid `NCName`. Duplicate declarations
     /// are already rejected by the attribute iterator
     /// ([`rule.namespace-usage.attributes-unique-expanded-name`](crate::xml_spec::rule_set::rule_namespace_usage_attributes_unique_expanded_name)).
-    fn namespace_declarations(start: &BytesStart<'_>) -> XmlResult<Vec<(Option<NCName>, String)>> {
+    fn namespace_declarations(
+        start: &BytesStart<'_>,
+    ) -> XmlResult<Vec<(Option<NCName>, String)>> {
         let mut declarations = Vec::new();
         for attribute in start.attributes() {
             let attribute = attribute.map_err(attribute_error)?;
@@ -602,7 +625,11 @@ impl<'input> Parser<'input> {
                 continue;
             };
             let value = attribute
-                .normalized_value_with(XmlVersion::Explicit1_0, 1, resolve_predefined_entity)
+                .normalized_value_with(
+                    XmlVersion::Explicit1_0,
+                    1,
+                    resolve_predefined_entity,
+                )
                 .map_err(quick_error)?;
             declarations.push((prefix, value.to_string()));
         }
@@ -663,8 +690,8 @@ mod tests {
     #[test]
     fn a_collection_during_parsing_keeps_the_tree_intact() {
         let xml = sample(40);
-        let reference =
-            Document::parse_string(&xml).expect("parses with the default configuration");
+        let reference = Document::parse_string(&xml)
+            .expect("parses with the default configuration");
         let tiny = parse_with_tiny_arena(&xml);
 
         assert_eq!(tiny.node_count(), reference.node_count());
@@ -691,7 +718,8 @@ mod tests {
         let mut unclosed = sample(20);
         unclosed.truncate(unclosed.len() - "</root>".len());
 
-        let document = Document::with_gc_config(GcConfig::new().with_initial_capacity(2));
+        let document =
+            Document::with_gc_config(GcConfig::new().with_initial_capacity(2));
         let parsed = Parser::with_document(&unclosed, document.clone()).run();
         assert!(matches!(parsed, Err(XmlError::MalformedXml(_))));
         assert!(
@@ -700,7 +728,8 @@ mod tests {
         );
 
         // A mismatched end tag is reported as well.
-        let parsed = Parser::with_document("<root><child></root>", Document::empty()).run();
+        let parsed =
+            Parser::with_document("<root><child></root>", Document::empty()).run();
         assert!(matches!(parsed, Err(XmlError::MalformedXml(_))));
     }
 }

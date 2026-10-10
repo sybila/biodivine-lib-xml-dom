@@ -132,7 +132,11 @@ impl PyDocument {
     /// Raises:
     ///     XmlSyntaxError: if the target is not a valid XML name or matches `xml` case-insensitively,
     ///     or if the content contains `?>`.
-    pub fn create_processing_instruction(&self, target: &str, data: &str) -> PyResult<PyNode> {
+    pub fn create_processing_instruction(
+        &self,
+        target: &str,
+        data: &str,
+    ) -> PyResult<PyNode> {
         self.inner
             .create_processing_instruction(target, data)
             .map(PyNode::from)
@@ -268,7 +272,10 @@ impl PyDocument {
     ///     XmlNamespaceError: if a namespace is used illegally.
     #[staticmethod]
     #[pyo3(signature = (data))]
-    pub fn parse_bytes(py: Python<'_>, data: &Bound<'_, PyBytes>) -> PyResult<PyDocument> {
+    pub fn parse_bytes(
+        py: Python<'_>,
+        data: &Bound<'_, PyBytes>,
+    ) -> PyResult<PyDocument> {
         crate::io::parse_bytes(py, data)
     }
 

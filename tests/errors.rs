@@ -239,7 +239,10 @@ fn element_errors() {
 
     assert_variant(
         "root.set_attribute_checked(QualifiedName::without_namespace(",
-        root.set_attribute_checked(QualifiedName::without_namespace("a").unwrap(), "bad \u{1}"),
+        root.set_attribute_checked(
+            QualifiedName::without_namespace("a").unwrap(),
+            "bad \u{1}",
+        ),
         "InvalidText",
         |error| matches!(error, XmlError::InvalidText(_)),
     );
@@ -249,7 +252,9 @@ fn element_errors() {
     root.declare_namespace(ex.clone());
     assert_variant(
         "root.declare_namespace_checked( Namespace::prefixed('http://",
-        root.declare_namespace_checked(Namespace::prefixed("http://other.com", "ex").unwrap()),
+        root.declare_namespace_checked(
+            Namespace::prefixed("http://other.com", "ex").unwrap(),
+        ),
         "InvalidNamespace",
         |error| matches!(error, XmlError::InvalidNamespace(_)),
     );

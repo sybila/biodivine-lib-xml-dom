@@ -92,8 +92,8 @@ impl PyElement {
     /// Raises:
     ///     XmlSyntaxError: if `local_name` is not a valid XML name.
     pub fn attribute_local(&self, local_name: &str) -> PyResult<Option<String>> {
-        let local_name =
-            biodivine_lib_xml_dom::xml_spec::NCName::try_from(local_name).map_err(to_py_err)?;
+        let local_name = biodivine_lib_xml_dom::xml_spec::NCName::try_from(local_name)
+            .map_err(to_py_err)?;
         Ok(self
             .inner
             .attribute_local(&local_name)
@@ -192,9 +192,10 @@ impl PyElement {
         prefix: Option<&str>,
     ) -> PyResult<Option<Option<PyNamespace>>> {
         let prefix = match prefix {
-            Some(prefix) => {
-                Some(biodivine_lib_xml_dom::xml_spec::NCName::try_from(prefix).map_err(to_py_err)?)
-            }
+            Some(prefix) => Some(
+                biodivine_lib_xml_dom::xml_spec::NCName::try_from(prefix)
+                    .map_err(to_py_err)?,
+            ),
             None => None,
         };
         Ok(self
@@ -212,9 +213,10 @@ impl PyElement {
     #[pyo3(signature = (prefix = None))]
     pub fn get_namespace(&self, prefix: Option<&str>) -> PyResult<Option<PyNamespace>> {
         let prefix = match prefix {
-            Some(prefix) => {
-                Some(biodivine_lib_xml_dom::xml_spec::NCName::try_from(prefix).map_err(to_py_err)?)
-            }
+            Some(prefix) => Some(
+                biodivine_lib_xml_dom::xml_spec::NCName::try_from(prefix)
+                    .map_err(to_py_err)?,
+            ),
             None => None,
         };
         Ok(self
@@ -315,7 +317,10 @@ impl PyElement {
     }
 
     /// Creates a detached, shallow copy of this element in `target`.
-    pub fn shallow_clone_into(&self, target: &crate::document::PyDocument) -> PyElement {
+    pub fn shallow_clone_into(
+        &self,
+        target: &crate::document::PyDocument,
+    ) -> PyElement {
         PyElement::from(self.inner.shallow_clone_into(&target.inner))
     }
 

@@ -306,7 +306,9 @@ pub use crate::namespace::Namespace;
 pub use crate::node::{Node, NodeContent, NodeKind};
 pub use crate::node_id::{MAX_NODES, NodeId};
 pub use crate::qualified_name::QualifiedName;
-pub use crate::validation::{ValidationErrorKind, XmlValidationError, XmlValidationErrors};
+pub use crate::validation::{
+    ValidationErrorKind, XmlValidationError, XmlValidationErrors,
+};
 
 #[cfg(test)]
 mod tests {
@@ -322,7 +324,8 @@ mod tests {
     #[test]
     fn test_create_element() {
         let document = Document::empty();
-        let element = document.create_element(QualifiedName::without_namespace("test").unwrap());
+        let element =
+            document.create_element(QualifiedName::without_namespace("test").unwrap());
         assert_eq!(element.local_name(), "test");
         assert!(element.namespace().is_none());
         assert!(!element.is_attached());
@@ -331,8 +334,10 @@ mod tests {
     #[test]
     fn test_add_children() {
         let document = Document::empty();
-        let parent = document.create_element(QualifiedName::without_namespace("parent").unwrap());
-        let child = document.create_element(QualifiedName::without_namespace("child").unwrap());
+        let parent = document
+            .create_element(QualifiedName::without_namespace("parent").unwrap());
+        let child =
+            document.create_element(QualifiedName::without_namespace("child").unwrap());
 
         parent.append_child(child.clone());
         document.set_root(parent.clone());
@@ -347,8 +352,11 @@ mod tests {
     #[test]
     fn test_namespace_declaration() {
         let document = Document::empty();
-        let root = document.create_element(QualifiedName::without_namespace("root").unwrap());
-        root.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
+        let root =
+            document.create_element(QualifiedName::without_namespace("root").unwrap());
+        root.declare_namespace(
+            Namespace::prefixed("http://example.com", "ex").unwrap(),
+        );
 
         assert_eq!(
             root.get_namespace(Some(&nc_name("ex"))),
@@ -359,8 +367,11 @@ mod tests {
     #[test]
     fn test_qualified_name_resolution() {
         let document = Document::empty();
-        let root = document.create_element(QualifiedName::without_namespace("root").unwrap());
-        root.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
+        let root =
+            document.create_element(QualifiedName::without_namespace("root").unwrap());
+        root.declare_namespace(
+            Namespace::prefixed("http://example.com", "ex").unwrap(),
+        );
 
         let resolved = root.resolve_qualified_name("ex:test").unwrap();
         assert_eq!(resolved.local_name(), "test");
@@ -370,7 +381,8 @@ mod tests {
     #[test]
     fn test_document_reference() {
         let document = Document::empty();
-        let element = document.create_element(QualifiedName::without_namespace("test").unwrap());
+        let element =
+            document.create_element(QualifiedName::without_namespace("test").unwrap());
         document.set_root(element);
         assert!(document.root().is_some());
     }
@@ -384,12 +396,15 @@ mod tests {
         // The arena stores indices instead, so dropping every handle must free the document.
         let weak: Weak<crate::document::DocumentInner> = {
             let document = Document::empty();
-            let root = document.create_element(QualifiedName::without_namespace("root").unwrap());
-            let child = document.create_element(QualifiedName::without_namespace("child").unwrap());
+            let root = document
+                .create_element(QualifiedName::without_namespace("root").unwrap());
+            let child = document
+                .create_element(QualifiedName::without_namespace("child").unwrap());
             root.append_child(child.clone());
             document.set_root(root.clone());
-            root.clone()
-                .declare_namespace(Namespace::without_prefix("http://example.com").unwrap());
+            root.clone().declare_namespace(
+                Namespace::without_prefix("http://example.com").unwrap(),
+            );
 
             // One clone per live handle: the original `document` plus `root` and `child`.
             assert_eq!(StdArc::strong_count(&document.inner), 3);

@@ -158,9 +158,9 @@ impl PyNode {
 
     /// The `(target, data)` of this node as a processing instruction, or `None`.
     pub fn processing_instruction(&self) -> Option<(String, String)> {
-        self.inner
-            .processing_instruction()
-            .map(|(target, data)| (target.as_str().to_string(), data.as_str().to_string()))
+        self.inner.processing_instruction().map(|(target, data)| {
+            (target.as_str().to_string(), data.as_str().to_string())
+        })
     }
 
     /// Detaches this node from its parent and returns the previous parent.

@@ -17,8 +17,8 @@ use biodivine_lib_xml_dom::{Document, Element, Node, NodeId, NodeKind};
 use pyo3::prelude::*;
 
 use crate::{
-    PyDocument, PyElement, PyNamespace, PyNode, PyNodeArg, PyNodeId, PyNodeKind, PyQualifiedName,
-    PyWriteOptions,
+    PyDocument, PyElement, PyNamespace, PyNode, PyNodeArg, PyNodeId, PyNodeKind,
+    PyQualifiedName, PyWriteOptions,
 };
 
 #[test]
@@ -82,7 +82,8 @@ fn a_document_round_trips_through_the_bindings() {
 #[test]
 fn a_parsed_document_is_the_same_tree_as_the_serialized_one() {
     Python::attach(|py| {
-        let source = r#"<ex:root xmlns:ex="http://example.com"><ex:b a="1">t</ex:b></ex:root>"#;
+        let source =
+            r#"<ex:root xmlns:ex="http://example.com"><ex:b a="1">t</ex:b></ex:root>"#;
         let document = PyDocument::parse_string(py, source).unwrap();
         assert!(document.is_valid(py));
         assert_eq!(document.write_string(py, None).unwrap(), source);
@@ -105,11 +106,13 @@ fn a_validation_failure_carries_every_problem() {
     Python::attach(|py| {
         let document = PyDocument::new();
         let missing = PyNamespace::prefixed("http://x", "missing").unwrap();
-        let root =
-            document.create_element(&PyQualifiedName::with_namespace("root", &missing).unwrap());
+        let root = document.create_element(
+            &PyQualifiedName::with_namespace("root", &missing).unwrap(),
+        );
         document.set_root(&root).unwrap();
         let xml_namespace =
-            PyNamespace::prefixed("http://www.w3.org/XML/1998/namespace", "xml").unwrap();
+            PyNamespace::prefixed("http://www.w3.org/XML/1998/namespace", "xml")
+                .unwrap();
         root.set_attribute(
             &PyQualifiedName::with_namespace("space", &xml_namespace).unwrap(),
             "nope",
@@ -136,7 +139,8 @@ fn handles_can_be_moved_into_a_plain_rust_thread() {
     // No interpreter token is needed for any of this, which is the point: the handle is a
     // self-contained, thread-safe view of the document.
     let document = PyDocument::new();
-    let root = document.create_element(&PyQualifiedName::without_namespace("root").unwrap());
+    let root =
+        document.create_element(&PyQualifiedName::without_namespace("root").unwrap());
     document.set_root(&root).unwrap();
 
     let handle = root.node();
@@ -156,7 +160,8 @@ fn handles_can_be_moved_into_a_plain_rust_thread() {
 #[test]
 fn a_document_can_be_shared_by_several_threads() {
     let document = PyDocument::new();
-    let root = document.create_element(&PyQualifiedName::without_namespace("root").unwrap());
+    let root =
+        document.create_element(&PyQualifiedName::without_namespace("root").unwrap());
     document.set_root(&root).unwrap();
 
     let workers: Vec<_> = (0..4)
@@ -166,7 +171,9 @@ fn a_document_can_be_shared_by_several_threads() {
             std::thread::spawn(move || {
                 for _ in 0..100 {
                     let node = document
-                        .create_element(&PyQualifiedName::without_namespace("item").unwrap())
+                        .create_element(
+                            &PyQualifiedName::without_namespace("item").unwrap(),
+                        )
                         .node();
                     handle.append_child(PyNodeArg::Node(node.clone())).unwrap();
                     node.detach();

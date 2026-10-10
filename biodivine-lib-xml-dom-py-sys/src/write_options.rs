@@ -150,7 +150,8 @@ impl PyWriteOptions {
     /// Equality with another handle of the same type: the same node/document/value
     /// (Rust's `PartialEq`). Python object identity is *not* part of it.
     pub fn __eq__(&self, other: &Self) -> bool {
-        self.declaration == other.declaration && self.empty_elements == other.empty_elements
+        self.declaration == other.declaration
+            && self.empty_elements == other.empty_elements
     }
 }
 
@@ -181,7 +182,11 @@ impl PyXmlDeclaration {
     /// job, exactly as in Rust).
     #[new]
     #[pyo3(signature = (version = "1.0".to_string(), encoding = None, standalone = None))]
-    pub fn new(version: String, encoding: Option<String>, standalone: Option<bool>) -> Self {
+    pub fn new(
+        version: String,
+        encoding: Option<String>,
+        standalone: Option<bool>,
+    ) -> Self {
         XmlDeclaration::new(version, encoding, standalone).into()
     }
 

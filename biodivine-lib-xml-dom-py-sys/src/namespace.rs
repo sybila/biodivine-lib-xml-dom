@@ -110,7 +110,9 @@ impl PyNamespace {
     /// A debug representation for interactive use, not a serialization of the value.
     pub fn __repr__(&self) -> String {
         match self.inner.prefix_str() {
-            Some(prefix) => format!("Namespace({:?}, prefix={:?})", self.inner.uri(), prefix),
+            Some(prefix) => {
+                format!("Namespace({:?}, prefix={:?})", self.inner.uri(), prefix)
+            }
             None => format!("Namespace({:?})", self.inner.uri()),
         }
     }

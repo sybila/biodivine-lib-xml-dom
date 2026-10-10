@@ -6,7 +6,7 @@ use biodivine_lib_xml_dom::{
 use pyo3::prelude::*;
 
 use crate::error::XmlValidationError as PyValidationException;
-use crate::node_id::PyNodeId;
+use crate::node_id::{PyNodeId, raw_index};
 
 /// The kind of a node, without its payload.
 ///
@@ -92,7 +92,7 @@ impl PyXmlValidationError {
         format!(
             "ValidationError(kind={:?}, node={:?}, message={:?})",
             self.kind(),
-            self.inner.node().map(|node| node.index()),
+            self.inner.node().map(raw_index),
             self.message()
         )
     }

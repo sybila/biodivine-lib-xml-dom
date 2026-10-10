@@ -171,24 +171,55 @@ class Document:
     # -- nodes ----------------------------------------------------------------------------
     @property
     def node_count(self) -> int:
-        """The number of arena slots used (attached and detached nodes alike)."""
+        """The number of nodes the document currently holds (attached and detached alike).
+
+        Nodes that the garbage collector has reclaimed are not counted, so this number can go down.
+        """
         return self._document.node_count()
 
     def nodes(self) -> List[Node]:
-        """All nodes of this document, attached and detached alike, in creation order."""
+        """All nodes the document currently holds, in slot order.
+
+        The returned handles keep their nodes alive for as long as the list exists; prefer walking
+        from :attr:`root` when you only need the tree.
+        """
         return _convert.wrap_many(self._document.nodes())
 
-    def node(self, id: Union[NodeId, int]) -> Optional[Node]:
-        """Looks up a node by id, or returns ``None`` if the id does not belong to this document.
+    def collect_garbage(self) -> "GcStats":
+        """Reclaims every node that no handle and no root can reach, and reports what happened.
 
-        Accepts a :class:`NodeId` (the precise form) or a plain arena index, which is handy when
-        reading an id out of a validation problem: ``document.node(int(problem.node))``.
+        The collector also runs automatically when the arena is full, so this is for bounding memory
+        earlier or for observing what is still alive::
+
+            document = Document()
+            temporary = document.create_text("scratch")
+            assert document.collect_garbage().collected == 0   # the handle keeps it alive
+            del temporary
+            assert document.collect_garbage().collected == 1   # now it is gone
         """
-        if isinstance(id, NodeId):
-            return _convert.optional(self._document.node(id._id))
-        index = int(id)
-        nodes = self.nodes()
-        return nodes[index] if 0 <= index < len(nodes) else None
+        from .gc import GcStats
+
+        return GcStats._wrap(self._document.collect_garbage())
+
+    @property
+    def capacity(self) -> int:
+        """The number of nodes the document may hold before its arena is considered full.
+
+        The arena grows geometrically and never shrinks, so this is a high-water mark rather than the
+        current memory usage; use :attr:`node_count` for the number of nodes.
+        """
+        return self._document.capacity()
+
+    def node(self, id: Union[NodeId, int]) -> Optional[Node]:
+        """Looks up a node by id, or returns ``None`` if no node lives there.
+
+        Accepts a :class:`NodeId` or a plain integer slot number. ``None`` means that the id was
+        never handed out by this document or that the node it referred to has since been reclaimed
+        by the garbage collector, which is handy when reading an id out of a validation problem:
+        ``document.node(int(problem.node))``.
+        """
+        node_id = id if isinstance(id, NodeId) else NodeId(int(id))
+        return _convert.optional(self._document.node(node_id._id))
 
     # -- copying and identity --------------------------------------------------------------
     def copy(self) -> "Document":

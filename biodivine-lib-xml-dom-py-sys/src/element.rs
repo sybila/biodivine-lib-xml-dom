@@ -14,6 +14,7 @@ use std::hash::{Hash, Hasher};
 use crate::error::to_py_err;
 use crate::namespace::PyNamespace;
 use crate::node::PyNode;
+use crate::node_id::raw_index;
 use crate::qualified_name::PyQualifiedName;
 
 /// A handle to an element node of a [`PyDocument`](crate::PyDocument).
@@ -348,7 +349,7 @@ impl PyElement {
         format!(
             "Element({}, id={}, attached={})",
             self.inner.qualified_name(),
-            self.inner.id().index(),
+            raw_index(self.inner.id()),
             self.inner.is_attached()
         )
     }

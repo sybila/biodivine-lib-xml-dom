@@ -8,7 +8,7 @@ use std::hash::{Hash, Hasher};
 use crate::document::PyDocument;
 use crate::element::PyElement;
 use crate::error::to_py_err;
-use crate::node_id::PyNodeId;
+use crate::node_id::{PyNodeId, raw_index};
 use crate::validation::PyNodeKind;
 
 /// Either a [`PyNode`] or a [`PyElement`].
@@ -295,7 +295,7 @@ impl PyNode {
         format!(
             "Node({}, id={}, attached={})",
             kind,
-            self.inner.id().index(),
+            raw_index(self.inner.id()),
             self.inner.is_attached()
         )
     }

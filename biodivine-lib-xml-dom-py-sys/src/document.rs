@@ -7,6 +7,7 @@ use std::hash::{Hash, Hasher};
 
 use crate::element::PyElement;
 use crate::error::to_py_err;
+use crate::gc::PyGcStats;
 use crate::node::PyNode;
 use crate::node_id::PyNodeId;
 use crate::qualified_name::PyQualifiedName;
@@ -189,19 +190,39 @@ impl PyDocument {
         py.detach(|| document.is_valid())
     }
 
-    /// The number of arena slots this document uses (attached and detached nodes alike).
+    /// The number of nodes this document currently holds.
+    ///
+    /// Attached and detached nodes are counted alike; nodes that the garbage collector has
+    /// reclaimed are not.
     pub fn node_count(&self) -> usize {
         self.inner.node_count()
     }
 
-    /// All nodes of this document, attached and detached alike, in creation order.
+    /// All nodes this document currently holds, in slot order.
+    ///
+    /// The returned handles keep their nodes alive for as long as the list exists.
     pub fn nodes(&self) -> Vec<PyNode> {
         self.inner.nodes().into_iter().map(PyNode::from).collect()
     }
 
-    /// Looks up a node by id, or `None` if the id does not belong to this document.
+    /// Looks up a node by id, or `None` if the id does not refer to a live node of this document.
     pub fn node(&self, id: &PyNodeId) -> Option<PyNode> {
         self.inner.node(id.inner).map(PyNode::from)
+    }
+
+    /// Reclaims every node that is unreachable from a handle or from the document root, and
+    /// returns what the collection did.
+    ///
+    /// The collector runs automatically when the arena is full, so calling this is only needed to
+    /// bound memory earlier, or to observe what is still alive.
+    pub fn collect_garbage(&self, py: Python<'_>) -> PyGcStats {
+        let document = self.inner.clone();
+        py.detach(|| document.collect_garbage()).into()
+    }
+
+    /// The number of nodes this document may hold before it considers its arena full.
+    pub fn capacity(&self) -> usize {
+        self.inner.capacity()
     }
 
     /// Whether two handles refer to the same document.

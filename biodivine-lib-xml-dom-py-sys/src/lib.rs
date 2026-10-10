@@ -47,6 +47,7 @@
 mod document;
 mod element;
 mod error;
+mod gc;
 mod io;
 mod namespace;
 mod node;
@@ -62,6 +63,7 @@ use pyo3::prelude::*;
 
 pub use crate::document::PyDocument;
 pub use crate::element::PyElement;
+pub use crate::gc::PyGcStats;
 pub use crate::io::{
     parse_bytes, parse_file, parse_string, write_file, write_file_with, write_string,
     write_string_with,
@@ -88,6 +90,7 @@ fn _sys(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
 
     module.add_class::<PyNodeId>()?;
+    module.add_class::<PyGcStats>()?;
     module.add_class::<PyNamespace>()?;
     module.add_class::<PyQualifiedName>()?;
     module.add_class::<PyDocument>()?;

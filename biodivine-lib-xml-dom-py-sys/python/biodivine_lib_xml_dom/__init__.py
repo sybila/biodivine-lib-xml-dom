@@ -55,6 +55,7 @@ from .errors import (
     XmlSyntaxError,
     XmlValidationError,
 )
+from .gc import GcStats
 from .name import QualifiedName
 from .namespace import Namespace
 from .node import Node, NodeKind
@@ -69,6 +70,7 @@ __all__ = [
     "Document",
     "Element",
     "EmptyElementStyle",
+    "GcStats",
     "Namespace",
     "Node",
     "NodeId",

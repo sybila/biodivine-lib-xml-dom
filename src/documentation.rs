@@ -11,13 +11,13 @@
 //! | [`bindings`] | the Rust ↔ Python mapping, item by item, with the deliberate differences |
 //! | [`rule_coverage`] | which XML specification rules this library acts on, in which layer, and which are deliberately out of scope |
 //!
-//! The pages are the repository documents themselves (`docs/design/*.md`), included verbatim with
-//! [`include_str!`], so a change to a document cannot leave the API documentation behind — and the
-//! documents stay readable in a plain editor or on a code host.
+//! The pages are the repository's design documents, included verbatim with [`include_str!`], so a
+//! change to a document cannot leave the API documentation behind — and the documents stay readable
+//! in a plain editor or on a code host.
 //!
 //! The XML rules themselves live next to the specification types in
 //! [`xml_spec::rule_set`](crate::xml_spec::rule_set), and the documentation book that teaches the
-//! library is in `docs/book/`.
+//! library ships with the repository next to them.
 
 /// How the library is built and why, including the trade-offs each decision accepts.
 #[doc = include_str!("../docs/design/architecture.md")]

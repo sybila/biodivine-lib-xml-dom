@@ -30,6 +30,10 @@ exercise it directly:
    it describes moving from an older version.
 5. **ASCII-art diagrams** — box-drawing characters in documentation; diagrams are SVG files under
    `docs/assets/` instead.
+6. **path case** — every file a `include_str!` directive names must be tracked under exactly that
+   spelling. The filesystems this project is developed on are case-insensitive, so a wrong-case path
+   would compile here and fail on a case-sensitive checkout; comparing against `git ls-files` catches
+   it.
 
 Every category reports the file, the line and the offending text, and the script exits non-zero if
 anything was found. `--self-test` feeds each category a positive and a negative sample and asserts
@@ -71,7 +75,9 @@ RULE_PATH_FILES = {
 #: Every way a rule file name appears in the sweep: a path (`rule.a.b.md`) or a glob (`rule.*.md`).
 RULE_PATH_ANY = re.compile(r"rule\.[^\s\"'`)\]]*\.md")
 
-#: Files whose doc comments are *not* rendered publicly and may therefore name internal modules.
+#: Files whose doc comments name internal modules on purpose because they implement them. Every
+#: other file's doc comments are public documentation, and the rendered-prose pass checks the
+#: public module `documentation` as well, so an internal name cannot hide there.
 PRIVATE_DOC_FILES = {
     "src/arena.rs",
     "src/arena/gc.rs",
@@ -84,7 +90,6 @@ PRIVATE_DOC_FILES = {
     "src/io/write.rs",
     "src/interner.rs",
     "src/ref_count.rs",
-    "src/documentation.rs",
 }
 
 INSTRUCTION_PATTERNS = [
@@ -95,17 +100,35 @@ INSTRUCTION_PATTERNS = [
     (re.compile(r"PLAN\.md"), "a reference to a deleted document"),
 ]
 
-DOC_PATH = re.compile(r"docs/(?:design|book)/[A-Za-z0-9._-]+")
+#: A `docs/…` path as it can appear in prose: with or without a trailing file name, with wildcards
+#: (`docs/design/*.md`) and with a trailing slash (`docs/book/`).
+DOC_PATH = re.compile(r"docs/(?:design|book)?/?[A-Za-z0-9._*-]*")
 #: The one place allowed to hold a document path: the include directives of the documentation
 #: module. Their number is checked against the number of documents.
 DOC_PATH_ALLOWED = re.compile(r'include_str!\("\.\./docs/design/[a-z-]+\.md"\)')
 
 RULE_PATH = re.compile(r"(?:specification/rules/)?rule\.[a-z0-9-]+\.[a-z0-9-]+\.md")
-INTERNAL_MODULE = re.compile(
-    r"crate::(?:arena|error|interner|io|node_id|qualified_name|ref_count|validation)\b"
+#: The private modules of the crate. Their types are public, but the *paths* are not part of the
+#: public API, so documentation must name the type rather than the module it is defined in.
+INTERNAL_MODULES = (
+    "arena",
+    "document",
+    "element",
+    "error",
+    "interner",
+    "io",
+    "namespace",
+    "node",
+    "node_id",
+    "qualified_name",
+    "ref_count",
+    "validation",
 )
+INTERNAL_MODULE = re.compile(r"crate::(?:" + "|".join(INTERNAL_MODULES) + r")\b")
+#: The lookbehind keeps public sub-modules out of it: `xml_spec::validation::check_…` is a public
+#: path, while a bare `validation::check_…` or `crate::validation` names the private module.
 INTERNAL_MODULE_RENDERED = re.compile(
-    r"(?:crate::)?(?:arena|error|interner|node_id|qualified_name|ref_count)::[a-z_]"
+    r"(?<![\w:])(?:crate::)?(?:" + "|".join(INTERNAL_MODULES) + r")::[a-z_]"
 )
 MIGRATION = re.compile(r"\bmigrat|back[- ]?compat|backwards? compatib", re.I)
 ASCII_ART = re.compile(r"[│├└─┌┐┘┴┬┼┤╭╮╰╯]")
@@ -194,6 +217,22 @@ def ascii_art(text: str) -> list[str]:
 
 
 # --------------------------------------------------------------------------------------------
+# Category 6: path case
+# --------------------------------------------------------------------------------------------
+
+def include_paths(text: str, source: Path) -> list[str]:
+    """Every path an `include_str!` directive in `text` names, as a repository-relative path."""
+    paths = []
+    for match in re.finditer(r'include_str!\("([^"]+)"\)', text):
+        candidate = (source.parent / match.group(1)).resolve()
+        try:
+            paths.append(candidate.relative_to(ROOT).as_posix())
+        except ValueError:
+            paths.append(match.group(1))
+    return paths
+
+
+# --------------------------------------------------------------------------------------------
 # Walking the repository
 # --------------------------------------------------------------------------------------------
 
@@ -255,12 +294,11 @@ def sweep_sources(include_book: bool) -> None:
             if ascii_art(line):
                 report("ASCII art", path, number, line)
 
-        if relative not in PRIVATE_DOC_FILES:
-            for number, line in doc_comments(path):
-                if internal_modules(line):
-                    report("internal module in public docs", path, number, line)
-                if doc_paths(line):
-                    report("repository document path in crate docs", path, number, line)
+        for number, line in doc_comments(path):
+            if relative not in PRIVATE_DOC_FILES and internal_modules(line):
+                report("internal module in public docs", path, number, line)
+            if doc_paths(line):
+                report("repository document path in crate docs", path, number, line)
 
     # Both allowlists are pinned to what is actually needed, so neither can go stale silently.
     documents = sorted((ROOT / "docs" / "design").glob("*.md"))
@@ -295,15 +333,23 @@ def sweep_rendered() -> None:
                 "(scripts/verify.sh does)"
             )
             return
-        for module in sorted(DOCS_SKIP - {"documentation"}):
-            page = docs / module / "index.html"
-            if page.is_file():
-                report(
-                    "rendered docs",
-                    page,
-                    0,
-                    f"the internal module {module} has a module page in a public build",
-                )
+        # A public build may contain redirect stubs for a re-exported item, but it never contains a
+        # *module* page for an internal module; `--document-private-items` does.
+        private_pages = [
+            module
+            for module in sorted(DOCS_SKIP - {"documentation"})
+            if (docs / module / "index.html").is_file()
+        ]
+        if private_pages:
+            report(
+                "rendered docs",
+                docs,
+                0,
+                "this looks like a `--document-private-items` build (pages for "
+                + ", ".join(private_pages)
+                + " exist): rebuild the public documentation before sweeping it",
+            )
+            continue
         for path in sorted(docs.rglob("*.html")):
             parts = path.relative_to(docs).parts
             if parts[0] in DOCS_SKIP or "src" in parts:
@@ -318,21 +364,62 @@ def sweep_rendered() -> None:
 # Self-test
 # --------------------------------------------------------------------------------------------
 
+def tracked_files() -> set[str]:
+    """Every file git tracks, with its exact spelling."""
+    result = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True)
+    if result.returncode != 0:
+        return set()
+    return set(result.stdout.split())
+
+
+def untracked_includes(text: str, source: Path, tracked: set[str]) -> list[str]:
+    """The `include_str!` paths of `text` that are not tracked under exactly that spelling."""
+    return [relative for relative in include_paths(text, source) if relative not in tracked]
+
+
+def sweep_path_case(include_book: bool) -> None:
+    """Every included file must be tracked under exactly the spelling the directive uses."""
+    tracked = tracked_files()
+    if not tracked:
+        violations.append("path case: `git ls-files` produced nothing; is this a git checkout?")
+        return
+    for path in sources(include_book):
+        if path.suffix != ".rs":
+            continue
+        for relative in untracked_includes(path.read_text(encoding="utf-8"), path, tracked):
+            report(
+                "path case",
+                path,
+                0,
+                f"`{relative}` is not tracked under this spelling: the checkout that finds it "
+                "may be case-insensitive",
+            )
+
+
 def self_test() -> int:
     """Feeds every category a positive and a negative sample, and asserts the outcome."""
     cases: list[tuple[str, object, str, str]] = [
         ("instruction language", instruction_language, "see requirement (3) for why", "see the design notes"),
         (
-            "repository document path",
+            "repository document path (file)",
             doc_paths,
             "see `docs/design/architecture.md`",
             'see [`architecture`](crate::documentation::architecture)',
         ),
+        ("repository document path (glob)", doc_paths, "in `docs/design/*.md`", "in the design documents"),
+        ("repository document path (directory)", doc_paths, "in `docs/book/`", "in the book"),
+        ("internal module (public type module)", internal_modules, "see [`crate::node::Node`]", "see [`Node`]"),
         ("rule markdown path", rule_paths, "as in rule.attributes.id-must-be-name.md", "as in `rule.attributes.id-must-be-name`"),
         ("internal module", internal_modules, "see [`crate::arena`] for the model", "see [`Document`] for the model"),
         ("internal module (rendered)", internal_modules_rendered, "<p>see arena::gc for the model</p>", '<p title="arena::gc">see <a href="x">GcConfig</a></p>'),
         ("migration wording", migration_wording, "migrating from 0.1 is easy", "the library has not been published"),
         ("ASCII art", ascii_art, "root\n├── child", "root (one child)"),
+        (
+            "path case",
+            lambda text: untracked_includes(text, ROOT / "src" / "lib.rs", tracked_files()),
+            'include_str!("../src/does-not-exist.rs")',
+            'include_str!("../docs/assets/model.svg")',
+        ),
     ]
     problems = []
     for name, check, positive, negative in cases:
@@ -359,6 +446,7 @@ def main() -> int:
         return self_test()
 
     sweep_sources(arguments.include_book)
+    sweep_path_case(arguments.include_book)
     if not arguments.skip_rendered:
         sweep_rendered()
 

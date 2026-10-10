@@ -657,10 +657,26 @@ fn validate_xml_prefix_binding(uri: Option<&str>) -> Result<(), XmlError> {
     }
 }
 
-/// Helper function to create an NCName. Panics if the string is invalid.
-/// Primarily intended for use in tests and examples.
+/// Creates an [`NCName`] from a string literal.
+///
+/// This is the convenience constructor for names that are known to be valid, which is what tests and
+/// the examples in the documentation book need; use [`NCName::try_from`] for input that comes from
+/// outside the program, so that an invalid name stays a typed error.
+///
+/// # Panics
+///
+/// Panics if `s` is not a valid `NCName`.
+///
+/// # Examples
+///
+/// ```rust
+/// use biodivine_lib_xml_dom::xml_spec::{NCName, nc_name};
+///
+/// assert_eq!(nc_name("child"), NCName::try_from("child").unwrap());
+/// ```
+#[track_caller]
 pub fn nc_name(s: &str) -> NCName {
-    NCName::try_from(s).unwrap()
+    NCName::try_from(s).expect("`nc_name` expects a valid NCName")
 }
 
 #[cfg(test)]

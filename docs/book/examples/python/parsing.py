@@ -2,7 +2,9 @@
 
 import biodivine_lib_xml_dom as xml
 
-# A round trip is faithful: prefixes, declarations, escaping and the declaration survive.
+# ANCHOR: roundtrip
+# A round trip is faithful: prefixes, declarations, escaping and the
+# declaration survive.
 source = (
     '<?xml version="1.0" encoding="UTF-8"?><ex:a xmlns:ex="http://e">'
     '<ex:b x="1 &amp; 2">t</ex:b><!--c--><![CDATA[<raw>]]><?pi data?></ex:a>'
@@ -10,14 +12,18 @@ source = (
 document = xml.parse(source)
 assert xml.write(document) == source
 assert document.xml_declaration is not None
+# ANCHOR_END: roundtrip
 
+# ANCHOR: options
 # Output options.
 options = xml.WriteOptions(
     declaration=xml.DeclarationStyle.Never,
     empty_elements=xml.EmptyElementStyle.ExplicitEndTag,
 )
 assert xml.write(xml.parse("<a><b/></a>"), options) == "<a><b></b></a>"
+# ANCHOR_END: options
 
+# ANCHOR: errors
 # Malformed input raises a typed error instead of panicking.
 for bad in [
     "<a>",                      # unclosed element
@@ -35,8 +41,22 @@ for bad in [
         print(f"{bad:26} -> {error}")
     except xml.XmlNamespaceError as error:
         print(f"{bad:26} -> {error}")
+# ANCHOR_END: errors
 
+# ANCHOR: other_nodes
+# Text, comments, CDATA sections and processing instructions are separate node kinds.
+mixed = xml.parse("<a>b<!--c--><![CDATA[<raw>]]><?pi data?></a>")
+assert [child.kind for child in mixed.root] == [
+    xml.NodeKind.Text,
+    xml.NodeKind.Comment,
+    xml.NodeKind.CData,
+    xml.NodeKind.ProcessingInstruction,
+]
+# ANCHOR_END: other_nodes
+
+# ANCHOR: entities
 # Predefined entities and character references are expanded.
 text = xml.parse("<a>AT&amp;T &#65;</a>")
 assert text.root[0].text() == "AT&T A"
 print(xml.write(document))
+# ANCHOR_END: entities

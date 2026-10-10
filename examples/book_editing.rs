@@ -8,11 +8,14 @@ fn main() {
     let document = Document::parse_string("<root><a/><b/><c/></root>").unwrap();
     let root = document.root().unwrap();
 
+    // ANCHOR: handles
     // Handles are cheap: cloning one copies the *handle*, not the node.
     let a = root.child_elements()[0].clone();
     let a_again = a.clone();
     assert!(a.ptr_eq(&a_again));
+    // ANCHOR_END: handles
 
+    // ANCHOR: traversal
     // Traversal.
     assert_eq!(root.children().len(), 3);
     assert_eq!(
@@ -28,7 +31,9 @@ fn main() {
         "c"
     );
     assert_eq!(a.index_in_parent(), Some(0));
+    // ANCHOR_END: traversal
 
+    // ANCHOR: editing
     // Structural editing is atomic and cycle-safe.
     let x = document.create_element(QualifiedName::without_namespace("x").unwrap());
     root.insert_child(1, x.clone());
@@ -42,35 +47,47 @@ fn main() {
     x.detach();
     root.insert_after(a.clone(), x.clone());
     assert_eq!(root.children().len(), 4);
+    // ANCHOR_END: editing
 
+    // ANCHOR: replace
     // Replacing leaves the old node detached but alive.
     let replacement =
         document.create_element(QualifiedName::without_namespace("y").unwrap());
     let old = x.replace_with(replacement);
     assert!(!old.is_attached());
     assert_eq!(old.as_element().unwrap().local_name(), "x");
+    // ANCHOR_END: replace
 
+    // ANCHOR: errors
     // Cycles and foreign documents are errors, not silent corruption.
     assert!(root.append_child_checked(root.clone()).is_err());
     let other = Document::empty();
     let foreign = other.create_element(QualifiedName::without_namespace("f").unwrap());
     assert!(root.append_child_checked(foreign).is_err());
+    // ANCHOR_END: errors
 
-    // A fresh node is detached (but already belongs to a document) until it is attached.
+    // ANCHOR: detached
+    // A fresh node is detached (but already belongs to a document) until it is
+    // attached.
     let detached =
         document.create_element(QualifiedName::without_namespace("d").unwrap());
     assert!(!detached.is_attached());
     root.append_child(detached.clone());
     assert!(detached.is_attached());
+    // ANCHOR_END: detached
 
+    // ANCHOR: clones
     // Clones: `deep_clone` copies the subtree, `shallow_clone` only the node.
     let deep = root.deep_clone();
     assert_eq!(deep.children().len(), root.children().len());
     assert!(!deep.is_attached());
     let shallow = root.shallow_clone();
     assert!(shallow.children().is_empty());
+    // ANCHOR_END: clones
 
-    // Copying into another document is the sanctioned way to move a tree between documents.
+    // ANCHOR: import
+    // Copying into another document is the sanctioned way to move a tree between
+    // documents.
     let target = Document::empty();
     let imported = root.deep_clone_into(&target);
     assert!(imported.belongs_to(&target));
@@ -81,4 +98,5 @@ fn main() {
     assert!(target.is_valid());
 
     println!("{}", document.write_string().unwrap());
+    // ANCHOR_END: import
 }

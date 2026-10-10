@@ -5,8 +5,9 @@
 use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
 
 fn main() {
-    // A document assembled through the API is not validated as you edit: edits are silent, and
-    // `validate` is where you ask.
+    // ANCHOR: silent
+    // A document assembled through the API is not validated as you edit: edits are
+    // silent, and `validate` is where you ask.
     let document = Document::empty();
     let missing = Namespace::prefixed("http://example.com", "ex").unwrap();
     let root = document
@@ -22,9 +23,11 @@ fn main() {
         QualifiedName::with_namespace("id", &xml).unwrap(),
         "not a name",
     );
+    // ANCHOR_END: silent
 
-    // Every problem is reported in one call, with the node it belongs to and the rule it comes
-    // from - so a whole class of issues can be fixed in one sweep.
+    // ANCHOR: problems
+    // Every problem is reported in one call, with the node it belongs to and the
+    // rule it comes from, so a whole class of issues can be fixed in one sweep.
     let errors = document.validate().unwrap_err();
     assert_eq!(errors.len(), 3);
     for error in &errors {
@@ -36,7 +39,9 @@ fn main() {
         );
     }
     assert!(!document.is_valid());
+    // ANCHOR_END: problems
 
+    // ANCHOR: fix
     // Fixing the three problems makes the document valid.
     root.set_qualified_name(QualifiedName::with_namespace("root", &missing).unwrap());
     root.declare_namespace(missing);
@@ -46,6 +51,7 @@ fn main() {
     );
     root.remove_attribute(&QualifiedName::with_namespace("id", &xml).unwrap());
     assert!(document.is_valid());
+    // ANCHOR_END: fix
 
     // A parsed document that satisfies the specification is valid too.
     assert!(

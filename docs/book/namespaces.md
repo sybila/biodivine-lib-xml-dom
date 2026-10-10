@@ -8,6 +8,27 @@ their local names and their *URIs* match; the prefix is presentation. That is wh
 `<p:x xmlns:p="u"/>` and `<q:x xmlns:q="u"/>` the same element — which is exactly what the XML
 Namespaces specification means by an expanded name.
 
+::::{tab-set}
+:::{tab-item} Rust
+:sync: rust
+```{literalinclude} ../../examples/book_namespaces.rs
+:language: rust
+:start-after: ANCHOR: parse
+:end-before: ANCHOR_END: parse
+:dedent:
+```
+:::
+:::{tab-item} Python
+:sync: python
+```{literalinclude} examples/python/namespaces.py
+:language: python
+:start-after: ANCHOR: parse
+:end-before: ANCHOR_END: parse
+:dedent:
+```
+:::
+::::
+
 ## Scope
 
 A declaration applies from the start tag that carries it to the end of the corresponding end tag, so
@@ -20,20 +41,72 @@ one, an unprefixed element name takes whatever the default namespace is in scope
 :sync: rust
 ```{literalinclude} ../../examples/book_namespaces.rs
 :language: rust
-:lines: 8-33
+:start-after: ANCHOR: resolve
+:end-before: ANCHOR_END: resolve
+:dedent:
 ```
 :::
 :::{tab-item} Python
 :sync: python
 ```{literalinclude} examples/python/namespaces.py
 :language: python
-:lines: 4-20
+:start-after: ANCHOR: resolve
+:end-before: ANCHOR_END: resolve
+:dedent:
 ```
 :::
 ::::
 
 The `xml` prefix is special: it is bound to `http://www.w3.org/XML/1998/namespace` without a
 declaration, so `xml:lang`, `xml:space` and `xml:id` always resolve.
+
+## Attributes and the `xml` prefix
+
+Attributes are expanded names too, with one twist: an unprefixed attribute is in *no* namespace,
+even when a default namespace is in scope. The `xml` prefix, on the other hand, is always bound
+to its reserved URI, so `xml:lang` works without any declaration.
+
+::::{tab-set}
+:::{tab-item} Rust
+:sync: rust
+```{literalinclude} ../../examples/book_namespaces.rs
+:language: rust
+:start-after: ANCHOR: attributes
+:end-before: ANCHOR_END: attributes
+:dedent:
+```
+:::
+:::{tab-item} Python
+:sync: python
+```{literalinclude} examples/python/namespaces.py
+:language: python
+:start-after: ANCHOR: attributes
+:end-before: ANCHOR_END: attributes
+:dedent:
+```
+:::
+::::
+
+::::{tab-set}
+:::{tab-item} Rust
+:sync: rust
+```{literalinclude} ../../examples/book_namespaces.rs
+:language: rust
+:start-after: ANCHOR: xml_prefix
+:end-before: ANCHOR_END: xml_prefix
+:dedent:
+```
+:::
+:::{tab-item} Python
+:sync: python
+```{literalinclude} examples/python/namespaces.py
+:language: python
+:start-after: ANCHOR: xml_prefix
+:end-before: ANCHOR_END: xml_prefix
+:dedent:
+```
+:::
+::::
 
 ## `xmlns=""`
 
@@ -45,14 +118,18 @@ tree records the declaration explicitly, so it survives a round trip:
 :sync: rust
 ```{literalinclude} ../../examples/book_namespaces.rs
 :language: rust
-:lines: 35-44
+:start-after: ANCHOR: undeclare
+:end-before: ANCHOR_END: undeclare
+:dedent:
 ```
 :::
 :::{tab-item} Python
 :sync: python
 ```{literalinclude} examples/python/namespaces.py
 :language: python
-:lines: 22-27
+:start-after: ANCHOR: undeclare
+:end-before: ANCHOR_END: undeclare
+:dedent:
 ```
 :::
 ::::
@@ -69,14 +146,18 @@ output. The contract is: **edits are silent, `validate` reports**.
 :sync: rust
 ```{literalinclude} ../../examples/book_namespaces.rs
 :language: rust
-:lines: 46-56
+:start-after: ANCHOR: silent
+:end-before: ANCHOR_END: silent
+:dedent:
 ```
 :::
 :::{tab-item} Python
 :sync: python
 ```{literalinclude} examples/python/namespaces.py
 :language: python
-:lines: 29-37
+:start-after: ANCHOR: silent
+:end-before: ANCHOR_END: silent
+:dedent:
 ```
 :::
 ::::

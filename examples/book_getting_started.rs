@@ -7,6 +7,7 @@
 use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
 
 fn main() {
+    // ANCHOR: document
     let document = Document::empty();
     assert!(document.root().is_none());
 
@@ -21,17 +22,25 @@ fn main() {
     child.set_attribute(QualifiedName::without_namespace("id").unwrap(), "first");
     child.append_child(document.create_text("Hello, World!").unwrap());
     root.append_child(child);
+    // ANCHOR_END: document
 
+    // ANCHOR: serialize
     assert_eq!(
         document.write_string().unwrap(),
-        r#"<ex:root xmlns:ex="http://example.com"><ex:child id="first">Hello, World!</ex:child></ex:root>"#
+        concat!(
+            r#"<ex:root xmlns:ex="http://example.com">"#,
+            r#"<ex:child id="first">Hello, World!</ex:child></ex:root>"#
+        )
     );
     assert!(document.is_valid());
+    // ANCHOR_END: serialize
 
-    // Element and attribute names are *expanded* names: the prefix is part of the namespace, not of
-    // the local name.
+    // ANCHOR: names
+    // Element and attribute names are *expanded* names: the prefix is part of the
+    // namespace, not of the local name.
     let child = &root.child_elements()[0];
     assert_eq!(child.local_name(), "child");
     assert_eq!(child.namespace().unwrap().uri(), "http://example.com");
     println!("{}", document.write_string().unwrap());
+    // ANCHOR_END: names
 }

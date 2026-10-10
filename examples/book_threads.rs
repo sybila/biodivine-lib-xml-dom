@@ -10,6 +10,7 @@ fn main() {
         document.create_element(QualifiedName::without_namespace("root").unwrap());
     document.set_root(root.clone());
 
+    // ANCHOR: threads
     // Handles are `Send + Sync`: pass the document, or a node, to another thread.
     let workers: Vec<_> = (0..4)
         .map(|index| {
@@ -30,9 +31,12 @@ fn main() {
     for worker in workers {
         worker.join().unwrap();
     }
+    // ANCHOR_END: threads
 
-    // Readers can run concurrently with each other; a read never sees a half-finished edit,
-    // because every operation is one critical section on the document's single lock.
+    // ANCHOR: readers
+    // Readers can run concurrently with each other; a read never sees a
+    // half-finished edit, because every operation is one critical section on the
+    // document's single lock.
     let readers: Vec<_> = (0..4)
         .map(|_| {
             let document = document.clone();
@@ -41,6 +45,7 @@ fn main() {
                 for _ in 0..50 {
                     total += document.root().unwrap().children().len();
                     let _ = document.write_string().unwrap();
+                    // ANCHOR_END: readers
                 }
                 total
             })

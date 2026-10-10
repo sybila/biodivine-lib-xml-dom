@@ -2,34 +2,34 @@
 
 import biodivine_lib_xml_dom as xml
 
+# ANCHOR: mapping
+# Iterating children and reading an attribute by local name are the Pythonic
+# spellings of the Rust `child_elements()` and `attribute_local()`.
 document = xml.parse('<root><child class="a"/><child class="b"/></root>')
 root = document.root
-
-# Iteration, indexing and length over children.
 assert [child.local_name for child in root] == ["child", "child"]
+assert root[0].get("class") == "a"
+# ANCHOR_END: mapping
+
+# ANCHOR: indexing
+# Indexing by position and `len` are the Pythonic spellings of `children.get(i)`.
 assert root[1].local_name == "child"
 assert len(root) == 2
+# ANCHOR_END: indexing
 
-# `attributes` is a dict keyed by `QualifiedName`; `get`/`set` accept a plain local name.
+# ANCHOR: handles
+# A handle is an identity: it can be used as a dictionary key, and
+# `document`/`id`/`parent` are properties.
 child = root[0]
-assert child.attributes == {xml.QualifiedName("class"): "a"}
-assert child.get("class") == "a"
-child.set_attribute("class", "changed")
-assert child.get(("class", None)) == "changed"
-
-# Names are accepted as a string, as `(local, namespace)` or as a `QualifiedName`.
-ex = xml.Namespace("http://example.com", "ex")
-assert str(document.create_element("plain").qualified_name) == "plain"
-assert str(document.create_element(("ns", ex)).qualified_name) == "ex:ns"
-assert str(document.create_element(xml.QualifiedName("ns", ex)).qualified_name) == "ex:ns"
-
-# Handles are usable as dictionary keys, and `document`/`id`/`parent` are properties.
 index = {root: "root", child: "child"}
 assert index[document.root] == "root"
 assert child.parent == root
 assert child.document == document
 assert isinstance(child.id, xml.NodeId)
+# ANCHOR_END: handles
 
-# The same operations in Rust are `child_elements()`, `attribute_local()` and explicit handles;
-# see the Rust half of this chapter.
+# ANCHOR: validation
+# Validation is a whole-document call in both languages.
+assert document.is_valid()
 print(f"{len(root)} children")
+# ANCHOR_END: validation

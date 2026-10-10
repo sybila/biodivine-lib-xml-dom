@@ -13,8 +13,10 @@ fn main() {
             .unwrap();
     let root = document.root().unwrap();
 
-    // The Python layer offers `for child in node` and `node["class"]`; the Rust API spells the same
-    // operations as an explicit child list and an attribute lookup by local name.
+    // ANCHOR: mapping
+    // The Python layer offers `for child in node` and `node["class"]`; the Rust API
+    // spells the same operations as an explicit child list and an attribute lookup
+    // by local name.
     let children = root.child_elements();
     assert_eq!(children.len(), 2);
     let classes: Vec<String> = children
@@ -27,11 +29,26 @@ fn main() {
         })
         .collect();
     assert_eq!(classes, ["a", "b"]);
+    // ANCHOR_END: mapping
 
+    // ANCHOR: indexing
     // Indexing by position is `children.get(i)`.
     assert_eq!(children.get(1).unwrap().local_name(), "child");
+    // ANCHOR_END: indexing
 
+    // ANCHOR: handles
+    // A handle is an identity: it can be compared, used as a map key, and asked
+    // for its document.
+    let child = root.child_elements()[0].clone();
+    assert!(child.ptr_eq(&root.child_elements()[0]));
+    assert!(child.belongs_to(&document));
+    assert_eq!(child.parent().unwrap().id(), root.id());
+    assert_eq!(child.id(), u32::from(child.id()).into());
+    // ANCHOR_END: handles
+
+    // ANCHOR: validation
     // Validation is a whole-document call in both languages.
     assert!(document.is_valid());
     println!("{} children", children.len());
+    // ANCHOR_END: validation
 }

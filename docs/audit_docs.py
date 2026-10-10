@@ -358,6 +358,29 @@ def sweep_rendered() -> None:
             found = internal_modules_rendered(text)
             if found:
                 report("internal module in rendered docs", path, 0, ", ".join(sorted(set(found))))
+            for image in re.findall(r'<img[^>]+src="([^"]+)"', text):
+                if image.startswith(("http:", "https:", "data:")):
+                    continue
+                target = (path.parent / image).resolve()
+                if not target.is_file():
+                    report(
+                        "dangling image",
+                        path,
+                        0,
+                        f"`{image}` was not copied into the output: a markdown image in "
+                        "documentation that rustdoc renders is a dead image, so the diagram has to "
+                        "be inline",
+                    )
+        # The documentation pages must show their diagrams for real.
+        for page in ("architecture", "bindings"):
+            index = docs / "documentation" / page / "index.html"
+            if index.is_file() and "<svg" not in index.read_text(encoding="utf-8", errors="replace"):
+                report(
+                    "missing diagram",
+                    index,
+                    0,
+                    f"the {page} page carries no inline SVG",
+                )
 
 
 # --------------------------------------------------------------------------------------------

@@ -2,11 +2,32 @@
 
 The Python side is three layers, and the import path shows the split:
 
-```text
-biodivine-lib-xml-dom              the Rust library - no PyO3 code at all
-biodivine-lib-xml-dom-py-sys       a thin PyO3 mirror; its native module is `_sys`
-biodivine_lib_xml_dom              the pure-Python package that wraps `_sys` idiomatically
-```
+<!-- diagram: layers.svg -->
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="220" viewBox="0 0 720 220" role="img" aria-label="Three layers: the Rust library, the native PyO3 mirror imported as _sys, and the pure Python package that wraps it.">
+  <style>
+    .box { fill: #f8fafc; stroke: #475569; stroke-width: 1.2; }
+    .label { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 13px; fill: #0f172a; }
+    .small { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 11px; fill: #475569; }
+    .title { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; font-weight: 600; fill: #0f172a; }
+    .edge { stroke: #4b5563; stroke-width: 1.4; fill: none; }
+  </style>
+  <text class="title" x="24" y="26">Your program</text>
+  <rect class="box" x="24" y="40" width="320" height="70" rx="8"/>
+  <text class="label" x="40" y="66">biodivine_lib_xml_dom</text>
+  <text class="small" x="40" y="86">the Python package: coercion, protocols, conveniences</text>
+  <rect class="box" x="24" y="130" width="320" height="70" rx="8"/>
+  <text class="label" x="40" y="156">biodivine_lib_xml_dom._sys</text>
+  <text class="small" x="40" y="176">the native extension: a one-to-one mirror of the Rust API</text>
+  <rect class="box" x="380" y="85" width="316" height="70" rx="8"/>
+  <text class="label" x="396" y="111">biodivine-lib-xml-dom</text>
+  <text class="small" x="396" y="131">the Rust library: the implementation, with no Python in it</text>
+  <path class="edge" d="M 184 110 L 184 130"/>
+  <path class="edge" d="M 184 165 L 184 180"/>
+  <path class="edge" d="M 344 165 L 378 140"/>
+  <path class="edge" d="M 344 75 L 378 105"/>
+  <text class="small" x="24" y="216">Only the top box is the documented API; the two below it are implementation layers.</text>
+</svg>
+<!-- /diagram -->
 
 `biodivine_lib_xml_dom._sys` is the native module; everything documented lives in
 `biodivine_lib_xml_dom`.

@@ -90,6 +90,7 @@ run "$PYTHON" docs/audit_docs.py --include-book
 run env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace --document-private-items
 run "$PYTHON" scripts/gen_rule_set.py --check
 run "$PYTHON" scripts/gen_rule_coverage.py --check
+run "$PYTHON" scripts/gen_diagrams.py --check
 run "$PYTHON" docs/check_doc_sections.py --self-test
 run "$PYTHON" docs/check_doc_sections.py
 run "$PYTHON" docs/check_book.py

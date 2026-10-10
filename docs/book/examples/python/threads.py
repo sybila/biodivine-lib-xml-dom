@@ -9,6 +9,7 @@ import concurrent.futures
 
 import biodivine_lib_xml_dom as xml
 
+# ANCHOR: threads
 document = xml.Document()
 root = document.create_element("root")
 document.set_root(root)
@@ -29,6 +30,8 @@ def reader() -> int:
     return total
 
 
+# ANCHOR_END: threads
+# ANCHOR: readers
 with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
     writers = [pool.submit(writer, index) for index in range(4)]
     readers = [pool.submit(reader) for _ in range(4)]
@@ -39,3 +42,4 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
 assert len(root) == 4 * 25
 assert document.is_valid()
 print(f"{len(root)} children, document valid")
+# ANCHOR_END: readers

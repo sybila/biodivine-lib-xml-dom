@@ -37,11 +37,10 @@ attribute types, no content models, no validity checking. Consequences worth kno
 * `xml:id` is the only attribute whose type this library can know, so "unique IDs" is checked for
   `xml:id` only;
 * the two `xml:lang`/`xml:space` "must be declared" rules are validity constraints and are not
-  checked — their *value* shapes are (see [`docs/design/rule-coverage.md`](../design/rule-coverage.md)).
+  checked — their *value* shapes are (see the `documentation::rule_coverage` page).
 
 **UTF-8 only.** Other encodings are rejected with a typed error rather than silently mis-decoded.
-[`docs/design/rule-coverage.md`](../design/rule-coverage.md) lists every rule file and whether this
-library acts on it,
+The `documentation::rule_coverage` page lists every rule file and whether this library acts on it,
 and `rule-enforcement.md` gives the verdict for each rule in the parser, validation and serializer
 layers — 54 enforced, 6 partial (the DTD half), 4 deferred (UTF-16, DTD validity) and 2 not
 applicable.
@@ -74,8 +73,7 @@ the supported API is the Python package; a test enumerates exactly what is expor
 typed accessors (`text()`, `comment()`, …) carry the same information without a discriminator dance.
 
 **No `abi3` wheels yet.** The extension is built for the interpreter maturin finds, so a wheel is
-specific to one CPython version (see
-[the bindings document](../design/bindings.md#8-known-gaps)).
+specific to one CPython version (see the `documentation::bindings` page).
 
 **Compound edits are not transactional.** Each operation is atomic, but a sequence of them is not;
 see [Thread safety](thread-safety.md#what-thread-safe-does-not-mean).

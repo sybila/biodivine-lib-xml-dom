@@ -5,11 +5,13 @@
 use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
 
 fn main() {
-    // Parsing assigns every name its expanded form, resolving prefixes against the declarations
-    // that are in scope.
-    let document = Document::parse_string(
-        r#"<root xmlns:ex="http://example.com" xmlns="http://default"><child ex:attr="v"/></root>"#,
-    )
+    // ANCHOR: parse
+    // Parsing assigns every name its expanded form, resolving prefixes against the
+    // declarations that are in scope.
+    let document = Document::parse_string(concat!(
+        r#"<root xmlns:ex="http://example.com" xmlns="http://default">"#,
+        r#"<child ex:attr="v"/></root>"#
+    ))
     .unwrap();
     let root = document.root().unwrap();
     let child = root.child_elements()[0].clone();
@@ -29,7 +31,9 @@ fn main() {
             .as_ref(),
         "v"
     );
+    // ANCHOR_END: parse
 
+    // ANCHOR: resolve
     // Resolution helpers work in the scope of any node.
     assert_eq!(
         child
@@ -40,6 +44,8 @@ fn main() {
             .uri(),
         "http://default"
     );
+    // ANCHOR: attributes
+    // ANCHOR_END: resolve
     // ... and an unprefixed *attribute* never takes the default namespace.
     assert!(
         child
@@ -48,6 +54,8 @@ fn main() {
             .namespace()
             .is_none()
     );
+    // ANCHOR: xml_prefix
+    // ANCHOR_END: attributes
     // The `xml` prefix needs no declaration.
     assert_eq!(
         child
@@ -58,7 +66,9 @@ fn main() {
             .uri(),
         "http://www.w3.org/XML/1998/namespace"
     );
+    // ANCHOR_END: xml_prefix
 
+    // ANCHOR: undeclare
     // `xmlns=""` removes the default namespace from the element it is declared on.
     let document = Document::parse_string(
         r#"<root xmlns="http://d"><inner xmlns=""><leaf/></inner></root>"#,
@@ -68,9 +78,11 @@ fn main() {
     assert!(inner.namespace().is_none());
     assert!(inner.child_elements()[0].namespace().is_none());
     assert_eq!(inner.namespace_declarations().get(&None), Some(&None));
+    // ANCHOR_END: undeclare
 
-    // Editing never synchronises declarations for you: removing one that a subtree relies on
-    // succeeds silently, and `validate` is what reports the resulting inconsistency.
+    // ANCHOR: silent
+    // Editing never synchronises declarations for you: removing one that a subtree
+    // relies on succeeds silently, and `validate` reports the inconsistency.
     let document = Document::parse_string(
         r#"<ex:root xmlns:ex="http://example.com"><ex:child/></ex:root>"#,
     )
@@ -85,4 +97,5 @@ fn main() {
         "<ex:root><ex:child/></ex:root>"
     );
     println!("{}", document.write_string().unwrap());
+    // ANCHOR_END: silent
 }

@@ -1,15 +1,15 @@
-"""Sphinx configuration for the `biodivine-lib-xml-dom` documentation book.
+"""Sphinx configuration for the Biodivine XML DOM documentation book.
 
 Build with::
 
     .venv/bin/python -m sphinx -b html docs/book docs/book/_build
 
-The book is written in MyST (Markdown) and uses `sphinx-design` for the language switch: every
-example is a tab set with a Rust and a Python tab that share sync groups, so choosing a language
-switches every example on the page.
+The book is written in MyST (Markdown), uses the Shibuya theme, and uses `sphinx-design` for the
+language switch: every example is a tab set with a Rust and a Python tab that share sync groups, so
+choosing a language switches every example on the page.
 """
 
-project = "biodivine-lib-xml-dom"
+project = "Biodivine XML DOM"
 copyright = "2026, Sybila"
 author = "Sybila"
 # Read from the crate manifest (via `[workspace.package]`), so the book and the code agree. The
@@ -36,6 +36,20 @@ myst_heading_anchors = 3
 source_suffix = {".md": "markdown"}
 master_doc = "index"
 
-html_theme = "alabaster"
-html_title = "biodivine-lib-xml-dom — documentation"
+html_theme = "shibuya"
+html_title = "Biodivine XML DOM"
+# Shibuya's options: https://shibuya.lepture.com/. The accent colour and the automatic colour mode
+# are presentation choices; the repository links are what a reader of a chapter usually wants next;
+# the AI/ads links the theme can add are switched off, because a library book should not advertise
+# third-party services.
+html_theme_options = {
+    "accent_color": "violet",
+    "color_mode": "auto",
+    "show_ai_links": False,
+    "github_url": "https://github.com/sybila/biodivine-lib-xml-dom",
+    "nav_links": [
+        {"title": "Rust API", "url": "https://docs.rs/biodivine-lib-xml-dom"},
+        {"title": "Python package", "url": "python-usage.html"},
+    ],
+}
 exclude_patterns = ["_build", "examples/**"]

@@ -22,14 +22,44 @@ operation is a single critical section.
 :sync: rust
 ```{literalinclude} ../../examples/book_threads.rs
 :language: rust
-:lines: 8-44
+:start-after: ANCHOR: threads
+:end-before: ANCHOR_END: threads
+:dedent:
 ```
 :::
 :::{tab-item} Python
 :sync: python
 ```{literalinclude} examples/python/threads.py
 :language: python
-:lines: 10-35
+:start-after: ANCHOR: threads
+:end-before: ANCHOR_END: threads
+:dedent:
+```
+:::
+::::
+
+## Readers in parallel
+
+Reading never blocks another reader: the lock is a reader-writer lock, and every operation is
+one critical section, so a read never sees a half-finished edit.
+
+::::{tab-set}
+:::{tab-item} Rust
+:sync: rust
+```{literalinclude} ../../examples/book_threads.rs
+:language: rust
+:start-after: ANCHOR: readers
+:end-before: ANCHOR_END: readers
+:dedent:
+```
+:::
+:::{tab-item} Python
+:sync: python
+```{literalinclude} examples/python/threads.py
+:language: python
+:start-after: ANCHOR: readers
+:end-before: ANCHOR_END: readers
+:dedent:
 ```
 :::
 ::::

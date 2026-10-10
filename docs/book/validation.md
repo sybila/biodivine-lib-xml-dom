@@ -23,20 +23,50 @@ way a whole class of issues can be fixed in one sweep instead of one failed oper
 :sync: rust
 ```{literalinclude} ../../examples/book_validation.rs
 :language: rust
-:lines: 8-31
+:start-after: ANCHOR: problems
+:end-before: ANCHOR_END: problems
+:dedent:
 ```
 :::
 :::{tab-item} Python
 :sync: python
 ```{literalinclude} examples/python/validation.py
 :language: python
-:lines: 5-28
+:start-after: ANCHOR: problems
+:end-before: ANCHOR_END: problems
+:dedent:
 ```
 :::
 ::::
 
 Each issue also knows which rule file in `specification/rules/` it enforces, so the message points
 at the part of the XML specification it comes from.
+
+## Fixing what validation reports
+
+Validation is a report, not a repair: the editing API is what changes a document, and it stays
+silent while you do it.
+
+::::{tab-set}
+:::{tab-item} Rust
+:sync: rust
+```{literalinclude} ../../examples/book_validation.rs
+:language: rust
+:start-after: ANCHOR: fix
+:end-before: ANCHOR_END: fix
+:dedent:
+```
+:::
+:::{tab-item} Python
+:sync: python
+```{literalinclude} examples/python/validation.py
+:language: python
+:start-after: ANCHOR: fix
+:end-before: ANCHOR_END: fix
+:dedent:
+```
+:::
+::::
 
 ## Why `validate` and not the edits
 
@@ -53,14 +83,18 @@ deliberate — see [Namespaces](namespaces.md#no-magic):
 :sync: rust
 ```{literalinclude} ../../examples/book_validation.rs
 :language: rust
-:lines: 33-37
+:start-after: ANCHOR: silent
+:end-before: ANCHOR_END: silent
+:dedent:
 ```
 :::
 :::{tab-item} Python
 :sync: python
 ```{literalinclude} examples/python/validation.py
 :language: python
-:lines: 30-37
+:start-after: ANCHOR: silent
+:end-before: ANCHOR_END: silent
+:dedent:
 ```
 :::
 ::::

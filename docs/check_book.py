@@ -1,10 +1,21 @@
 #!/usr/bin/env python3
-"""Checks the documentation book: structure, language pairs, and the built HTML.
+"""Checks the documentation book: structure, examples, and the built HTML.
 
 Run from the repository root:
 
     python3 docs/check_book.py            # source-level checks
     python3 docs/check_book.py --built    # additionally inspects docs/book/_build
+
+The book shows every example twice, once in Rust and once in Python, and it includes the examples
+from real files so that a chapter cannot show code that no longer runs. Two properties of those
+includes are checked rather than promised:
+
+* every include is a *named region* of the example file (`:start-after:`/`:end-before:` around an
+  ``ANCHOR`` comment) with `:dedent:` on, so a region can neither start nor end in the middle of a
+  statement and never carries the example's own indentation;
+* every line of every included region fits the book's code column, measured in the built HTML as the
+  longest line of any highlighted code block (the budget is `CODE_LINE_BUDGET`, which is the same
+  number `.rustfmt.toml` uses, so `cargo fmt` cannot reflow an example past it).
 
 Requirement (7) asks for a book in which *every* example is available in both Rust and Python with a
 switch between them. That is a structural property, so it is checked rather than promised:
@@ -22,14 +33,21 @@ from __future__ import annotations
 
 import re
 import sys
+from html import unescape
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+EXAMPLES = ROOT / "examples"
 
 BOOK = Path("docs/book")
 BUILD = BOOK / "_build"
 
+#: The name the library is presented under in public-facing documentation.
+DISPLAY_NAME = "Biodivine XML DOM"
+
 #: Chapters the book promises (the titles are also searched for in the built HTML).
 CHAPTERS = {
-    "index.md": "biodivine-lib-xml-dom",
+    "index.md": DISPLAY_NAME,
     "getting-started.md": "Getting started",
     "building-documents.md": "Building documents",
     "traversing-and-editing.md": "Traversing and editing",
@@ -42,11 +60,71 @@ CHAPTERS = {
     "design-notes.md": "Design notes",
 }
 
+#: Maximum number of characters on a line of an included example, and of a rendered code line.
+#: Shibuya's content column is about 800 pixels wide and its monospace font is 13 pixels, so a line
+#: of 88 characters is roughly 690 pixels: it fits without horizontal scrolling.
+CODE_LINE_BUDGET = 88
+
+#: The theme the built book must use.
+THEME = "shibuya"
+
 TAB_SET = re.compile(r"^(?P<fence>:{3,})\{tab-set\}\s*$")
 TAB_ITEM = re.compile(r"^(?P<fence>:{3,})\{tab-item\}\s*(?P<label>.*?)\s*$")
 COLON_ONLY = re.compile(r"^(?P<fence>:{3,})\s*$")
 SYNC = re.compile(r"^\s*:sync:\s*(\S+)\s*$")
 INCLUDE = re.compile(r"literalinclude\}\s+(\S+)")
+START_AFTER = re.compile(r"^\s*:start-after:\s*(?P<marker>.+?)\s*$")
+END_BEFORE = re.compile(r"^\s*:end-before:\s*(?P<marker>.+?)\s*$")
+LINES_OPTION = re.compile(r"^\s*:lines:")
+DEDENT_OPTION = re.compile(r"^\s*:dedent:")
+ANCHOR = re.compile(r"^(?P<indent>\s*)(?P<prefix>//|#) ANCHOR: (?P<name>[a-z0-9_]+)\s*$")
+
+
+def include_blocks(lines: list[str]) -> list[dict[str, object]]:
+    """Every `literalinclude` block, with the options it carries."""
+    blocks: list[dict[str, object]] = []
+    index = 0
+    while index < len(lines):
+        if not INCLUDE.search(lines[index]):
+            index += 1
+            continue
+        block = {
+            "file": INCLUDE.search(lines[index]).group(1),
+            "line": index + 1,
+            "start": "",
+            "end": "",
+            "lines": False,
+            "dedent": False,
+        }
+        index += 1
+        while index < len(lines) and lines[index].startswith(":"):
+            if found := START_AFTER.match(lines[index]):
+                block["start"] = found.group("marker")
+            if found := END_BEFORE.match(lines[index]):
+                block["end"] = found.group("marker")
+            if LINES_OPTION.match(lines[index]):
+                block["lines"] = True
+            if DEDENT_OPTION.match(lines[index]):
+                block["dedent"] = True
+            index += 1
+        blocks.append(block)
+    return blocks
+
+
+def anchor_name(marker: str) -> str:
+    """The anchor name in `[//|#] ANCHOR: name`, or the marker itself when it is already a name."""
+    found = re.search(r"ANCHOR: ([a-z0-9_]+)", marker)
+    return f"ANCHOR: {found.group(1)}" if found else marker
+
+
+def region(text: str, start_marker: str, end_marker: str) -> list[str] | None:
+    """The lines between two anchor comments, or `None` if they are missing or out of order."""
+    lines = text.split("\n")
+    start = next((i for i, line in enumerate(lines) if start_marker in line), None)
+    end = next((i for i, line in enumerate(lines) if end_marker in line and (start is None or i > start)), None)
+    if start is None or end is None:
+        return None
+    return lines[start + 1 : end]
 
 
 def parse_tab_sets(lines: list[str]) -> list[list[tuple[str, str, str]]]:
@@ -92,6 +170,65 @@ def parse_tab_sets(lines: list[str]) -> list[list[tuple[str, str, str]]]:
             items.append((label, sync, include))
         sets.append(items)
     return sets
+
+
+def check_examples(problems: list[str]) -> None:
+    """Every include is an anchored, dedented region whose lines fit the code column."""
+    used: set[tuple[str, str]] = set()
+    for chapter in sorted(CHAPTERS):
+        path = BOOK / chapter
+        if not path.is_file():
+            continue
+        lines = path.read_text(encoding="utf-8").split("\n")
+        for block in include_blocks(lines):
+            target = (BOOK / str(block["file"])).resolve()
+            where = f"{chapter}:{block['line']}"
+            if not target.is_file():
+                continue  # reported by the tab-set check
+            if block["lines"]:
+                problems.append(
+                    f"{where}: includes {block['file']} with `:lines:`, which can cut a statement in "
+                    f"half; use an anchored region instead"
+                )
+                continue
+            if not block["start"] or not block["end"]:
+                problems.append(
+                    f"{where}: includes {block['file']} without `:start-after:` and `:end-before:`"
+                )
+                continue
+            if not block["dedent"]:
+                problems.append(f"{where}: includes {block['file']} without `:dedent:`")
+            body = region(target.read_text(encoding="utf-8"), str(block["start"]), str(block["end"]))
+            if body is None:
+                problems.append(
+                    f"{where}: the anchors {block['start']!r} / {block['end']!r} are missing from "
+                    f"{block['file']} or out of order"
+                )
+                continue
+            if not any(line.strip() for line in body):
+                problems.append(f"{where}: the anchored region of {block['file']} is empty")
+            for number, line in enumerate(body, 1):
+                if len(line.rstrip()) > CODE_LINE_BUDGET:
+                    problems.append(
+                        f"{where}: line {number} of the region in {block['file']} is "
+                        f"{len(line.rstrip())} characters, over the {CODE_LINE_BUDGET} budget"
+                    )
+            used.add((target.name, anchor_name(str(block["start"]))))
+            used.add((target.name, anchor_name(str(block["end"]))))
+
+    # An anchor that no chapter uses is dead weight in the example; report it so it cannot rot.
+    examples = sorted(EXAMPLES.glob("book_*.rs")) + sorted(
+        (BOOK / "examples" / "python").glob("*.py")
+    )
+    for path in examples:
+        for line in path.read_text(encoding="utf-8").split("\n"):
+            found = ANCHOR.match(line)
+            if found and "ANCHOR_END" not in line:
+                if (path.name, f"ANCHOR: {found.group('name')}") not in used:
+                    problems.append(
+                        f"{path.name}: the anchor `{found.group('name')}` is not used by the book"
+                    )
+    print(f"book sources: {len(used) // 2} anchored example regions")
 
 
 def check_sources() -> list[str]:
@@ -144,6 +281,7 @@ def check_sources() -> list[str]:
     if pairs == 0:
         problems.append("the book contains no example pair at all — is the layout right?")
     print(f"book sources: {len(CHAPTERS)} chapters, {pairs} language pairs")
+    check_examples(problems)
     return problems
 
 
@@ -167,8 +305,36 @@ def check_built() -> list[str]:
     )
     if tab_sets == 0:
         problems.append("the built book contains no sphinx-design tab sets")
-    print(f"built book: {len(pages)} pages, {tab_sets} tab-set occurrences")
+    if not any(THEME in page.read_text(encoding="utf-8", errors="ignore").lower() for page in pages.values()):
+        problems.append(f"the built book does not look like it uses the {THEME} theme")
+    if not any(
+        DISPLAY_NAME in page.read_text(encoding="utf-8", errors="ignore") for page in pages.values()
+    ):
+        problems.append(f"the built book never mentions the display name `{DISPLAY_NAME}`")
+    longest, where = longest_code_line(pages)
+    if longest > CODE_LINE_BUDGET:
+        problems.append(
+            f"the longest rendered code line has {longest} characters (in {where}), over the "
+            f"{CODE_LINE_BUDGET} budget: it would need horizontal scrolling"
+        )
+    print(
+        f"built book: {len(pages)} pages, {tab_sets} tab-set occurrences, "
+        f"longest code line {longest} characters"
+    )
     return problems
+
+
+def longest_code_line(pages: dict[str, pathlib.Path]) -> tuple[int, str]:
+    """The longest line of any highlighted code block in the built book."""
+    longest, where = 0, ""
+    for stem, page in sorted(pages.items()):
+        html = page.read_text(encoding="utf-8", errors="ignore")
+        for block in re.findall(r"<pre>(.*?)</pre>", html, re.S):
+            text = unescape(re.sub(r"<[^>]+>", "", block))
+            for line in text.split("\n"):
+                if len(line.rstrip()) > longest:
+                    longest, where = len(line.rstrip()), f"{stem}.html"
+    return longest, where
 
 
 def main() -> int:

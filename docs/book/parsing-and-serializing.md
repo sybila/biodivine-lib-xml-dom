@@ -11,14 +11,18 @@ reformatted — text is preserved verbatim, so mixed content is never disturbed.
 :sync: rust
 ```{literalinclude} ../../examples/book_parsing.rs
 :language: rust
-:lines: 8-12
+:start-after: ANCHOR: roundtrip
+:end-before: ANCHOR_END: roundtrip
+:dedent:
 ```
 :::
 :::{tab-item} Python
 :sync: python
 ```{literalinclude} examples/python/parsing.py
 :language: python
-:lines: 6-12
+:start-after: ANCHOR: roundtrip
+:end-before: ANCHOR_END: roundtrip
+:dedent:
 ```
 :::
 ::::
@@ -34,14 +38,18 @@ The defaults reproduce the input of a parsed document as closely as the model al
 :sync: rust
 ```{literalinclude} ../../examples/book_parsing.rs
 :language: rust
-:lines: 14-23
+:start-after: ANCHOR: options
+:end-before: ANCHOR_END: options
+:dedent:
 ```
 :::
 :::{tab-item} Python
 :sync: python
 ```{literalinclude} examples/python/parsing.py
 :language: python
-:lines: 14-20
+:start-after: ANCHOR: options
+:end-before: ANCHOR_END: options
+:dedent:
 ```
 :::
 ::::
@@ -56,14 +64,18 @@ error rather than a panic — including input that makes many parsers unhappy:
 :sync: rust
 ```{literalinclude} ../../examples/book_parsing.rs
 :language: rust
-:lines: 25-45
+:start-after: ANCHOR: errors
+:end-before: ANCHOR_END: errors
+:dedent:
 ```
 :::
 :::{tab-item} Python
 :sync: python
 ```{literalinclude} examples/python/parsing.py
 :language: python
-:lines: 22-42
+:start-after: ANCHOR: errors
+:end-before: ANCHOR_END: errors
+:dedent:
 ```
 :::
 ::::
@@ -74,6 +86,30 @@ document whose names are fine but whose *declarations* are missing parses happil
 [validation](validation.md) is for.
 
 ## Entities
+
+The five predefined entities and character references are expanded while parsing; any other
+entity reference is a typed error, because this library does not process `DOCTYPE` declarations.
+
+::::{tab-set}
+:::{tab-item} Rust
+:sync: rust
+```{literalinclude} ../../examples/book_parsing.rs
+:language: rust
+:start-after: ANCHOR: entities
+:end-before: ANCHOR_END: entities
+:dedent:
+```
+:::
+:::{tab-item} Python
+:sync: python
+```{literalinclude} examples/python/parsing.py
+:language: python
+:start-after: ANCHOR: entities
+:end-before: ANCHOR_END: entities
+:dedent:
+```
+:::
+::::
 
 `DOCTYPE` is read and ignored: this library does not process DTDs. The five predefined entities
 (`&amp;`, `&lt;`, `&gt;`, `&apos;`, `&quot;`) and character references (`&#65;`, `&#x41;`) are

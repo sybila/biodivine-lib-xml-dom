@@ -4,13 +4,19 @@ This chapter is a pointer rather than a tutorial: the design decisions, the alte
 rejected and the reasoning live in the repository's design documents, which are kept up to date as
 the implementation changes.
 
-| document | what is in it |
+The reasoning lives in the crate documentation, in the `documentation` module, next to the API it
+describes:
+
+| page | what is in it |
 | --- | --- |
-| [`docs/design/architecture.md`](../design/architecture.md) | the model and its trade-offs, the concurrency and panic-safety arguments, the error model, the namespace contract, module layout and the testing strategy |
-| [`docs/design/bindings.md`](../design/bindings.md) | the item-by-item mapping of the Python bindings: what is mirrored, what is deliberately not and why, the error mapping and the GIL policy |
-| [`docs/design/rule-coverage.md`](../design/rule-coverage.md) | every XML rule, the layer that acts on it, and what is deliberately out of scope |
-| [`docs/design/build.md`](../design/build.md) | how to set the project up, run the checks and build the documentation |
-| `specification/` | the XML 1.0 and Namespaces 1.0 specifications, and one file per rule in `specification/rules/` |
+| `documentation::architecture` | the model and its trade-offs, the concurrency and panic-safety arguments, the error model, the namespace contract, module layout and the testing strategy |
+| `documentation::bindings` | the item-by-item mapping of the Python bindings: what is mirrored, what is deliberately not and why, the error mapping and the GIL policy |
+| `documentation::rule_coverage` | every XML rule, the layer that acts on it, and what is deliberately out of scope |
+| `documentation::build` | how to set the project up, run the checks and build the documentation |
+| `xml_spec::rule_set` | one module per XML rule, documented with the rule summary itself |
+
+Run `cargo doc --open` in the repository and follow those links; the same pages are the design
+documents of the repository.
 
 Two decisions are worth summarising here because they shape everything a user sees:
 

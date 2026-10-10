@@ -1,10 +1,11 @@
-# biodivine-lib-xml-dom
+# Biodivine XML DOM
 
-An XML DOM library with full namespace support, whole-document validation and thread-safe
-documents, in Rust with an idiomatic Python package on top.
+Biodivine XML DOM is an XML DOM library with full namespace support, whole-document validation and
+thread-safe documents, in Rust with an idiomatic Python package on top.
 
 The library is designed for **document manipulation**: you build, edit, traverse, validate and
-serialize XML trees. It is not a streaming parser, but it gets the awkward parts right —
+serialize XML trees. In code it is spelled `biodivine-lib-xml-dom` (Rust) and
+`biodivine_lib_xml_dom` (Python). It is not a streaming parser, but it gets the awkward parts right —
 expanded names instead of prefix juggling, one lock per document so a tree can be shared between
 threads, and a validation pass that reports everything at once instead of failing on the first
 problem.
@@ -16,14 +17,18 @@ problem.
 :sync: rust
 ```{literalinclude} ../../examples/book_getting_started.rs
 :language: rust
-:lines: 10-30
+:start-after: ANCHOR: document
+:end-before: ANCHOR_END: document
+:dedent:
 ```
 :::
 :::{tab-item} Python
 :sync: python
 ```{literalinclude} examples/python/getting_started.py
 :language: python
-:lines: 9-22
+:start-after: ANCHOR: document
+:end-before: ANCHOR_END: document
+:dedent:
 ```
 :::
 ::::
@@ -36,9 +41,8 @@ problem.
 | `biodivine-lib-xml-dom-py-sys` | a thin PyO3 mirror of the Rust API, imported as `biodivine_lib_xml_dom._sys` | the layer below |
 | `biodivine_lib_xml_dom` | the pure-Python package: argument coercion, Pythonic protocols, conveniences | Python programs |
 
-The mapping between the Rust API and the Python one is itemised in
-[`docs/design/bindings.md`](../design/bindings.md), and the Rust API itself is documented in its
-rustdoc (which also carries the design notes as its `documentation` module).
+The mapping between the Rust API and the Python one is itemised on the `documentation::bindings`
+page of the crate documentation, and the design notes ship with the rustdoc as well.
 
 ## Running the examples
 

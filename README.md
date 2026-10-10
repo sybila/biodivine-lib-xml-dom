@@ -1,7 +1,9 @@
-# biodivine-lib-xml-dom
+# Biodivine XML DOM
 
-An XML DOM library for Rust with an idiomatic Python package on top, built for **document
-manipulation**: build, edit, traverse, validate and serialize XML trees.
+Biodivine XML DOM is an XML DOM library for Rust with an idiomatic Python package on top, built for
+**document manipulation**: build, edit, traverse, validate and serialize XML trees.
+
+The Rust crate is called `biodivine-lib-xml-dom`, the Python package `biodivine_lib_xml_dom`.
 
 The parts that are usually awkward are the parts this library gets right:
 

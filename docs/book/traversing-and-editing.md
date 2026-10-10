@@ -11,14 +11,18 @@ iterative, so a deeply nested document cannot overflow the stack. Python additio
 :sync: rust
 ```{literalinclude} ../../examples/book_editing.rs
 :language: rust
-:lines: 17-24
+:start-after: ANCHOR: traversal
+:end-before: ANCHOR_END: traversal
+:dedent:
 ```
 :::
 :::{tab-item} Python
 :sync: python
 ```{literalinclude} examples/python/editing.py
 :language: python
-:lines: 14-21
+:start-after: ANCHOR: traversal
+:end-before: ANCHOR_END: traversal
+:dedent:
 ```
 :::
 ::::
@@ -34,14 +38,18 @@ cycle check cannot be raced against (a bug the previous per-element locking desi
 :sync: rust
 ```{literalinclude} ../../examples/book_editing.rs
 :language: rust
-:lines: 26-40
+:start-after: ANCHOR: editing
+:end-before: ANCHOR_END: editing
+:dedent:
 ```
 :::
 :::{tab-item} Python
 :sync: python
 ```{literalinclude} examples/python/editing.py
 :language: python
-:lines: 22-39
+:start-after: ANCHOR: editing
+:end-before: ANCHOR_END: editing
+:dedent:
 ```
 :::
 ::::
@@ -55,6 +63,30 @@ cycle check cannot be raced against (a bug the previous per-element locking desi
 | remove and keep the node | `remove` | `remove` |
 | swap a node out | `replace_with` | `replace_with` |
 
+Replacing a node leaves the old one in the document, detached but fully usable — which is how
+you undo a replacement or move the old node somewhere else.
+
+::::{tab-set}
+:::{tab-item} Rust
+:sync: rust
+```{literalinclude} ../../examples/book_editing.rs
+:language: rust
+:start-after: ANCHOR: replace
+:end-before: ANCHOR_END: replace
+:dedent:
+```
+:::
+:::{tab-item} Python
+:sync: python
+```{literalinclude} examples/python/editing.py
+:language: python
+:start-after: ANCHOR: replace
+:end-before: ANCHOR_END: replace
+:dedent:
+```
+:::
+::::
+
 ## Text, comments, CDATA and processing instructions
 
 Non-element nodes are children like any other; they are created by the document and appended. Their
@@ -65,14 +97,18 @@ content is validated on creation, and their kind is discoverable from a handle:
 :sync: rust
 ```{literalinclude} ../../examples/book_parsing.rs
 :language: rust
-:lines: 8-12
+:start-after: ANCHOR: other_nodes
+:end-before: ANCHOR_END: other_nodes
+:dedent:
 ```
 :::
 :::{tab-item} Python
 :sync: python
 ```{literalinclude} examples/python/parsing.py
 :language: python
-:lines: 6-11
+:start-after: ANCHOR: other_nodes
+:end-before: ANCHOR_END: other_nodes
+:dedent:
 ```
 :::
 ::::

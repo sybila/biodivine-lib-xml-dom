@@ -117,11 +117,29 @@ def check_document_list() -> None:
     if orphaned:
         fail(f"docs/design contains documents that documentation.rs does not include: {orphaned}")
     notes = (BOOK / "design-notes.md").read_text(encoding="utf-8")
-    listed = {name.lower() for name in re.findall(r"\(\.\./design/([A-Za-z-]+\.md)\)", notes)}
-    missing = sorted(included - listed)
+    missing = sorted(
+        name
+        for name in included
+        if f"documentation::{name[:-3].replace('-', '_')}" not in notes
+    )
     if missing:
-        fail(f"the book's design-notes chapter does not list {missing}")
-    print(f"documentation module: {len(included)} documents, all present and listed in the book")
+        fail(f"the book's design-notes chapter does not point at {missing}")
+    print(f"documentation module: {len(included)} documents, all present and referenced by the book")
+
+
+def check_display_name() -> None:
+    """The public-facing documents present the library under its display name."""
+    name = "Biodivine XML DOM"
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    if f"# {name}" not in readme:
+        fail(f"README.md does not start with the display name `{name}`")
+    index = (BOOK / "index.md").read_text(encoding="utf-8")
+    if f"# {name}" not in index:
+        fail(f"the book index does not start with the display name `{name}`")
+    theme = (BOOK / "conf.py").read_text(encoding="utf-8")
+    if f'html_title = "{name}"' not in theme:
+        fail(f"the book's html_title is not `{name}`")
+    print(f"display name: `{name}` in the README, the book and its page title")
 
 
 def check_version() -> None:
@@ -143,7 +161,13 @@ def check_version() -> None:
 
 
 def main() -> int:
-    for check in (check_rule_numbers, check_book_numbers, check_document_list, check_version):
+    for check in (
+        check_rule_numbers,
+        check_book_numbers,
+        check_document_list,
+        check_display_name,
+        check_version,
+    ):
         check()
     if problems:
         print(f"\n{len(problems)} fact problem(s):", file=sys.stderr)

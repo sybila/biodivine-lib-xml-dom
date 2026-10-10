@@ -7,7 +7,7 @@
 mod common;
 
 use biodivine_lib_xml_dom::{
-    Document, Element, Namespace, Node, NodeContent, QualifiedName, XmlError, write_string,
+    Document, Element, Namespace, Node, NodeContent, QualifiedName, XmlError,
 };
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -291,7 +291,7 @@ fn display_renders_the_subtree_as_xml() {
     assert!(rendered.contains("hello"), "{rendered}");
     assert!(rendered.contains("<!-- note -->"), "{rendered}");
     assert!(rendered.contains("<![CDATA[raw <content>]]>"), "{rendered}");
-    assert_eq!(rendered, write_string(&document).unwrap());
+    assert_eq!(rendered, document.write_string().unwrap());
 }
 
 #[test]

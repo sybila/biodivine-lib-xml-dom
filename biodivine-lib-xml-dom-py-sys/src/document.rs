@@ -2,8 +2,10 @@
 
 use biodivine_lib_xml_dom::Document;
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
 
 use crate::element::PyElement;
 use crate::error::to_py_err;
@@ -12,7 +14,7 @@ use crate::node::PyNode;
 use crate::node_id::PyNodeId;
 use crate::qualified_name::PyQualifiedName;
 use crate::validation::validation_failure;
-use crate::write_options::PyXmlDeclaration;
+use crate::write_options::{PyWriteOptions, PyXmlDeclaration};
 
 /// An XML document.
 ///
@@ -246,6 +248,69 @@ impl PyDocument {
     /// A debug representation for interactive use, not a serialization of the value.
     pub fn __repr__(&self) -> String {
         format!("Document(nodes={})", self.inner.node_count())
+    }
+
+    /// Parses an XML document from a string.
+    ///
+    /// Raises:
+    ///     XmlSyntaxError: if the input is not well-formed.
+    ///     XmlNamespaceError: if a namespace is used illegally.
+    #[staticmethod]
+    #[pyo3(signature = (source))]
+    pub fn parse_string(py: Python<'_>, source: &str) -> PyResult<PyDocument> {
+        crate::io::parse_string(py, source)
+    }
+
+    /// Parses an XML document from bytes (which must be valid UTF-8).
+    ///
+    /// Raises:
+    ///     XmlSyntaxError: if the input is not well-formed or is not valid UTF-8.
+    ///     XmlNamespaceError: if a namespace is used illegally.
+    #[staticmethod]
+    #[pyo3(signature = (data))]
+    pub fn parse_bytes(py: Python<'_>, data: &Bound<'_, PyBytes>) -> PyResult<PyDocument> {
+        crate::io::parse_bytes(py, data)
+    }
+
+    /// Parses an XML document from a file.
+    ///
+    /// Raises:
+    ///     XmlIoError: if the file cannot be read.
+    ///     XmlSyntaxError / XmlNamespaceError: as `parse_bytes`.
+    #[staticmethod]
+    #[pyo3(signature = (path))]
+    pub fn parse_file(py: Python<'_>, path: PathBuf) -> PyResult<PyDocument> {
+        crate::io::parse_file(py, path)
+    }
+
+    /// Serializes this document into a string, using the default options.
+    ///
+    /// A document without a root element and without a declaration serializes to the empty string.
+    ///
+    /// Raises:
+    ///     XmlSyntaxError: if the output were not valid UTF-8, which cannot happen for a document
+    ///     built through this API (reported rather than panicking).
+    #[pyo3(signature = (options = None))]
+    pub fn write_string(
+        &self,
+        py: Python<'_>,
+        options: Option<PyWriteOptions>,
+    ) -> PyResult<String> {
+        crate::io::write_string(py, self, options)
+    }
+
+    /// Writes this document to a file, using the default options.
+    ///
+    /// Raises:
+    ///     XmlIoError: if the file cannot be created or written.
+    #[pyo3(signature = (path, options = None))]
+    pub fn write_file(
+        &self,
+        py: Python<'_>,
+        path: PathBuf,
+        options: Option<PyWriteOptions>,
+    ) -> PyResult<()> {
+        crate::io::write_file(py, self, path, options)
     }
 }
 

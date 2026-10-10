@@ -1,15 +1,18 @@
-//! The XML serializer.
+//! The XML serializer behind the `Document::write_*` methods.
+//!
+//! The public contract is documented on [`Document`](crate::Document) and on the individual entry
+//! points ([`Document::write_string`](crate::Document::write_string) and friends); what follows is
+//! the implementation-level view, which only matters when changing this file.
 //!
 //! # Fidelity
 //!
 //! Serialization is intended to be *lossless* for everything the data model can represent:
 //!
-//! * element and attribute names are written **with their prefix**, so
-//!   `<html:body>` stays `<html:body>` (this was a data-loss bug in the pre-rewrite
-//!   implementation, REVIEW D2);
+//! * element and attribute names are written **with their prefix**, so `<html:body>` stays
+//!   `<html:body>`; dropping the prefix would lose information that a re-parse cannot recover;
 //! * namespace declarations are written exactly as they are stored on the nodes. The serializer
 //!   never adds, removes or rewrites one — an inconsistent document stays inconsistent and is
-//!   reported by whole-document validation instead (requirement (3));
+//!   reported by whole-document validation instead;
 //! * text is escaped so that `&`, `<`, ``]]>`` and a literal carriage return survive a round trip;
 //! * attribute values are escaped so that `&`, `<`, `"` survive, and tab, line feed and carriage
 //!   return are written as character references, because attribute-value normalisation would
@@ -26,15 +29,14 @@
 //!
 //! The serializer is deliberately not "smart": it writes the prefixes and declarations that are
 //! stored in the tree. A document whose names use a prefix that is not declared anywhere is
-//! serialized as such, and re-parsing it fails. That is the contract required by the task
-//! description — run [`crate::Document::validate`] (or `cargo doc`-documented validation once it
-//! lands) before serializing a document you assembled by hand.
+//! serialized as such, and re-parsing it fails. Run [`Document::validate`] before serializing a
+//! document that was assembled by hand.
 //!
 //! # Depth
 //!
 //! Serialization is iterative (an explicit work stack, not recursion), so a deeply nested document
-//! cannot overflow the stack: a stack overflow aborts the process and could not be reported as a
-//! typed error (see `docs/design/PLAN.md` §16, advisor condition C2).
+//! cannot overflow the stack: a stack overflow would abort the process instead of being reported as
+//! a typed error.
 
 use quick_xml::Writer;
 use quick_xml::events::{BytesCData, BytesDecl, BytesEnd, BytesPI, BytesStart, BytesText, Event};
@@ -75,7 +77,8 @@ pub enum EmptyElementStyle {
     ExplicitEndTag,
 }
 
-/// Options for [`write_string_with`], [`write_file_with`] and [`write_writer_with`].
+/// Options for [`Document::write_string_with`], [`Document::write_file_with`] and
+/// [`Document::write_writer_with`].
 ///
 /// [`WriteOptions::default`] is "write the declaration when the document has one" plus
 /// "self-closing empty elements", which reproduces the input of a parsed document as closely as
@@ -88,70 +91,74 @@ pub struct WriteOptions {
     pub empty_elements: EmptyElementStyle,
 }
 
-/// Serializes an XML document into a string, using the default options.
-///
-/// A document without a root element and without a declaration serializes to the empty string.
+/// Serializes a document into a string with the default options; the implementation of
+/// [`Document::write_string`](crate::Document::write_string).
 ///
 /// # Errors
 ///
-/// Returns [`XmlError::InvalidUtf8`] if the serialized output is not valid UTF-8. This cannot
-/// happen for a document built from `str` (every payload of the data model is valid UTF-8 by
-/// construction), so the variant is reported rather than panicking.
-pub fn write_string(doc: &Document) -> XmlResult<String> {
+/// Returns [`XmlError::InvalidUtf8`] if the serialized output is not valid UTF-8. This cannot happen
+/// for a document built from `str` (every payload of the data model is valid UTF-8 by construction),
+/// so the variant is reported rather than panicking.
+pub(crate) fn write_string(doc: &Document) -> XmlResult<String> {
     write_string_with(doc, &WriteOptions::default())
 }
 
-/// Serializes an XML document into a string with explicit options.
+/// Serializes a document into a string with explicit options; the implementation of
+/// [`Document::write_string_with`](crate::Document::write_string_with).
 ///
 /// # Errors
 ///
-/// As [`write_string`].
-pub fn write_string_with(doc: &Document, options: &WriteOptions) -> XmlResult<String> {
+/// As [`write_string`](crate::Document::write_string).
+pub(crate) fn write_string_with(doc: &Document, options: &WriteOptions) -> XmlResult<String> {
     let mut buffer = Vec::new();
-    write_writer_with(doc, &mut buffer, options)?;
+    doc.write_writer_with(&mut buffer, options)?;
     String::from_utf8(buffer)
         .map_err(|error| XmlError::InvalidUtf8(format!("invalid UTF-8 in output: {error}")))
 }
 
-/// Writes an XML document to a file, using the default options.
+/// Writes a document to a file with the default options; the implementation of
+/// [`Document::write_file`](crate::Document::write_file).
 ///
 /// # Errors
 ///
 /// Returns [`XmlError::Io`] if the file cannot be created or written, plus the errors of
-/// [`write_writer_with`].
-pub fn write_file<P: AsRef<Path>>(doc: &Document, path: P) -> XmlResult<()> {
-    write_file_with(doc, path, &WriteOptions::default())
+/// [`write_writer_with`](crate::Document::write_writer_with).
+pub(crate) fn write_file<P: AsRef<Path>>(doc: &Document, path: P) -> XmlResult<()> {
+    doc.write_file_with(path, &WriteOptions::default())
 }
 
-/// Writes an XML document to a file with explicit options.
+/// Writes a document to a file with explicit options; the implementation of
+/// [`Document::write_file_with`](crate::Document::write_file_with).
 ///
 /// # Errors
 ///
-/// As [`write_file`].
-pub fn write_file_with<P: AsRef<Path>>(
+/// As [`write_file`](crate::Document::write_file).
+pub(crate) fn write_file_with<P: AsRef<Path>>(
     doc: &Document,
     path: P,
     options: &WriteOptions,
 ) -> XmlResult<()> {
     let file = File::create(path)?;
-    write_writer_with(doc, BufWriter::new(file), options)
+    doc.write_writer_with(BufWriter::new(file), options)
 }
 
-/// Writes an XML document to a generic writer, using the default options.
+/// Writes a document to a writer with the default options; the implementation of
+/// [`Document::write_writer`](crate::Document::write_writer).
 ///
 /// # Errors
 ///
 /// Returns [`XmlError::Io`] if the underlying writer fails.
-pub fn write_writer<W: Write>(doc: &Document, writer: W) -> XmlResult<()> {
-    write_writer_with(doc, writer, &WriteOptions::default())
+pub(crate) fn write_writer<W: Write>(doc: &Document, writer: W) -> XmlResult<()> {
+    doc.write_writer_with(writer, &WriteOptions::default())
 }
 
-/// Writes an XML document to a generic writer with explicit options.
+/// Writes a document to a writer with explicit options; the implementation of
+/// [`Document::write_writer_with`](crate::Document::write_writer_with).
 ///
 /// # Errors
 ///
 /// Returns [`XmlError::Io`] if the underlying writer fails.
-pub fn write_writer_with<W: Write>(
+pub(crate) fn write_writer_with<W: Write>(
     doc: &Document,
     writer: W,
     options: &WriteOptions,

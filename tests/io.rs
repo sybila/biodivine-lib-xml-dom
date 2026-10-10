@@ -12,14 +12,14 @@ mod common;
 use biodivine_lib_xml_dom::xml_spec::rules;
 use biodivine_lib_xml_dom::{
     DeclarationStyle, Document, EmptyElementStyle, Namespace, NodeContent, QualifiedName,
-    WriteOptions, XmlError, parse_bytes, parse_string, write_string, write_string_with,
+    WriteOptions, XmlError,
 };
 
 use common::element;
 
 /// Parses and returns the text content of the root element's first text child.
 fn root_text(xml: &str) -> String {
-    let document = parse_string(xml).unwrap();
+    let document = Document::parse_string(xml).unwrap();
     let root = document.root().unwrap();
     root.children()
         .iter()
@@ -30,7 +30,7 @@ fn root_text(xml: &str) -> String {
 
 /// Asserts that parsing fails and returns the error.
 fn parse_error(xml: &str) -> XmlError {
-    parse_string(xml).expect_err("the input was expected to be rejected")
+    Document::parse_string(xml).expect_err("the input was expected to be rejected")
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -119,19 +119,19 @@ fn attribute_value_normalisation_in_both_directions() {
     rules::assert_rule_exists("rule.attributes.linebreaks-normalized-to-lf.md");
 
     // A *literal* whitespace character (tab, line feed, carriage return) becomes a space.
-    let document = parse_string("<a b=\"x\ty\"/>").unwrap();
+    let document = Document::parse_string("<a b=\"x\ty\"/>").unwrap();
     assert_eq!(attribute(&document, "b"), "x y");
-    let document = parse_string("<a b=\"x\ny\"/>").unwrap();
+    let document = Document::parse_string("<a b=\"x\ny\"/>").unwrap();
     assert_eq!(attribute(&document, "b"), "x y");
-    let document = parse_string("<a b=\"x\r\ny\"/>").unwrap();
+    let document = Document::parse_string("<a b=\"x\r\ny\"/>").unwrap();
     assert_eq!(attribute(&document, "b"), "x y");
 
     // A *character reference* is not affected by normalisation, so it survives.
-    let document = parse_string("<a b=\"x&#x9;y\"/>").unwrap();
+    let document = Document::parse_string("<a b=\"x&#x9;y\"/>").unwrap();
     assert_eq!(attribute(&document, "b"), "x\ty");
-    let document = parse_string("<a b=\"x&#xA;y\"/>").unwrap();
+    let document = Document::parse_string("<a b=\"x&#xA;y\"/>").unwrap();
     assert_eq!(attribute(&document, "b"), "x\ny");
-    let document = parse_string("<a b=\"x&#xD;y\"/>").unwrap();
+    let document = Document::parse_string("<a b=\"x&#xD;y\"/>").unwrap();
     assert_eq!(attribute(&document, "b"), "x\ry");
 
     // And the serializer writes those characters back as character references, so a value
@@ -141,20 +141,20 @@ fn attribute_value_normalisation_in_both_directions() {
         let root = element(&document, "a");
         document.set_root(root.clone());
         root.set_attribute(QualifiedName::without_namespace("b").unwrap(), value);
-        let serialized = write_string(&document).unwrap();
+        let serialized = document.write_string().unwrap();
         assert!(
             !serialized.contains('\t') || value.contains('\t'),
             "a literal tab must not appear in an attribute value: {serialized}"
         );
-        let reparsed = parse_string(&serialized).unwrap();
+        let reparsed = Document::parse_string(&serialized).unwrap();
         assert_eq!(attribute(&reparsed, "b"), value, "output: {serialized}");
     }
 
     // Markup characters are expanded on parse and re-escaped on write.
-    let document = parse_string("<a b=\"&lt;&amp;&quot;\"/>").unwrap();
+    let document = Document::parse_string("<a b=\"&lt;&amp;&quot;\"/>").unwrap();
     assert_eq!(attribute(&document, "b"), "<&\"");
     assert_eq!(
-        write_string(&document).unwrap(),
+        document.write_string().unwrap(),
         "<a b=\"&lt;&amp;&quot;\"/>"
     );
 }
@@ -181,26 +181,27 @@ fn the_declaration_is_interpreted_and_preserved() {
     // rule: rule.entities.no-encoding-legal-utf-required.md
     for encoding in ["UTF-8", "utf-8", "Utf8"] {
         let xml = format!(r#"<?xml version="1.0" encoding="{encoding}"?><a/>"#);
-        let document = parse_string(&xml).unwrap();
+        let document = Document::parse_string(&xml).unwrap();
         assert!(document.xml_declaration().is_some(), "encoding {encoding}");
     }
 
     let document =
-        parse_string(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a/>"#).unwrap();
+        Document::parse_string(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a/>"#)
+            .unwrap();
     let declaration = document.xml_declaration().unwrap();
     assert_eq!(declaration.version(), "1.0");
     assert_eq!(declaration.encoding(), Some("UTF-8"));
     assert_eq!(declaration.standalone(), Some(true));
     assert_eq!(
-        write_string(&document).unwrap(),
+        document.write_string().unwrap(),
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a/>"#
     );
 
     // A declaration without an encoding is legal.
-    let document = parse_string(r#"<?xml version="1.0"?><a/>"#).unwrap();
+    let document = Document::parse_string(r#"<?xml version="1.0"?><a/>"#).unwrap();
     assert_eq!(document.xml_declaration().unwrap().encoding(), None);
     assert_eq!(
-        write_string(&document).unwrap(),
+        document.write_string().unwrap(),
         r#"<?xml version="1.0"?><a/>"#
     );
 }
@@ -239,7 +240,7 @@ fn a_declaration_must_be_the_very_first_thing() {
         XmlError::InvalidProcessingInstruction(_)
     ));
     // `<?xml-stylesheet?>` is an ordinary processing instruction, not a declaration.
-    let document = parse_string(r#"<?xml-stylesheet href="a.css"?><a/>"#).unwrap();
+    let document = Document::parse_string(r#"<?xml-stylesheet href="a.css"?><a/>"#).unwrap();
     assert!(document.xml_declaration().is_none());
 }
 
@@ -247,10 +248,11 @@ fn a_declaration_must_be_the_very_first_thing() {
 fn an_optional_utf8_byte_order_mark_is_accepted() {
     // rule: rule.entities.utf8-bom-optional.md
     rules::assert_rule_exists("rule.entities.utf8-bom-optional.md");
-    let with_bom = parse_bytes(b"\xEF\xBB\xBF<a/>").unwrap();
-    assert_eq!(write_string(&with_bom).unwrap(), "<a/>");
+    let with_bom = Document::parse_bytes(b"\xEF\xBB\xBF<a/>").unwrap();
+    assert_eq!(with_bom.write_string().unwrap(), "<a/>");
 
-    let with_bom_and_declaration = parse_bytes(b"\xEF\xBB\xBF<?xml version=\"1.0\"?><a/>").unwrap();
+    let with_bom_and_declaration =
+        Document::parse_bytes(b"\xEF\xBB\xBF<?xml version=\"1.0\"?><a/>").unwrap();
     assert!(with_bom_and_declaration.xml_declaration().is_some());
 }
 
@@ -259,11 +261,11 @@ fn invalid_utf8_is_a_typed_error() {
     // rule: rule.entities.illegal-byte-sequence-fatal.md
     rules::assert_rule_exists("rule.entities.illegal-byte-sequence-fatal.md");
     assert!(matches!(
-        parse_bytes(b"<a>\xFF\xFE</a>"),
+        Document::parse_bytes(b"<a>\xFF\xFE</a>"),
         Err(XmlError::InvalidUtf8(_))
     ));
     assert!(matches!(
-        parse_bytes(&[0x3C, 0x61, 0x3E, 0xC3, 0x28]),
+        Document::parse_bytes(&[0x3C, 0x61, 0x3E, 0xC3, 0x28]),
         Err(XmlError::InvalidUtf8(_))
     ));
 }
@@ -299,24 +301,38 @@ fn top_level_content_policy() {
 
     // Whitespace around the root is allowed and is not represented.
     assert_eq!(
-        write_string(&parse_string("  <a/>  ").unwrap()).unwrap(),
+        Document::parse_string("  <a/>  ")
+            .unwrap()
+            .write_string()
+            .unwrap(),
         "<a/>"
     );
     // Whitespace *inside* the root is content and is preserved verbatim (this library does not
     // reformat documents); only the whitespace around the root is dropped.
     assert_eq!(
-        write_string(&parse_string("\n<a>\n  <b/>\n</a>\n").unwrap()).unwrap(),
+        Document::parse_string("\n<a>\n  <b/>\n</a>\n")
+            .unwrap()
+            .write_string()
+            .unwrap(),
         "<a>\n  <b/>\n</a>"
     );
 
     // Comments and processing instructions outside the root are accepted and discarded: the data
     // model has exactly one root and nothing else at the top level. This is the documented default
-    // behaviour (see the `io::parse` module documentation).
+    // behaviour (see the crate documentation).
     assert_eq!(
-        write_string(&parse_string("<!-- c --><?pi d?><a/><!-- e -->").unwrap()).unwrap(),
+        Document::parse_string("<!-- c --><?pi d?><a/><!-- e -->")
+            .unwrap()
+            .write_string()
+            .unwrap(),
         "<a/>"
     );
-    assert!(parse_string("<!--c--><a/>").unwrap().root().is_some());
+    assert!(
+        Document::parse_string("<!--c--><a/>")
+            .unwrap()
+            .root()
+            .is_some()
+    );
 
     // Non-whitespace text and a second element are errors.
     assert!(matches!(
@@ -357,9 +373,10 @@ fn tags_must_nest_and_close() {
 
 #[test]
 fn namespaces_are_resolved_and_reported() {
-    let document =
-        parse_string(r#"<h:root xmlns:h="http://h" xmlns="http://d"><child h:attr="v"/></h:root>"#)
-            .unwrap();
+    let document = Document::parse_string(
+        r#"<h:root xmlns:h="http://h" xmlns="http://d"><child h:attr="v"/></h:root>"#,
+    )
+    .unwrap();
     let root = document.root().unwrap();
     assert_eq!(root.qualified_name().to_string(), "h:root");
     let child = root.child_elements()[0].clone();
@@ -414,7 +431,8 @@ fn an_empty_default_declaration_removes_the_default_namespace() {
     // rule: rule.namespace-usage.empty-default-namespace.md
     rules::assert_rule_exists("rule.namespace-usage.empty-default-namespace.md");
     let document =
-        parse_string(r#"<root xmlns="http://d"><inner xmlns=""><leaf/></inner></root>"#).unwrap();
+        Document::parse_string(r#"<root xmlns="http://d"><inner xmlns=""><leaf/></inner></root>"#)
+            .unwrap();
     let root = document.root().unwrap();
     assert_eq!(root.namespace().unwrap().uri(), "http://d");
     let inner = root.child_elements()[0].clone();
@@ -424,9 +442,9 @@ fn an_empty_default_declaration_removes_the_default_namespace() {
     assert!(leaf.namespace().is_none());
 
     // The empty declaration survives a round trip.
-    let serialized = write_string(&document).unwrap();
+    let serialized = document.write_string().unwrap();
     assert!(serialized.contains(r#"xmlns="""#), "{serialized}");
-    let reparsed = parse_string(&serialized).unwrap();
+    let reparsed = Document::parse_string(&serialized).unwrap();
     assert!(
         reparsed.root().unwrap().child_elements()[0]
             .namespace()
@@ -446,7 +464,7 @@ fn xml_lang_and_xml_space_round_trip_with_the_implicit_xml_prefix() {
     );
 
     let xml = r#"<a xml:lang="en-GB" xml:space="preserve"><b/></a>"#;
-    let document = parse_string(xml).unwrap();
+    let document = Document::parse_string(xml).unwrap();
     let root = document.root().unwrap();
 
     // The `xml` prefix is bound without any declaration (Namespaces 1.0 §3), so `xml:lang` is an
@@ -486,14 +504,14 @@ fn xml_lang_and_xml_space_round_trip_with_the_implicit_xml_prefix() {
     ));
 
     // ... and the document round-trips byte for byte.
-    assert_eq!(write_string(&document).unwrap(), xml);
-    let reparsed = parse_string(&write_string(&document).unwrap()).unwrap();
-    assert_eq!(write_string(&reparsed).unwrap(), xml);
+    assert_eq!(document.write_string().unwrap(), xml);
+    let reparsed = Document::parse_string(&document.write_string().unwrap()).unwrap();
+    assert_eq!(reparsed.write_string().unwrap(), xml);
 
     // A value that breaks the `xml:space` enumeration is *validity*, not well-formedness: the
     // parser stores it (no DTD means no attribute types) and `is_valid_xml_space_value` rejects
     // it, so the whole-document validation pass (G4) is what reports it.
-    let loose = parse_string(r#"<a xml:space="preserved"/>"#).unwrap();
+    let loose = Document::parse_string(r#"<a xml:space="preserved"/>"#).unwrap();
     assert_eq!(
         loose
             .root()
@@ -522,7 +540,7 @@ fn less_than_is_rejected_in_attribute_values() {
     ));
     // ... but an escaped one is fine.
     assert_eq!(
-        attribute(&parse_string(r#"<a b="x&lt;y"/>"#).unwrap(), "b"),
+        attribute(&Document::parse_string(r#"<a b="x&lt;y"/>"#).unwrap(), "b"),
         "x<y"
     );
 }
@@ -541,8 +559,8 @@ fn comments_must_be_well_formed() {
         parse_error("<a><!--x---></a>"),
         XmlError::InvalidComment(_) | XmlError::MalformedXml(_)
     ));
-    assert!(parse_string("<a><!-- fine --></a>").is_ok());
-    assert!(parse_string("<a><!-- ends with - --></a>").is_ok());
+    assert!(Document::parse_string("<a><!-- fine --></a>").is_ok());
+    assert!(Document::parse_string("<a><!-- ends with - --></a>").is_ok());
 }
 
 #[test]
@@ -555,7 +573,7 @@ fn cdata_and_processing_instructions_must_be_well_formed() {
     rules::assert_rule_exists("rule.well-formedness.pi-no-contains-close.md");
 
     // `]]>` simply closes the section, so this is *valid*: the rest becomes text.
-    let document = parse_string("<a><![CDATA[x]]>y</a>").unwrap();
+    let document = Document::parse_string("<a><![CDATA[x]]>y</a>").unwrap();
     let kinds: Vec<NodeContent> = document
         .root()
         .unwrap()
@@ -608,8 +626,8 @@ fn parser_never_panics_on_odd_input() {
         "<a xmlns:x='http://x' x:a='1' a='2'/>",
     ];
     for input in inputs {
-        let _ = parse_string(input);
-        let _ = parse_bytes(input.as_bytes());
+        let _ = Document::parse_string(input);
+        let _ = Document::parse_bytes(input.as_bytes());
     }
 }
 
@@ -621,10 +639,10 @@ fn parser_never_panics_on_odd_input() {
 fn prefixes_are_preserved() {
     // This was REVIEW D2: the pre-rewrite serializer dropped the element prefix.
     let xml = r#"<html:html xmlns:html="http://www.w3.org/1999/xhtml"><html:body>hi</html:body></html:html>"#;
-    let document = parse_string(xml).unwrap();
-    assert_eq!(write_string(&document).unwrap(), xml);
+    let document = Document::parse_string(xml).unwrap();
+    assert_eq!(document.write_string().unwrap(), xml);
 
-    let document = parse_string(xml).unwrap();
+    let document = Document::parse_string(xml).unwrap();
     assert!(document.root().unwrap().to_string().contains("<html:body>"));
 }
 
@@ -637,78 +655,71 @@ fn namespace_declarations_are_never_invented_or_removed() {
 
     // The name carries the namespace, but nothing declares the prefix: the serializer writes what
     // is there and does not "fix" the document (requirement (3)).
-    let serialized = write_string(&document).unwrap();
+    let serialized = document.write_string().unwrap();
     assert_eq!(serialized, "<ex:item/>");
-    assert!(parse_string(&serialized).is_err());
+    assert!(Document::parse_string(&serialized).is_err());
 
     // After declaring it, the document is consistent again.
     root.declare_namespace(ex);
     assert_eq!(
-        write_string(&document).unwrap(),
+        document.write_string().unwrap(),
         r#"<ex:item xmlns:ex="http://example.com"/>"#
     );
 }
 
 #[test]
 fn empty_elements_and_write_options() {
-    let document = parse_string("<a/>").unwrap();
+    let document = Document::parse_string("<a/>").unwrap();
     let default = WriteOptions::default();
     assert_eq!(default.declaration, DeclarationStyle::IfPresent);
     assert_eq!(default.empty_elements, EmptyElementStyle::SelfClosing);
-    assert_eq!(write_string(&document).unwrap(), "<a/>");
+    assert_eq!(document.write_string().unwrap(), "<a/>");
     assert_eq!(
-        write_string_with(
-            &document,
-            &WriteOptions {
+        document
+            .write_string_with(&WriteOptions {
                 declaration: DeclarationStyle::Never,
                 empty_elements: EmptyElementStyle::ExplicitEndTag,
-            }
-        )
-        .unwrap(),
+            })
+            .unwrap(),
         "<a></a>"
     );
 
     // A nested empty element inside a non-empty one.
-    let document = parse_string("<a><b/><c>text</c></a>").unwrap();
-    assert_eq!(write_string(&document).unwrap(), "<a><b/><c>text</c></a>");
+    let document = Document::parse_string("<a><b/><c>text</c></a>").unwrap();
+    assert_eq!(document.write_string().unwrap(), "<a><b/><c>text</c></a>");
     assert_eq!(
-        write_string_with(
-            &document,
-            &WriteOptions {
+        document
+            .write_string_with(&WriteOptions {
                 declaration: DeclarationStyle::Never,
                 empty_elements: EmptyElementStyle::ExplicitEndTag,
-            }
-        )
-        .unwrap(),
+            })
+            .unwrap(),
         "<a><b></b><c>text</c></a>"
     );
 }
 
 #[test]
 fn declaration_style_is_honoured() {
-    let with_declaration = parse_string(r#"<?xml version="1.0" encoding="UTF-8"?><a/>"#).unwrap();
-    let without = parse_string("<a/>").unwrap();
+    let with_declaration =
+        Document::parse_string(r#"<?xml version="1.0" encoding="UTF-8"?><a/>"#).unwrap();
+    let without = Document::parse_string("<a/>").unwrap();
 
     assert_eq!(
-        write_string_with(
-            &with_declaration,
-            &WriteOptions {
+        with_declaration
+            .write_string_with(&WriteOptions {
                 declaration: DeclarationStyle::Never,
                 ..Default::default()
-            }
-        )
-        .unwrap(),
+            })
+            .unwrap(),
         "<a/>"
     );
     assert_eq!(
-        write_string_with(
-            &without,
-            &WriteOptions {
+        without
+            .write_string_with(&WriteOptions {
                 declaration: DeclarationStyle::Always,
                 ..Default::default()
-            }
-        )
-        .unwrap(),
+            })
+            .unwrap(),
         r#"<?xml version="1.0" encoding="UTF-8"?><a/>"#
     );
     // Explicit setting is preserved.
@@ -718,7 +729,7 @@ fn declaration_style_is_honoured() {
         Some(false),
     )));
     assert_eq!(
-        write_string(&without).unwrap(),
+        without.write_string().unwrap(),
         r#"<?xml version="1.0" encoding="UTF-8" standalone="no"?><a/>"#
     );
 }
@@ -732,7 +743,7 @@ fn text_is_escaped_so_that_it_round_trips() {
     document.set_root(root.clone());
     root.append_child(document.create_text("A & B < C > D").unwrap());
 
-    let serialized = write_string(&document).unwrap();
+    let serialized = document.write_string().unwrap();
     assert_eq!(serialized, "<a>A &amp; B &lt; C &gt; D</a>");
     assert_eq!(root_text(&serialized), "A & B < C > D");
 }
@@ -744,7 +755,7 @@ fn a_literal_carriage_return_in_text_round_trips() {
     document.set_root(root.clone());
     root.append_child(document.create_text("x\ry\nz").unwrap());
 
-    let serialized = write_string(&document).unwrap();
+    let serialized = document.write_string().unwrap();
     assert_eq!(
         serialized, "<a>x&#xD;y\nz</a>",
         "a literal CR would be normalised to LF by the next parse"
@@ -758,7 +769,7 @@ fn text_containing_a_cdata_close_round_trips() {
     let root = element(&document, "a");
     document.set_root(root.clone());
     root.append_child(document.create_text("a ]]> b").unwrap());
-    let serialized = write_string(&document).unwrap();
+    let serialized = document.write_string().unwrap();
     assert!(serialized.contains("]]&gt;"), "{serialized}");
     assert_eq!(root_text(&serialized), "a ]]> b");
 }
@@ -774,11 +785,14 @@ fn adjacent_text_nodes_are_merged_on_output() {
     root.append_child(document.create_text("three").unwrap());
     root.append_child(document.create_text("four").unwrap());
 
-    let serialized = write_string(&document).unwrap();
+    let serialized = document.write_string().unwrap();
     assert_eq!(serialized, "<a>onetwo<b/>threefour</a>");
     // Parsing the output again gives the same structure, so writing is idempotent.
     assert_eq!(
-        write_string(&parse_string(&serialized).unwrap()).unwrap(),
+        Document::parse_string(&serialized)
+            .unwrap()
+            .write_string()
+            .unwrap(),
         serialized
     );
 }
@@ -800,7 +814,7 @@ fn processing_instruction_content_is_kept_verbatim() {
         ("<?a x y?>", "x y"),
         ("<?a echo \"hi\"; ?>", "echo \"hi\"; "),
     ] {
-        let document = parse_string(&format!("<r>{input}</r>")).unwrap();
+        let document = Document::parse_string(&format!("<r>{input}</r>")).unwrap();
         let (_, data) = document
             .root()
             .unwrap()
@@ -811,8 +825,8 @@ fn processing_instruction_content_is_kept_verbatim() {
         assert_eq!(data.as_str(), expected, "input: {input}");
 
         // ... and the output re-parses to the same content.
-        let serialized = write_string(&document).unwrap();
-        let reparsed = parse_string(&serialized).unwrap();
+        let serialized = document.write_string().unwrap();
+        let reparsed = Document::parse_string(&serialized).unwrap();
         let (_, data) = reparsed
             .root()
             .unwrap()
@@ -835,7 +849,7 @@ fn empty_text_nodes_have_no_representation_and_are_omitted() {
     root.append_child(element(&document, "b"));
     root.append_child(document.create_text("").unwrap());
 
-    assert_eq!(write_string(&document).unwrap(), "<a>text<b/></a>");
+    assert_eq!(document.write_string().unwrap(), "<a>text<b/></a>");
     // Comments and CDATA sections have a representation for "empty" and keep it.
     let document = Document::empty();
     let root = element(&document, "a");
@@ -843,7 +857,7 @@ fn empty_text_nodes_have_no_representation_and_are_omitted() {
     root.append_child(document.create_comment("").unwrap());
     root.append_child(document.create_cdata("").unwrap());
     assert_eq!(
-        write_string(&document).unwrap(),
+        document.write_string().unwrap(),
         "<a><!----><![CDATA[]]></a>"
     );
 }
@@ -868,22 +882,22 @@ fn comments_cdata_and_processing_instructions_are_written_verbatim() {
     );
     root.append_child(document.create_processing_instruction("empty", "").unwrap());
 
-    let serialized = write_string(&document).unwrap();
+    let serialized = document.write_string().unwrap();
     assert_eq!(
         serialized,
         "<a><!-- ok --><![CDATA[raw <content> & more]]><?target data=\"v\"?><?empty?></a>"
     );
-    let reparsed = parse_string(&serialized).unwrap();
-    assert_eq!(write_string(&reparsed).unwrap(), serialized);
+    let reparsed = Document::parse_string(&serialized).unwrap();
+    assert_eq!(reparsed.write_string().unwrap(), serialized);
 }
 
 #[test]
 fn a_document_without_a_root_serializes_to_nothing_useful_but_does_not_fail() {
     let document = Document::empty();
-    assert_eq!(write_string(&document).unwrap(), "");
+    assert_eq!(document.write_string().unwrap(), "");
     document.set_xml_declaration(Some(biodivine_lib_xml_dom::xml_spec::XmlDeclaration::utf8()));
     assert_eq!(
-        write_string(&document).unwrap(),
+        document.write_string().unwrap(),
         r#"<?xml version="1.0" encoding="UTF-8"?>"#
     );
 }
@@ -908,14 +922,14 @@ fn a_deeply_nested_document_round_trips() {
         current = child;
     }
 
-    let serialized = write_string(&document).unwrap();
+    let serialized = document.write_string().unwrap();
     // One `<child` per level, and exactly one of them is an empty-element tag.
     assert_eq!(serialized.matches("<child").count(), DEPTH);
     assert_eq!(serialized.matches("<child/>").count(), 1);
 
-    let reparsed = parse_string(&serialized).unwrap();
+    let reparsed = Document::parse_string(&serialized).unwrap();
     assert_eq!(reparsed.root().unwrap().descendants().len(), DEPTH);
-    assert_eq!(write_string(&reparsed).unwrap(), serialized);
+    assert_eq!(reparsed.write_string().unwrap(), serialized);
     // `Display` uses the same writer.
     assert_eq!(reparsed.root().unwrap().to_string(), serialized);
     // Cloning is iterative as well.

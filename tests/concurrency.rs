@@ -131,7 +131,7 @@ fn readers_and_writers_do_not_deadlock() {
                     let children = root.children();
                     let _ = children.len();
                     let _ = root.descendants().len();
-                    let _ = biodivine_lib_xml_dom::write_string(&document).unwrap();
+                    let _ = document.write_string().unwrap();
                     let _ = document.node_count();
                 }
             }

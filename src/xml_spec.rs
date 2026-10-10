@@ -7,7 +7,6 @@ pub mod rules;
 pub mod validation;
 
 pub use declaration::{UTF8_ENCODING_NAME, XML_VERSION, XmlDeclaration};
-pub use rules::RULES_DIRECTORY;
 
 /// Validates `s` and returns it as an `Arc<str>`, or a validation error naming the expected
 /// content type.

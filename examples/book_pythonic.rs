@@ -5,11 +5,11 @@
 //! name, and validating.
 //!
 //! Run with `cargo run --example book_pythonic`.
-
-use biodivine_lib_xml_dom::parse_string;
+use biodivine_lib_xml_dom::Document;
 
 fn main() {
-    let document = parse_string(r#"<root><child class="a"/><child class="b"/></root>"#).unwrap();
+    let document =
+        Document::parse_string(r#"<root><child class="a"/><child class="b"/></root>"#).unwrap();
     let root = document.root().unwrap();
 
     // The Python layer offers `for child in node` and `node["class"]`; the Rust API spells the same

@@ -64,10 +64,6 @@ use pyo3::prelude::*;
 pub use crate::document::PyDocument;
 pub use crate::element::PyElement;
 pub use crate::gc::PyGcStats;
-pub use crate::io::{
-    parse_bytes, parse_file, parse_string, write_file, write_file_with, write_string,
-    write_string_with,
-};
 pub use crate::namespace::PyNamespace;
 pub use crate::node::{PyNode, PyNodeArg};
 pub use crate::node_id::PyNodeId;
@@ -101,14 +97,6 @@ fn _sys(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyDeclarationStyle>()?;
     module.add_class::<PyEmptyElementStyle>()?;
     module.add_class::<crate::write_options::PyXmlDeclaration>()?;
-
-    module.add_function(wrap_pyfunction!(parse_string, module)?)?;
-    module.add_function(wrap_pyfunction!(parse_bytes, module)?)?;
-    module.add_function(wrap_pyfunction!(parse_file, module)?)?;
-    module.add_function(wrap_pyfunction!(write_string, module)?)?;
-    module.add_function(wrap_pyfunction!(write_string_with, module)?)?;
-    module.add_function(wrap_pyfunction!(write_file, module)?)?;
-    module.add_function(wrap_pyfunction!(write_file_with, module)?)?;
 
     error::register(module)?;
     validation::register(module)?;

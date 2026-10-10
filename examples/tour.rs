@@ -6,9 +6,7 @@
 //! cargo run --example tour
 //! ```
 
-use biodivine_lib_xml_dom::{
-    Document, Namespace, NodeContent, QualifiedName, parse_string, write_string,
-};
+use biodivine_lib_xml_dom::{Document, Namespace, NodeContent, QualifiedName};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("XML DOM library tour");
@@ -67,7 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     </book>
 </bookstore>"#;
 
-    let bookstore = parse_string(xml)?;
+    let bookstore = Document::parse_string(xml)?;
     let root = bookstore.root().ok_or("the document has no root element")?;
     println!("root: {}", root.qualified_name());
 
@@ -88,7 +86,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // --- 3: traverse with node contents -----------------------------------------------------
     println!("\n3. Inspecting child nodes");
-    let mixed = parse_string(r#"<p>Hello <b>world</b>, welcome!</p>"#)?;
+    let mixed = Document::parse_string(r#"<p>Hello <b>world</b>, welcome!</p>"#)?;
     let paragraph = mixed.root().unwrap();
     for (index, child) in paragraph.children().iter().enumerate() {
         match child.content() {
@@ -144,7 +142,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     annotated_root.append_child(annotated.create_text("plain text")?);
 
-    let serialized = write_string(&annotated)?;
+    let serialized = annotated.write_string()?;
     println!("{serialized}");
     assert!(serialized.contains("<![CDATA[raw <content> & text]]>"));
     assert!(serialized.contains("<?xml-stylesheet type=\"text/css\" href=\"a.css\"?>"));

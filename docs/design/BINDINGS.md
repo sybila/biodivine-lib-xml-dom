@@ -35,11 +35,11 @@ group and gives a verdict, so the "does not make sense" set is visible rather th
 | `XmlDeclaration` | `XmlDeclaration` | `XmlDeclaration` | **mirrored** |
 | `XmlError` (+ all variants) | `XmlError` and five subclasses | same | **mirrored as an exception hierarchy** (see §2) |
 | `XmlValidationError`, `XmlValidationErrors`, `ValidationErrorKind` | `ValidationError`, `ValidationErrors` | same | **mirrored**; the kind is exposed both as a stable snake_case string (`kind()`) and as the rule file it comes from (`rule()`) |
-| `parse_string`, `parse_bytes`, `parse_file`, `write_string`, `write_string_with`, `write_file`, `write_file_with` | same names | `parse`, `parse_file`, `write`, `write_file` (+ `options=`) | **mirrored**; Python's `parse` accepts `str` or `bytes` and the file variants accept any `os.PathLike` |
+| `Document::parse_string`, `Document::parse_bytes`, `Document::parse_file`, `Document::write_string`, `Document::write_string_with`, `Document::write_file`, `Document::write_file_with` | `Document` static/instance methods with the same names | module-level `parse`, `parse_file`, `write`, `write_file` (+ `options=`) | **mirrored**; Python puts the entry points at module level (its idiom) and delegates to the mirrored `Document` methods; `parse` accepts `str` or `bytes` and the file variants accept any `os.PathLike` |
 | `MAX_NODES` | — | — | **not mirrored**: reachable only with more than four billion nodes in one document; Rust documents it where it is checked |
 | `xml_spec::{NCName, Text, Comment, CData, PiTarget, PiData}` | — | — | **not mirrored.** These types *are* the Rust construction mechanism (requirement (4)(1): validity enforced by the type). Python's equivalents are the raising constructors (`Document.create_text`, `QualifiedName(...)`, `Namespace(...)`), so mirroring the wrapper types would create a second, parallel way to validate names with no benefit |
 | `xml_spec::{rules, validation, declaration}` helpers | — | — | **not mirrored**: developer/test-facing (§ `rules::assert_rule_exists` is for the Rust test suite, `NamespaceScope`/`check_*` are the internal shape of validation) |
-| `Namespace::shares_data_with`, `Arena`, `Interner`, `validation::validate_arena` | — | — | crate-internal in Rust, so nothing to mirror |
+| `Namespace::shares_data_with`, `Arena`, `Interner`, the whole-document validation traversal | — | — | crate-internal in Rust, so nothing to mirror |
 
 ### Python-only additions
 
@@ -48,7 +48,8 @@ These exist in the Python layer only, and each one is a convenience rather than 
 * `Node.__iter__`/`__len__`/`__getitem__` over children; `Element.attributes` returns a `dict`;
   `Element.get(name, default=None)`; `Element.local_name = "x"` as a setter.
 * `Document.create_element_tree(name, *children)`, `Document.copy()`/`__copy__`/`__deepcopy__`.
-* `parse`/`parse_file`/`write`/`write_file` module functions with `options=None` defaults.
+* `parse`/`parse_file`/`write`/`write_file` module functions with `options=None` defaults, which
+  delegate to the mirrored `Document.parse_string`/`parse_file`/`write_string`/`write_file` methods.
 * `ValidationErrors` is a `list` subclass, so `if document.validation_errors():` reads naturally.
 * Argument coercion: `str` where a `QualifiedName` is expected (meaning "no namespace"), `Namespace`
   or URI `str` where a namespace is expected, `Node` or `Element` wherever a node is expected
@@ -76,8 +77,8 @@ document release the GIL, so a long operation in one Python thread does not free
 
 | operation | GIL | why |
 | --- | --- | --- |
-| `parse_string`, `parse_bytes`, `parse_file` | released | parses a whole document |
-| `write_string(_with)`, `write_file(_with)` | released | serializes a whole document |
+| `Document.parse_string`, `Document.parse_bytes`, `Document.parse_file` | released | parses a whole document |
+| `Document.write_string`, `Document.write_file` | released | serializes a whole document |
 | `Document.validate`, `is_valid`, `validation_errors` | released | walks the whole arena |
 | `Node.deep_clone_into`, `Element.deep_clone_into` | released | snapshots and rebuilds a subtree |
 | every other binding | held | one lock acquisition and a bounded read or write, where releasing would cost more than it saves |

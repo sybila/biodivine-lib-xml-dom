@@ -4,7 +4,7 @@
 //! test as well as an example: the book includes this file verbatim, so a chapter cannot show code
 //! that no longer works.
 
-use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName, write_string};
+use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
 
 fn main() {
     let document = Document::empty();
@@ -21,7 +21,7 @@ fn main() {
     root.append_child(child);
 
     assert_eq!(
-        write_string(&document).unwrap(),
+        document.write_string().unwrap(),
         r#"<ex:root xmlns:ex="http://example.com"><ex:child id="first">Hello, World!</ex:child></ex:root>"#
     );
     assert!(document.is_valid());
@@ -31,5 +31,5 @@ fn main() {
     let child = &root.child_elements()[0];
     assert_eq!(child.local_name(), "child");
     assert_eq!(child.namespace().unwrap().uri(), "http://example.com");
-    println!("{}", write_string(&document).unwrap());
+    println!("{}", document.write_string().unwrap());
 }

@@ -13,11 +13,11 @@
 use std::path::{Path, PathBuf};
 
 /// Directory (relative to the crate root) that holds the rule summaries.
-pub const RULES_DIRECTORY: &str = "specification/rules";
+const RULES_DIRECTORY: &str = "specification/rules";
 
 /// The path of the summary file for `rule`, where `rule` is a file name such as
 /// `rule.well-formedness.legal-characters.md`.
-pub fn rule_summary_path(rule: &str) -> PathBuf {
+fn rule_summary_path(rule: &str) -> PathBuf {
     Path::new(RULES_DIRECTORY).join(rule)
 }
 
@@ -28,10 +28,11 @@ pub fn rule_summary_exists(rule: &str) -> bool {
 
 /// Asserts that a summary file exists for `rule`.
 ///
-/// This turns "this code implements rule X" from a comment into something the test suite checks, so
-/// a renamed or deleted rule file cannot go unnoticed. It is public because the check is just as
-/// useful from this crate's own integration tests (which only see the public API) and from
-/// downstream crates that want to assert their own rule anchors.
+///
+/// This turns "this code enforces rule X" from a comment into something the test suite checks, so a
+/// renamed or deleted rule file cannot go unnoticed. The check is public because the convention it
+/// enforces is checked from this crate's integration tests, which only see the public API, and
+/// because a downstream crate that mirrors the convention can reuse it.
 ///
 /// # Panics
 ///

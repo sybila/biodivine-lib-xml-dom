@@ -7,7 +7,7 @@
 
 use std::thread;
 
-use biodivine_lib_xml_dom::{Document, Element, GcConfig, NodeId, QualifiedName, write_string};
+use biodivine_lib_xml_dom::{Document, Element, GcConfig, NodeId, QualifiedName};
 
 /// A configuration whose arena fills up quickly, so collections happen all the time.
 fn small_arena() -> GcConfig {
@@ -86,13 +86,13 @@ fn a_collected_slot_is_reused_by_the_next_allocation() {
 #[test]
 fn the_document_root_keeps_its_tree_alive_without_any_handle() {
     let document = tree(8);
-    let expected = write_string(&document).unwrap();
+    let expected = document.write_string().unwrap();
 
     // No handle to any node of the tree exists here: the document itself is the only owner.
     let stats = document.collect_garbage();
     assert_eq!(stats.collected, 0);
     assert_eq!(stats.live, 17);
-    assert_eq!(write_string(&document).unwrap(), expected);
+    assert_eq!(document.write_string().unwrap(), expected);
 }
 
 #[test]
@@ -222,7 +222,7 @@ fn stats_describe_the_capacity_policy() {
 #[test]
 fn a_collection_during_a_cross_document_copy_keeps_the_copy_intact() {
     let source = tree(30);
-    let expected = write_string(&source).unwrap();
+    let expected = source.write_string().unwrap();
 
     // The target arena is far too small for the copy and is full of garbage, so inserting the
     // subtree has to collect and grow before it can allocate the copied nodes.
@@ -245,7 +245,7 @@ fn a_collection_during_a_cross_document_copy_keeps_the_copy_intact() {
 
     let copy_as_root = copy.as_element().unwrap();
     target.set_root(copy_as_root);
-    assert_eq!(write_string(&target).unwrap(), expected);
+    assert_eq!(target.write_string().unwrap(), expected);
     assert!(target.validate().is_ok());
 }
 

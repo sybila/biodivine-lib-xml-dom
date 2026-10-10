@@ -2,12 +2,12 @@
 //!
 //! Run with `cargo run --example book_namespaces`.
 
-use biodivine_lib_xml_dom::{Namespace, QualifiedName, parse_string, write_string};
+use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
 
 fn main() {
     // Parsing assigns every name its expanded form, resolving prefixes against the declarations
     // that are in scope.
-    let document = parse_string(
+    let document = Document::parse_string(
         r#"<root xmlns:ex="http://example.com" xmlns="http://default"><child ex:attr="v"/></root>"#,
     )
     .unwrap();
@@ -61,7 +61,8 @@ fn main() {
 
     // `xmlns=""` removes the default namespace from the element it is declared on.
     let document =
-        parse_string(r#"<root xmlns="http://d"><inner xmlns=""><leaf/></inner></root>"#).unwrap();
+        Document::parse_string(r#"<root xmlns="http://d"><inner xmlns=""><leaf/></inner></root>"#)
+            .unwrap();
     let inner = document.root().unwrap().child_elements()[0].clone();
     assert!(inner.namespace().is_none());
     assert!(inner.child_elements()[0].namespace().is_none());
@@ -70,13 +71,14 @@ fn main() {
     // Editing never synchronises declarations for you: removing one that a subtree relies on
     // succeeds silently, and `validate` is what reports the resulting inconsistency.
     let document =
-        parse_string(r#"<ex:root xmlns:ex="http://example.com"><ex:child/></ex:root>"#).unwrap();
+        Document::parse_string(r#"<ex:root xmlns:ex="http://example.com"><ex:child/></ex:root>"#)
+            .unwrap();
     let root = document.root().unwrap();
     root.remove_namespace_declaration(Some(&biodivine_lib_xml_dom::xml_spec::nc_name("ex")));
     assert_eq!(document.validate().unwrap_err().len(), 2);
     assert_eq!(
-        write_string(&document).unwrap(),
+        document.write_string().unwrap(),
         "<ex:root><ex:child/></ex:root>"
     );
-    println!("{}", write_string(&document).unwrap());
+    println!("{}", document.write_string().unwrap());
 }

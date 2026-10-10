@@ -9,7 +9,6 @@ mod common;
 use biodivine_lib_xml_dom::xml_spec::{NCName, nc_name, rules};
 use biodivine_lib_xml_dom::{
     Document, Element, Namespace, QualifiedName, ValidationErrorKind, XmlValidationError,
-    parse_string, write_string,
 };
 
 use common::element;
@@ -91,10 +90,10 @@ fn every_parsed_fixture_is_valid() {
         r#"<a xmlns:ex="http://e"><ex:b>text</ex:b><!-- c --><![CDATA[raw]]><?pi data?></a>"#,
     ];
     for fixture in fixtures {
-        let document = parse_string(fixture).unwrap();
+        let document = Document::parse_string(fixture).unwrap();
         assert_valid(&document);
         // ... and the round trip stays valid.
-        assert_valid(&parse_string(&write_string(&document).unwrap()).unwrap());
+        assert_valid(&Document::parse_string(&document.write_string().unwrap()).unwrap());
     }
 }
 
@@ -688,7 +687,8 @@ fn editing_is_silent_and_validation_is_what_reports() {
     // Requirement (3): "I can remove the namespace declaration attribute, and it will not complain
     // even if some child nodes rely on that declaration."
     let document =
-        parse_string(r#"<ex:root xmlns:ex="http://example.com"><ex:child/></ex:root>"#).unwrap();
+        Document::parse_string(r#"<ex:root xmlns:ex="http://example.com"><ex:child/></ex:root>"#)
+            .unwrap();
     let root = document.root().unwrap();
     assert_valid(&document);
 
@@ -748,11 +748,12 @@ fn moving_an_element_can_break_its_namespace_and_validation_says_so() {
 #[test]
 fn validation_does_not_change_the_document() {
     let document =
-        parse_string(r#"<ex:root xmlns:ex="http://example.com"><ex:b/></ex:root>"#).unwrap();
-    let before = write_string(&document).unwrap();
+        Document::parse_string(r#"<ex:root xmlns:ex="http://example.com"><ex:b/></ex:root>"#)
+            .unwrap();
+    let before = document.write_string().unwrap();
     let _ = document.validate();
     let _ = document.is_valid();
-    assert_eq!(write_string(&document).unwrap(), before);
+    assert_eq!(document.write_string().unwrap(), before);
 }
 
 /// A small helper so that the tests can build `xml:*` attributes without repeating the namespace.

@@ -2,10 +2,10 @@
 //!
 //! Run with `cargo run --example book_editing`.
 
-use biodivine_lib_xml_dom::{Document, QualifiedName, parse_string};
+use biodivine_lib_xml_dom::{Document, QualifiedName};
 
 fn main() {
-    let document = parse_string("<root><a/><b/><c/></root>").unwrap();
+    let document = Document::parse_string("<root><a/><b/><c/></root>").unwrap();
     let root = document.root().unwrap();
 
     // Handles are cheap: cloning one copies the *handle*, not the node.
@@ -77,8 +77,5 @@ fn main() {
     new_root.append_child(imported);
     assert!(target.is_valid());
 
-    println!(
-        "{}",
-        biodivine_lib_xml_dom::write_string(&document).unwrap()
-    );
+    println!("{}", document.write_string().unwrap());
 }

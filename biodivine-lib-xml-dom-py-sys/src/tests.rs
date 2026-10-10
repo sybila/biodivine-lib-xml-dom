@@ -18,7 +18,7 @@ use pyo3::prelude::*;
 
 use crate::{
     PyDocument, PyElement, PyNamespace, PyNode, PyNodeArg, PyNodeId, PyNodeKind, PyQualifiedName,
-    PyWriteOptions, parse_string, write_string,
+    PyWriteOptions,
 };
 
 #[test]
@@ -64,7 +64,7 @@ fn a_document_round_trips_through_the_bindings() {
         assert!(document.validation_errors(py).is_empty());
         assert_eq!(document.node_count(), 2);
         assert_eq!(
-            write_string(py, &document).unwrap(),
+            document.write_string(py, None).unwrap(),
             r#"<ex:item xmlns:ex="http://example.com" a="v">hello</ex:item>"#
         );
 
@@ -83,9 +83,9 @@ fn a_document_round_trips_through_the_bindings() {
 fn a_parsed_document_is_the_same_tree_as_the_serialized_one() {
     Python::attach(|py| {
         let source = r#"<ex:root xmlns:ex="http://example.com"><ex:b a="1">t</ex:b></ex:root>"#;
-        let document = parse_string(py, source).unwrap();
+        let document = PyDocument::parse_string(py, source).unwrap();
         assert!(document.is_valid(py));
-        assert_eq!(write_string(py, &document).unwrap(), source);
+        assert_eq!(document.write_string(py, None).unwrap(), source);
 
         let root = document.root().unwrap();
         assert_eq!(root.qualified_name().__str__(), "ex:root");

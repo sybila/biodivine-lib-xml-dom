@@ -2,7 +2,7 @@
 //!
 //! Run with `cargo run --example book_threads`.
 
-use biodivine_lib_xml_dom::{Document, QualifiedName, write_string};
+use biodivine_lib_xml_dom::{Document, QualifiedName};
 
 fn main() {
     let document = Document::empty();
@@ -38,7 +38,7 @@ fn main() {
                 let mut total = 0usize;
                 for _ in 0..50 {
                     total += document.root().unwrap().children().len();
-                    let _ = write_string(&document).unwrap();
+                    let _ = document.write_string().unwrap();
                 }
                 total
             })

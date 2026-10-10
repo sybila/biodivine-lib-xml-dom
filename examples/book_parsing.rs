@@ -2,16 +2,13 @@
 //!
 //! Run with `cargo run --example book_parsing`.
 
-use biodivine_lib_xml_dom::{
-    DeclarationStyle, EmptyElementStyle, WriteOptions, parse_string, write_string,
-    write_string_with,
-};
+use biodivine_lib_xml_dom::{DeclarationStyle, Document, EmptyElementStyle, WriteOptions};
 
 fn main() {
     // A round trip is faithful: prefixes, declarations, escaping and the XML declaration survive.
     let source = r#"<?xml version="1.0" encoding="UTF-8"?><ex:a xmlns:ex="http://e"><ex:b x="1 &amp; 2">t</ex:b><!--c--><![CDATA[<raw>]]><?pi data?></ex:a>"#;
-    let document = parse_string(source).unwrap();
-    assert_eq!(write_string(&document).unwrap(), source);
+    let document = Document::parse_string(source).unwrap();
+    assert_eq!(document.write_string().unwrap(), source);
     assert!(document.xml_declaration().is_some());
 
     // Output options.
@@ -20,7 +17,10 @@ fn main() {
         empty_elements: EmptyElementStyle::ExplicitEndTag,
     };
     assert_eq!(
-        write_string_with(&parse_string("<a><b/></a>").unwrap(), &options).unwrap(),
+        Document::parse_string("<a><b/></a>")
+            .unwrap()
+            .write_string_with(&options)
+            .unwrap(),
         "<a><b></b></a>"
     );
 
@@ -35,15 +35,15 @@ fn main() {
         r#"<a a="1" a="2"/>"#,   // duplicate attribute
         r#"<a>&undefined;</a>"#, // an entity this library cannot resolve
     ] {
-        let error = parse_string(bad).unwrap_err();
+        let error = Document::parse_string(bad).unwrap_err();
         println!("{bad:28} -> {error}");
     }
 
     // Predefined entities and character references are expanded.
-    let text = parse_string("<a>AT&amp;T &#65;</a>").unwrap();
+    let text = Document::parse_string("<a>AT&amp;T &#65;</a>").unwrap();
     assert_eq!(
         text.root().unwrap().children()[0].text().unwrap().as_str(),
         "AT&T A"
     );
-    println!("{}", write_string(&document).unwrap());
+    println!("{}", document.write_string().unwrap());
 }

@@ -14,6 +14,11 @@
 //!
 //! The debug-only [`reentry`] guard turns the "no re-entrancy" claim into something that fails
 //! loudly in tests instead of silently hanging.
+//!
+//! The parsing and serialization entry points live in a child module, because they are a
+//! self-contained slice of the public API of [`Document`] with a substantial contract of their own.
+
+mod io;
 
 use std::fmt;
 use std::sync::Arc;
@@ -297,7 +302,7 @@ impl Document {
     ///
     /// The declaration is metadata about the document, not a node: it is not part of the tree, it
     /// is not a child of anything, and it is written back by the serializer according to
-    /// [`crate::io::WriteOptions`].
+    /// [`WriteOptions`](crate::WriteOptions).
     pub fn xml_declaration(&self) -> Option<XmlDeclaration> {
         self.read_arena("Document::xml_declaration", |arena| arena.declaration())
     }
@@ -464,8 +469,8 @@ impl Document {
     /// This is requirement (4)(2): the checks that need a holistic view — namespace scope
     /// integrity, the structural invariants, and the document-wide value rules — are collected in
     /// one pass instead of failing at the first problem, so that a caller can fix everything in one
-    /// sweep. The rules themselves are documented in [`crate::validation`] and implemented in
-    /// [`crate::xml_spec::validation`].
+    /// sweep. The checks themselves are described in the [crate documentation](crate#validation) and
+    /// the individual findings are listed in [`ValidationErrorKind`](crate::ValidationErrorKind).
     ///
     /// Editing operations deliberately do *not* perform these checks (requirement (3)): removing a
     /// namespace declaration that a subtree relies on, or moving an element into a scope where its

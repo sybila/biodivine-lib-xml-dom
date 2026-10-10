@@ -8,7 +8,7 @@
 mod common;
 
 use biodivine_lib_xml_dom::xml_spec::nc_name;
-use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName, XmlError, parse_string};
+use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName, XmlError};
 
 use common::element;
 
@@ -408,32 +408,32 @@ fn replace_with_errors() {
 #[test]
 fn parse_errors() {
     assert_variant(
-        "parse_string('<a a='1' a='2'/>')",
-        parse_string("<a a='1' a='2'/>"),
+        "Document::parse_string('<a a='1' a='2'/>')",
+        Document::parse_string("<a a='1' a='2'/>"),
         "DuplicateAttribute",
         |error| matches!(error, XmlError::DuplicateAttribute(_)),
     );
     assert_variant(
-        "parse_string('<a><b></a>')",
-        parse_string("<a><b></a>"),
+        "Document::parse_string('<a><b></a>')",
+        Document::parse_string("<a><b></a>"),
         "MalformedXml",
         |error| matches!(error, XmlError::MalformedXml(_)),
     );
     assert_variant(
-        "parse_string('<a xmlns:p=''/>')",
-        parse_string("<a xmlns:p=''/>"),
+        "Document::parse_string('<a xmlns:p=''/>')",
+        Document::parse_string("<a xmlns:p=''/>"),
         "InvalidNamespace",
         |error| matches!(error, XmlError::InvalidNamespace(_)),
     );
     assert_variant(
-        "parse_string('<p:a/>')",
-        parse_string("<p:a/>"),
+        "Document::parse_string('<p:a/>')",
+        Document::parse_string("<p:a/>"),
         "UndeclaredPrefix",
         |error| matches!(error, XmlError::UndeclaredPrefix(_)),
     );
     assert_variant(
-        "parse_string('<a xmlns:xmlns='http://example.com'/>')",
-        parse_string("<a xmlns:xmlns='http://example.com'/>"),
+        "Document::parse_string('<a xmlns:xmlns='http://example.com'/>')",
+        Document::parse_string("<a xmlns:xmlns='http://example.com'/>"),
         "ReservedPrefix",
         |error| matches!(error, XmlError::ReservedPrefix(_)),
     );
@@ -441,8 +441,8 @@ fn parse_errors() {
     // whose content *ends* with a hyphen only becomes visible once the section is closed, so it is
     // caught by the `Comment` validator. Both are documented in `parse_reader`'s `# Errors`.
     assert_variant(
-        "parse_string('<a><!-- bad -- comment --></a>')",
-        parse_string("<a><!-- bad -- comment --></a>"),
+        "Document::parse_string('<a><!-- bad -- comment --></a>')",
+        Document::parse_string("<a><!-- bad -- comment --></a>"),
         "MalformedXml or InvalidComment",
         |error| {
             matches!(
@@ -452,8 +452,8 @@ fn parse_errors() {
         },
     );
     assert_variant(
-        "parse_string('<a><!--x---></a>')",
-        parse_string("<a><!--x---></a>"),
+        "Document::parse_string('<a><!--x---></a>')",
+        Document::parse_string("<a><!--x---></a>"),
         "MalformedXml or InvalidComment",
         |error| {
             matches!(
@@ -463,8 +463,8 @@ fn parse_errors() {
         },
     );
     assert_variant(
-        "parse_string('<1bad/>')",
-        parse_string("<1bad/>"),
+        "Document::parse_string('<1bad/>')",
+        Document::parse_string("<1bad/>"),
         "InvalidName",
         |error| matches!(error, XmlError::InvalidName(_)),
     );
@@ -473,14 +473,14 @@ fn parse_errors() {
 #[test]
 fn parse_file_reports_io_errors() {
     assert_variant(
-        "biodivine_lib_xml_dom::parse_file('/nonexistent/path/to/file",
-        biodivine_lib_xml_dom::parse_file("/nonexistent/path/to/file.xml"),
+        "Document::parse_file('/nonexistent/path/to/file",
+        Document::parse_file("/nonexistent/path/to/file.xml"),
         "Io",
         |error| matches!(error, XmlError::Io(_)),
     );
     assert_variant(
-        "biodivine_lib_xml_dom::write_file(&Document::empty()",
-        biodivine_lib_xml_dom::write_file(&Document::empty(), "/nonexistent/dir/file.xml"),
+        "biodivine_lib_xml_dom::Document::empty().write_file(",
+        Document::empty().write_file("/nonexistent/dir/file.xml"),
         "Io",
         |error| matches!(error, XmlError::Io(_)),
     );
@@ -494,20 +494,20 @@ fn parse_file_reports_io_errors() {
 #[test]
 fn unclosed_elements_and_xml_target_pis_are_rejected() {
     assert_variant(
-        "parse_string('<a><b></a>')",
-        parse_string("<a><b></a>"),
+        "Document::parse_string('<a><b></a>')",
+        Document::parse_string("<a><b></a>"),
         "MalformedXml",
         |error| matches!(error, XmlError::MalformedXml(_)),
     );
     assert_variant(
-        "parse_string('<a>')",
-        parse_string("<a>"),
+        "Document::parse_string('<a>')",
+        Document::parse_string("<a>"),
         "MalformedXml",
         |error| matches!(error, XmlError::MalformedXml(_)),
     );
     assert_variant(
-        "parse_string('<a><?xml target?></a>')",
-        parse_string("<a><?xml target?></a>"),
+        "Document::parse_string('<a><?xml target?></a>')",
+        Document::parse_string("<a><?xml target?></a>"),
         "InvalidProcessingInstruction",
         |error| matches!(error, XmlError::InvalidProcessingInstruction(_)),
     );

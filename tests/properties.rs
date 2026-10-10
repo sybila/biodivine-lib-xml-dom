@@ -15,10 +15,7 @@
 //!    the input is valid.
 //! 3. **Idempotence.** `write(parse(write(d))) == write(d)`.
 
-use biodivine_lib_xml_dom::{
-    Document, Element, Namespace, Node, NodeContent, QualifiedName, parse_bytes, parse_string,
-    write_string,
-};
+use biodivine_lib_xml_dom::{Document, Element, Namespace, Node, NodeContent, QualifiedName};
 use proptest::prelude::*;
 use std::collections::BTreeMap;
 
@@ -482,8 +479,8 @@ proptest! {
     #[test]
     fn round_trip_preserves_the_document(generated in arb_document_consistent()) {
         let document = build_document(&generated);
-        let serialized = write_string(&document).expect("serializing an in-memory document");
-        let reparsed = parse_string(&serialized);
+        let serialized = document.write_string().expect("serializing an in-memory document");
+        let reparsed = Document::parse_string(&serialized);
         prop_assert!(
             reparsed.is_ok(),
             "the serializer produced unparseable XML: {}",
@@ -497,8 +494,11 @@ proptest! {
     #[test]
     fn writing_is_idempotent(generated in arb_document_consistent()) {
         let document = build_document(&generated);
-        let once = write_string(&document).expect("serialize");
-        let twice = write_string(&parse_string(&once).expect("parse")).expect("re-serialize");
+        let once = document.write_string().expect("serialize");
+        let twice = Document::parse_string(&once)
+            .expect("parse")
+            .write_string()
+            .expect("re-serialize");
         prop_assert_eq!(twice, once);
     }
 
@@ -507,8 +507,8 @@ proptest! {
     fn the_declaration_survives_a_round_trip(generated in arb_document_consistent()) {
         let document = build_document(&generated);
         document.set_xml_declaration(Some(biodivine_lib_xml_dom::xml_spec::XmlDeclaration::utf8()));
-        let serialized = write_string(&document).expect("serialize");
-        let reparsed = parse_string(&serialized).expect("parse");
+        let serialized = document.write_string().expect("serialize");
+        let reparsed = Document::parse_string(&serialized).expect("parse");
         prop_assert_eq!(reparsed.xml_declaration(), document.xml_declaration());
     }
 }
@@ -529,8 +529,8 @@ proptest! {
             prop_assert!(false, "a consistent document was reported as invalid:\n{errors}");
         }
         // ... and the round trip must not introduce a problem either.
-        let serialized = write_string(&document).expect("serialize");
-        let reparsed = parse_string(&serialized).expect("parse");
+        let serialized = document.write_string().expect("serialize");
+        let reparsed = Document::parse_string(&serialized).expect("parse");
         if let Err(errors) = reparsed.validate() {
             prop_assert!(
                 false,
@@ -547,14 +547,14 @@ proptest! {
     /// Arbitrary bytes must never make the parser panic.
     #[test]
     fn arbitrary_bytes_never_panic(bytes in prop::collection::vec(any::<u8>(), 0..256)) {
-        let _ = parse_bytes(&bytes);
+        let _ = Document::parse_bytes(&bytes);
     }
 
     /// Arbitrary strings must never make the parser panic.
     #[test]
     fn arbitrary_strings_never_panic(characters in prop::collection::vec(any::<char>(), 0..64)) {
         let text: String = characters.into_iter().collect();
-        let _ = parse_string(&text);
+        let _ = Document::parse_string(&text);
     }
 
     /// Mutating a well-formed document in place must never make the parser panic. This reaches
@@ -566,7 +566,7 @@ proptest! {
         mutations in 0u8..8,
     ) {
         let document = build_document(&generated);
-        let mut bytes = write_string(&document).expect("serialize").into_bytes();
+        let mut bytes = document.write_string().expect("serialize").into_bytes();
         let mut state = seed | 1;
         for _ in 0..mutations {
             if bytes.is_empty() {
@@ -576,9 +576,12 @@ proptest! {
             state ^= state << 13;
             state ^= state >> 7;
             state ^= state << 17;
-            let index = (state as usize) % bytes.len();
-            bytes[index] = (state >> 32) as u8;
+            // The conversions are explicit rather than `as` casts: the mutations are derived from
+            // the low bits of the state, and the masks make that visible.
+            let length = u64::try_from(bytes.len()).expect("a byte length fits into u64");
+            let index = usize::try_from(state % length).expect("the remainder is below the length");
+            bytes[index] = u8::try_from((state >> 32) & 0xff).expect("masked to one byte");
         }
-        let _ = parse_bytes(&bytes);
+        let _ = Document::parse_bytes(&bytes);
     }
 }

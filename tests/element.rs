@@ -8,9 +8,7 @@
 mod common;
 
 use biodivine_lib_xml_dom::xml_spec::nc_name;
-use biodivine_lib_xml_dom::{
-    Document, Namespace, QualifiedName, XmlError, parse_string, write_string,
-};
+use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName, XmlError};
 
 use common::element;
 
@@ -311,7 +309,7 @@ fn resolution_uses_the_in_scope_declarations() {
 fn namespaced_documents_round_trip_through_the_parser() {
     // Parsing assigns the expanded names, so the tree already carries everything the editing API
     // needs; see G3 for full round-trip fidelity of the serializer.
-    let document = parse_string(
+    let document = Document::parse_string(
         r#"<ex:root xmlns:ex="http://example.com" xmlns="http://default"><child ex:attr="v"/></ex:root>"#,
     )
     .unwrap();
@@ -333,7 +331,7 @@ fn namespaced_documents_round_trip_through_the_parser() {
 
     // Serializing and re-parsing preserves the expanded names (the declaration is inherited from
     // the root, which is why no declaration is stored on the child).
-    let reparsed = parse_string(&write_string(&document).unwrap()).unwrap();
+    let reparsed = Document::parse_string(&document.write_string().unwrap()).unwrap();
     let reparsed_child = reparsed.root().unwrap().child_elements()[0].clone();
     assert_eq!(
         reparsed_child

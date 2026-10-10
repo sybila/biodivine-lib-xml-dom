@@ -2,7 +2,7 @@
 //!
 //! Everything in this module is a *rule* that needs the namespace scope of a node but not the tree
 //! itself, so it can live with the rest of the specification logic. The traversal that feeds these
-//! rules is in [`crate::validation`].
+//! results is [`crate::Document::validate`], which produces [`crate::ValidationErrorKind`] values.
 //!
 //! Two rules are worth calling out because they are the ones a "no magic" editing API needs
 //! (requirement (3)):

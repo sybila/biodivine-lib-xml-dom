@@ -35,7 +35,7 @@ The mapping between the Rust API and the Python one is itemised in
 Rust:
 
 ```rust
-use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName, write_string};
+use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
 
 let document = Document::empty();
 let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
@@ -50,7 +50,7 @@ root.append_child(child);
 
 assert!(document.is_valid());
 assert_eq!(
-    write_string(&document).unwrap(),
+    document.write_string().unwrap(),
     r#"<ex:root xmlns:ex="http://example.com"><ex:child>Hello, World!</ex:child></ex:root>"#
 );
 ```

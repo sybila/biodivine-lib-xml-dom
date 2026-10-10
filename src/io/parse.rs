@@ -1,16 +1,18 @@
-//! The XML parser.
+//! The XML parser behind the `Document::parse_*` methods.
 //!
-//! # Policy
+//! The public contract — what is accepted, what is rejected, what happens to content outside the
+//! root element — is documented on [`Document`](crate::Document) and on the individual entry points
+//! ([`Document::parse_string`](crate::Document::parse_string) and friends). What follows is the
+//! implementation-level view, which only matters when changing this file.
 //!
-//! The parser turns a byte stream into a [`Document`] and enforces every well-formedness rule that
-//! is decidable *locally* (that is: while looking at one element, one attribute or one string).
-//! Rules that need a whole-document view (namespace scope, unique ids, `xml:lang` inheritance) are
-//! **not** checked here; they are reported by whole-document validation. The two sets are listed in
-//! `docs/design/evidence/rule-inventory.md` together with the layer each rule belongs to.
+//! # Layers
 //!
-//! The parser never panics. Every failure is a typed [`XmlError`], including malformed input,
-//! invalid UTF-8, undeclared prefixes, illegal comments/CDATA/processing instructions and
-//! references to entities that this library cannot resolve.
+//! The parser enforces every well-formedness rule that is decidable *locally*: while looking at one
+//! element, one attribute or one string. Rules that need a whole-document view (namespace scope,
+//! unique ids, `xml:lang` inheritance) are checked by whole-document validation instead, so that
+//! two passes over a document never duplicate the same check.
+//!
+//! The parser never panics: every failure is a typed [`XmlError`].
 //!
 //! # Entities
 //!
@@ -28,7 +30,8 @@
 //! # Document-level content policy
 //!
 //! The data model of this library is one root element plus the nodes below it, so content *outside*
-//! the root element is handled as follows and is documented on [`Document`] as well:
+//! the root element is handled as follows (the same table appears on [`Document`], which is the
+//! public home of this policy):
 //!
 //! | input outside the root | result |
 //! | --- | --- |
@@ -65,30 +68,33 @@ use crate::xml_spec::{self, NCName, XmlDeclaration};
 /// The UTF-8 byte-order mark (`rule.entities.utf8-bom-optional`).
 const UTF8_BOM: &[u8] = &[0xEF, 0xBB, 0xBF];
 
-/// Parses an XML document from a file.
+/// Reads a file and parses it; the implementation of
+/// [`Document::parse_file`](crate::Document::parse_file).
 ///
 /// # Errors
 ///
 /// Returns [`XmlError::Io`] if the file cannot be opened or read, plus every error of
 /// [`parse_bytes`].
-pub fn parse_file<P: AsRef<Path>>(path: P) -> XmlResult<Document> {
+pub(crate) fn parse_file<P: AsRef<Path>>(path: P) -> XmlResult<Document> {
     // rule: rule.entities.bom-encoding-detection.md (the byte-order mark is handled by `parse_bytes`)
     let mut file = std::fs::File::open(path)?;
     let mut bytes = Vec::new();
     file.read_to_end(&mut bytes)?;
-    parse_bytes(&bytes)
+    Document::parse_bytes(&bytes)
 }
 
-/// Parses an XML document from a string.
+/// Parses a string; the implementation of
+/// [`Document::parse_string`](crate::Document::parse_string).
 ///
 /// # Errors
 ///
 /// Returns every error of [`parse_bytes`].
-pub fn parse_string(xml: &str) -> XmlResult<Document> {
-    parse_bytes(xml.as_bytes())
+pub(crate) fn parse_string(xml: &str) -> XmlResult<Document> {
+    Document::parse_bytes(xml.as_bytes())
 }
 
-/// Parses an XML document from a generic reader.
+/// Parses a generic reader; the implementation of
+/// [`Document::parse_reader`](crate::Document::parse_reader).
 ///
 /// The reader is consumed completely: a DOM holds the whole document in memory anyway, so there is
 /// nothing to gain from streaming, and reading the input as a whole keeps byte-order-mark handling,
@@ -97,13 +103,13 @@ pub fn parse_string(xml: &str) -> XmlResult<Document> {
 /// # Errors
 ///
 /// Returns [`XmlError::Io`] if the reader fails, plus every error of [`parse_bytes`].
-pub fn parse_reader<R: BufRead>(mut reader: R) -> XmlResult<Document> {
+pub(crate) fn parse_reader<R: BufRead>(mut reader: R) -> XmlResult<Document> {
     let mut bytes = Vec::new();
     reader.read_to_end(&mut bytes)?;
-    parse_bytes(&bytes)
+    Document::parse_bytes(&bytes)
 }
 
-/// Parses an XML document from raw bytes.
+/// Parses raw bytes; the implementation behind every other entry point.
 ///
 /// # Errors
 ///
@@ -127,7 +133,7 @@ pub fn parse_reader<R: BufRead>(mut reader: R) -> XmlResult<Document> {
 /// - [`XmlError::DuplicateAttribute`] when one element specifies the same attribute twice.
 ///
 /// No other error kind can be produced, and the function never panics.
-pub fn parse_bytes(bytes: &[u8]) -> XmlResult<Document> {
+pub(crate) fn parse_bytes(bytes: &[u8]) -> XmlResult<Document> {
     let bytes = match bytes.strip_prefix(UTF8_BOM) {
         Some(stripped) => stripped,
         None => bytes,
@@ -621,7 +627,6 @@ fn decode_bytes<'a>(bytes: &'a [u8], what: &str) -> XmlResult<&'a str> {
 mod tests {
     use super::*;
     use crate::arena::GcConfig;
-    use crate::io::write_string;
 
     /// Builds `<root>` with `count` children, each carrying an attribute and a text node.
     fn sample(count: usize) -> String {
@@ -658,13 +663,14 @@ mod tests {
     #[test]
     fn a_collection_during_parsing_keeps_the_tree_intact() {
         let xml = sample(40);
-        let reference = parse_string(&xml).expect("parses with the default configuration");
+        let reference =
+            Document::parse_string(&xml).expect("parses with the default configuration");
         let tiny = parse_with_tiny_arena(&xml);
 
         assert_eq!(tiny.node_count(), reference.node_count());
         assert_eq!(
-            write_string(&tiny).expect("serializes"),
-            write_string(&reference).expect("serializes")
+            tiny.write_string().expect("serializes"),
+            reference.write_string().expect("serializes")
         );
         let root = tiny.root().expect("the root survived");
         assert_eq!(root.children().len(), 40);

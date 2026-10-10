@@ -2,7 +2,7 @@
 //!
 //! Run with `cargo run --example book_validation`.
 
-use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName, parse_string};
+use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
 
 fn main() {
     // A document assembled through the API is not validated as you edit: edits are silent, and
@@ -47,7 +47,7 @@ fn main() {
 
     // A parsed document that satisfies the specification is valid too.
     assert!(
-        parse_string(r#"<a xmlns:ex="http://e"><ex:b/></a>"#)
+        Document::parse_string(r#"<a xmlns:ex="http://e"><ex:b/></a>"#)
             .unwrap()
             .is_valid()
     );

@@ -5,7 +5,7 @@
 //! These tests only use the public API, so they double as a check that the API is actually usable
 //! from outside the crate.
 
-use biodivine_lib_xml_dom::{Document, QualifiedName, write_string};
+use biodivine_lib_xml_dom::{Document, QualifiedName};
 
 /// Creates a childless element with the given local name.
 pub fn element(document: &Document, name: &str) -> biodivine_lib_xml_dom::Element {
@@ -102,5 +102,7 @@ pub fn assert_consistent(document: &Document) {
     }
 
     // The tree must still be serializable.
-    write_string(document).expect("a consistent document must serialize");
+    document
+        .write_string()
+        .expect("a consistent document must serialize");
 }

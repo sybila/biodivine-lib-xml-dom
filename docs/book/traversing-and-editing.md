@@ -1,5 +1,10 @@
 # Traversing and editing
 
+Walking a tree and changing it: parents, children, siblings and descendants; inserting, moving,
+replacing and removing nodes; and the non-element node kinds. This is the chapter to read after
+[Building documents](building-documents.md); [Namespaces](namespaces.md) explains why moving a node
+can leave a document inconsistent, and [Validating a document](validation.md) is how you find out.
+
 ## Walking the tree
 
 Parents, children, siblings and descendants are all available; the descendants traversal is
@@ -117,3 +122,4 @@ An element's children keep their order, and mixed content (text, elements, comme
 processing instructions interleaved) round-trips exactly. The serialized output is escaped so that
 a literal carriage return and a `]]>` in text, and whitespace inside attribute values, survive a
 re-parse.
+

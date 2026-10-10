@@ -1,5 +1,10 @@
 # Building documents
 
+This chapter is about the tree itself: what a document owns, what a handle is, how a node is
+attached to (or detached from) its parent, and what the different kinds of "copy" mean. It assumes
+you have seen [Getting started](getting-started.md); the editing operations it mentions are covered
+in detail in [Traversing and editing](traversing-and-editing.md).
+
 ## Documents, nodes and handles
 
 A document owns all of its nodes in a single arena and protects them with a single reader-writer
@@ -183,3 +188,6 @@ The cross-document copy is the sanctioned way to move a tree between documents: 
 to a parent in another document is an error, while copying works and rebuilds the subtree with the
 target document's own names. It takes a point-in-time snapshot of the source, so a concurrent edit
 in the source cannot produce a half-copied tree.
+
+Next: [Traversing and editing](traversing-and-editing.md) shows how to walk and change a tree, and
+[Namespaces](namespaces.md) explains what an edit can leave inconsistent.

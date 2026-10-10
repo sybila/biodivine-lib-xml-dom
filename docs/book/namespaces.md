@@ -1,5 +1,10 @@
 # Namespaces
 
+Names are *expanded names* in this library, which is the single idea the rest of the API follows.
+This chapter shows how a name is resolved while parsing, what is in scope where, how the reserved
+`xml` prefix behaves, and why editing never repairs a namespace declaration for you. The validation
+side is in [Validating a document](validation.md).
+
 ## Names are expanded, prefixes are decoration
 
 Every element and attribute name in the tree is an *expanded* name: a local name plus, optionally, a
@@ -164,3 +169,4 @@ output. The contract is: **edits are silent, `validate` reports**.
 
 See [Validating a document](validation.md) for what is reported and
 [Known limitations and gotchas](limitations.md) for what the library deliberately does not do.
+

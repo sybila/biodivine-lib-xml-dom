@@ -1,5 +1,10 @@
 # Parsing and serializing
 
+The two ends of the life of a document: how much a round trip preserves, what the serializer's
+options change, and what the parser rejects. If you are building a document instead of reading one,
+start with [Building documents](building-documents.md); the rules the library deliberately does not
+check are listed in [Known limitations and gotchas](limitations.md).
+
 ## A faithful round trip
 
 `parse` and `write` are inverses for anything the data model can represent: prefixes, namespace
@@ -114,3 +119,6 @@ entity reference is a typed error, because this library does not process `DOCTYP
 `DOCTYPE` is read and ignored: this library does not process DTDs. The five predefined entities
 (`&amp;`, `&lt;`, `&gt;`, `&apos;`, `&quot;`) and character references (`&#65;`, `&#x41;`) are
 expanded; any other entity reference is an error, because without a DTD it can never be declared.
+
+Next: [Validating a document](validation.md) for the checks that need the whole tree, and
+[Known limitations and gotchas](limitations.md) for what is out of scope.

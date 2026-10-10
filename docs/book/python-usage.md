@@ -1,5 +1,10 @@
 # Using the Python package
 
+Using the Python package: what it adds to the mirrored Rust API, what the Pythonic protocols are,
+how errors and validation surface, and what identity and equality mean for handles. The Rust API is
+described in the rest of this book and in its rustdoc; the item-by-item mapping between the two is
+the `documentation::bindings` page of that rustdoc.
+
 ## Three layers, one behaviour
 
 `biodivine_lib_xml_dom` is a thin Pythonic layer over the native `biodivine_lib_xml_dom._sys`
@@ -172,3 +177,4 @@ The package ships a `py.typed` marker and full annotations, so type checkers see
 `Document`, `Element`, `Node`, `Namespace`, `QualifiedName`, `ValidationErrors`, the option types and
 the exception hierarchy. The native `_sys` module is importable but is not the documented surface —
 `tests-python/test_public_surface.py` exists precisely to keep it that way.
+

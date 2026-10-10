@@ -1,5 +1,9 @@
 # Validating a document
 
+Whole-document validation: what is checked, why editing stays silent about it, and how to act on
+the problems it reports. The namespace rules it checks are explained in [Namespaces](namespaces.md),
+and what is deliberately *not* checked is in [Known limitations and gotchas](limitations.md).
+
 ## Two kinds of integrity
 
 **Local** properties are enforced by the types and checked while you construct: a name that is not a
@@ -101,3 +105,4 @@ deliberate — see [Namespaces](namespaces.md#no-magic):
 
 A document that came from `parse` is validated for free if you like: a well-formed document whose
 names resolve is exactly what validation checks, and the round trip preserves that.
+

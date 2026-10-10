@@ -1,5 +1,10 @@
 # Thread safety
 
+Why a document can be shared between threads, what that means for the operations you write, and
+which parts of the locking behaviour you can rely on. The model it rests on is described in
+[Building documents](building-documents.md), and the Python side of it in
+[Using the Python package](python-usage.md).
+
 ## One lock per document
 
 Every document owns exactly one reader-writer lock, and every operation acquires it once, does its
@@ -80,3 +85,5 @@ It does not mean that your *edits* are transactional across calls: `if node.pare
 is two operations, and another thread may get in between. Each individual operation is atomic, and
 there is no way to corrupt the tree, but a compound invariant of your own needs your own
 synchronisation.
+
+Next: [Using the Python package](python-usage.md) for the Python side of the same guarantees.

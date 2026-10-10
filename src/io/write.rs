@@ -1,6 +1,6 @@
 //! The XML serializer behind the `Document::write_*` methods.
 //!
-//! The public contract is documented on [`Document`](crate::Document) and on the individual entry
+//! The public contract is documented on [`Document`] and the individual entry
 //! points ([`Document::write_string`](crate::Document::write_string) and friends); what follows is
 //! the implementation-level view, which only matters when changing this file.
 //!
@@ -346,7 +346,7 @@ fn write_start_tag(buffer: &mut String, element: &Element) -> String {
             }
             (None, Some(namespace)) => push_attribute(buffer, "xmlns", namespace.uri()),
             // An empty default declaration: `xmlns=""`.
-            // rule: rule.namespace-usage.empty-default-namespace.md
+            // rule: rule.namespace-usage.empty-default-namespace
             (None, None) => push_attribute(buffer, "xmlns", ""),
             // `xmlns:prefix=""` cannot be stored (the parser rejects it), so it cannot occur.
             (Some(_), None) => {}
@@ -381,10 +381,10 @@ fn qualified_name_to_string(name: &QualifiedName) -> String {
 
 /// Escapes text content.
 ///
-/// `&` and `<` must be escaped (`rule.well-formedness.escape-ampersand-and-lt`). `>` is escaped
+/// `&` and `<` must be escaped ([`rule.well-formedness.escape-ampersand-and-lt`](crate::xml_spec::rule_set::rule_well_formedness_escape_ampersand_and_lt)). `>` is escaped
 /// too, so that a `]]>` can never be formed — the `CharData` production excludes it. A literal
 /// carriage return is written as `&#xD;`, because the processor's mandatory line-end normalisation
-/// (`rule.document-structure.processor-must-normalize-line-breaks`) would otherwise turn it into a
+/// ([`rule.document-structure.processor-must-normalize-line-breaks`](crate::xml_spec::rule_set::rule_document_structure_processor_must_normalize_line_breaks)) would otherwise turn it into a
 /// line feed on the next parse, making the round trip lossy. Tab and line feed need no escaping in
 /// content.
 fn escape_text(input: &str, buffer: &mut String) {
@@ -401,11 +401,11 @@ fn escape_text(input: &str, buffer: &mut String) {
 
 /// Escapes an attribute value for a double-quoted attribute.
 ///
-/// `&`, `<` and `"` must be escaped (`rule.attributes.no-lt-in-values`,
-/// `rule.well-formedness.escape-ampersand-and-lt`). Tab, line feed and carriage return are written
+/// `&`, `<` and `"` must be escaped ([`rule.attributes.no-lt-in-values`](crate::xml_spec::rule_set::rule_attributes_no_lt_in_values),
+/// [`rule.well-formedness.escape-ampersand-and-lt`](crate::xml_spec::rule_set::rule_well_formedness_escape_ampersand_and_lt)). Tab, line feed and carriage return are written
 /// as character references because attribute-value normalisation replaces a *literal* whitespace
 /// character with a space (XML 1.0 §3.3.3,
-/// `rule.attributes.values-must-be-normalized`); a character reference is not affected by that
+/// [`rule.attributes.values-must-be-normalized`](crate::xml_spec::rule_set::rule_attributes_values_must_be_normalized)); a character reference is not affected by that
 /// normalisation, which is what makes `a="x&#x9;y"` round-trip byte-exactly while `a="x\ty"`
 /// becomes `x y`.
 fn escape_attribute(input: &str, buffer: &mut String) {

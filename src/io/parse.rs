@@ -1,7 +1,7 @@
 //! The XML parser behind the `Document::parse_*` methods.
 //!
 //! The public contract — what is accepted, what is rejected, what happens to content outside the
-//! root element — is documented on [`Document`](crate::Document) and on the individual entry points
+//! root element — is documented on [`Document`] and the individual entry points
 //! ([`Document::parse_string`](crate::Document::parse_string) and friends). What follows is the
 //! implementation-level view, which only matters when changing this file.
 //!
@@ -20,11 +20,11 @@
 //! attribute type or content model can be declared. Consequently
 //!
 //! * the five predefined entities `amp`, `lt`, `gt`, `apos`, `quot` are expanded — they must be
-//!   recognised whether declared or not (`rule.entities.predefined-entities-recognized`);
+//!   recognised whether declared or not ([`rule.entities.predefined-entities-recognized`](crate::xml_spec::rule_set::rule_entities_predefined_entities_recognized));
 //! * character references (`&#…;`, `&#x…;`) are expanded and the resulting character must be legal
-//!   in XML (`rule.entities.charref-legal-character`);
+//!   in XML ([`rule.entities.charref-legal-character`](crate::xml_spec::rule_set::rule_entities_charref_legal_character));
 //! * any other general entity reference is an error
-//!   (`rule.attributes.no-undeclared-entity-refs`, `rule.entities.entity-declared-wfc`), because
+//!   ([`rule.attributes.no-undeclared-entity-refs`](crate::xml_spec::rule_set::rule_attributes_no_undeclared_entity_refs), [`rule.entities.entity-declared-wfc`](crate::xml_spec::rule_set::rule_entities_entity_declared_wfc)), because
 //!   without DTD processing it can never be declared.
 //!
 //! # Document-level content policy
@@ -45,9 +45,9 @@
 //! # Encodings
 //!
 //! Only UTF-8 is supported. An optional UTF-8 byte-order mark is accepted
-//! (`rule.entities.utf8-bom-optional`); the input must be valid UTF-8
-//! (`rule.entities.illegal-byte-sequence-fatal`); and if the XML declaration names an encoding, it
-//! must name UTF-8 (`rule.entities.encoding-must-match-declaration`).
+//! ([`rule.entities.utf8-bom-optional`](crate::xml_spec::rule_set::rule_entities_utf8_bom_optional)); the input must be valid UTF-8
+//! ([`rule.entities.illegal-byte-sequence-fatal`](crate::xml_spec::rule_set::rule_entities_illegal_byte_sequence_fatal)); and if the XML declaration names an encoding, it
+//! must name UTF-8 ([`rule.entities.encoding-must-match-declaration`](crate::xml_spec::rule_set::rule_entities_encoding_must_match_declaration)).
 
 use quick_xml::Reader;
 use quick_xml::XmlVersion;
@@ -65,7 +65,7 @@ use crate::error::{XmlError, XmlResult};
 use crate::qualified_name::QualifiedName;
 use crate::xml_spec::{self, NCName, XmlDeclaration};
 
-/// The UTF-8 byte-order mark (`rule.entities.utf8-bom-optional`).
+/// The UTF-8 byte-order mark ([`rule.entities.utf8-bom-optional`](crate::xml_spec::rule_set::rule_entities_utf8_bom_optional)).
 const UTF8_BOM: &[u8] = &[0xEF, 0xBB, 0xBF];
 
 /// Reads a file and parses it; the implementation of
@@ -76,7 +76,7 @@ const UTF8_BOM: &[u8] = &[0xEF, 0xBB, 0xBF];
 /// Returns [`XmlError::Io`] if the file cannot be opened or read, plus every error of
 /// [`parse_bytes`].
 pub(crate) fn parse_file<P: AsRef<Path>>(path: P) -> XmlResult<Document> {
-    // rule: rule.entities.bom-encoding-detection.md (the byte-order mark is handled by `parse_bytes`)
+    // rule: rule.entities.bom-encoding-detection (the byte-order mark is handled by `parse_bytes`)
     let mut file = std::fs::File::open(path)?;
     let mut bytes = Vec::new();
     file.read_to_end(&mut bytes)?;
@@ -117,7 +117,7 @@ pub(crate) fn parse_reader<R: BufRead>(mut reader: R) -> XmlResult<Document> {
 /// document that this library supports:
 ///
 /// - [`XmlError::InvalidUtf8`] if the input is not valid UTF-8
-///   (`rule.entities.illegal-byte-sequence-fatal`);
+///   ([`rule.entities.illegal-byte-sequence-fatal`](crate::xml_spec::rule_set::rule_entities_illegal_byte_sequence_fatal));
 /// - [`XmlError::UnsupportedEncoding`] / [`XmlError::UnsupportedXmlVersion`] if the XML declaration
 ///   names an encoding other than UTF-8 or a version other than 1.0;
 /// - [`XmlError::MalformedXml`] for malformed markup (unbalanced, mismatched or unclosed tags,
@@ -152,7 +152,7 @@ fn reader_error(error: quick_xml::Error) -> XmlError {
 ///
 /// Duplicate attribute names get their own variant, because that is the one attribute error the
 /// XML specification names explicitly
-/// (`rule.elements-and-tags.unique-attribute-specification`); everything else is malformed markup.
+/// ([`rule.elements-and-tags.unique-attribute-specification`](crate::xml_spec::rule_set::rule_elements_and_tags_unique_attribute_specification)); everything else is malformed markup.
 fn attribute_error(error: AttrError) -> XmlError {
     match error {
         AttrError::Duplicated(first, second) => XmlError::DuplicateAttribute(format!(
@@ -224,9 +224,9 @@ impl<'input> Parser<'input> {
     /// the root element is installed in the document as soon as its start tag is seen.
     fn with_document(input: &'input str, document: Document) -> Self {
         let mut reader = Reader::from_str(input);
-        // rule: rule.well-formedness.comment-no-double-hyphen.md
+        // rule: rule.well-formedness.comment-no-double-hyphen
         reader.config_mut().check_comments = true;
-        // rule: rule.elements-and-tags.end-tag-must-match-start-tag.md
+        // rule: rule.elements-and-tags.end-tag-must-match-start-tag
         reader.config_mut().check_end_names = true;
         Self {
             reader,
@@ -253,14 +253,14 @@ impl<'input> Parser<'input> {
 
         self.flush_text()?;
         if let Some(element) = self.stack.last() {
-            // rule: rule.elements-and-tags.every-start-tag-must-have-end-tag.md
+            // rule: rule.elements-and-tags.every-start-tag-must-have-end-tag
             return Err(XmlError::MalformedXml(format!(
                 "element `<{}>` is never closed",
                 element.local_name()
             )));
         }
         if !self.root_seen {
-            // rule: rule.well-formedness.document-production.md
+            // rule: rule.well-formedness.document-production
             return Err(XmlError::MissingRoot);
         }
         Ok(self.document)
@@ -324,7 +324,7 @@ impl<'input> Parser<'input> {
                 // that separates the target from the content is syntax, so exactly one character
                 // of it is removed. Everything else - including leading and trailing whitespace of
                 // the content itself - is data and is kept verbatim, which is what makes the
-                // content round-trip exactly (`rule.well-formedness.pi-pass-through.md`).
+                // content round-trip exactly (`rule.well-formedness.pi-pass-through`).
                 let content =
                     decode_bytes(instruction.content(), "processing instruction content")?;
                 let content = content
@@ -349,10 +349,10 @@ impl<'input> Parser<'input> {
     /// has to be checked here: the XML declaration may only be the very first thing in a document
     /// (`XMLDecl ::= '<?xml' …`, XML 1.0 §2.8). Anywhere else the same text would be a processing
     /// instruction whose target is `xml`, which the specification forbids
-    /// (`rule.well-formedness.pi-target-not-xml`).
+    /// ([`rule.well-formedness.pi-target-not-xml`](crate::xml_spec::rule_set::rule_well_formedness_pi_target_not_xml)).
     fn handle_declaration(&mut self, declaration: &BytesDecl<'_>) -> XmlResult<()> {
         if !self.first_event {
-            // rule: rule.well-formedness.pi-target-not-xml.md
+            // rule: rule.well-formedness.pi-target-not-xml
             return Err(XmlError::InvalidProcessingInstruction(
                 "`xml` is a reserved processing-instruction target, and the XML declaration may \
                  only appear at the very beginning of a document"
@@ -377,7 +377,7 @@ impl<'input> Parser<'input> {
                     XmlError::InvalidUtf8(format!("invalid encoding name: {error}"))
                 })?;
                 if !xml_spec::declaration::encoding_is_utf8(encoding) {
-                    // rule: rule.entities.encoding-must-match-declaration.md
+                    // rule: rule.entities.encoding-must-match-declaration
                     return Err(XmlError::UnsupportedEncoding(encoding.to_string()));
                 }
                 Some(encoding.to_string())
@@ -412,7 +412,7 @@ impl<'input> Parser<'input> {
     fn open_element(&mut self, start: &BytesStart<'_>, empty: bool) -> XmlResult<()> {
         if self.stack.is_empty() {
             if self.root_seen {
-                // rule: rule.well-formedness.single-root-element.md
+                // rule: rule.well-formedness.single-root-element
                 return Err(XmlError::MultipleRootElements);
             }
             self.root_seen = true;
@@ -440,20 +440,20 @@ impl<'input> Parser<'input> {
                 continue;
             }
             if attribute.value.contains(&b'<') {
-                // rule: rule.elements-and-tags.no-less-than-in-attribute-values.md
+                // rule: rule.elements-and-tags.no-less-than-in-attribute-values
                 return Err(XmlError::MalformedXml(format!(
                     "the value of attribute `{key}` contains a `<`"
                 )));
             }
-            // rule: rule.attributes.values-must-be-normalized.md
-            // rule: rule.attributes.entity-refs-expanded.md
-            // rule: rule.attributes.char-refs-expanded.md
+            // rule: rule.attributes.values-must-be-normalized
+            // rule: rule.attributes.entity-refs-expanded
+            // rule: rule.attributes.char-refs-expanded
             let value = attribute
                 .normalized_value_with(XmlVersion::Explicit1_0, 1, resolve_predefined_entity)
                 .map_err(quick_error)?;
             let name = QualifiedName::resolve_attribute_with_namespace_map(key, &scope)?;
             if attributes.contains_key(&name) {
-                // rule: rule.namespace-usage.attributes-unique-expanded-name.md
+                // rule: rule.namespace-usage.attributes-unique-expanded-name
                 return Err(XmlError::DuplicateAttribute(name.to_string()));
             }
             attributes.insert(name, value.to_string());
@@ -499,7 +499,7 @@ impl<'input> Parser<'input> {
                 ));
             };
             if !xml_spec::is_legal_char(character) {
-                // rule: rule.entities.charref-legal-character.md
+                // rule: rule.entities.charref-legal-character
                 return Err(XmlError::InvalidCharacterReference(format!(
                     "`&#{};` denotes a character that is not legal in XML",
                     decode_bytes(reference, "character reference")?
@@ -509,7 +509,7 @@ impl<'input> Parser<'input> {
         } else {
             let name = decode_bytes(reference, "entity reference")?;
             let replacement = resolve_predefined_entity(name).ok_or_else(|| {
-                // rule: rule.attributes.no-undeclared-entity-refs.md
+                // rule: rule.attributes.no-undeclared-entity-refs
                 XmlError::UndeclaredEntityReference(name.to_string())
             })?;
             // The predefined entities all resolve to a single character.
@@ -520,7 +520,7 @@ impl<'input> Parser<'input> {
     /// Appends character data, remembering whether it may appear outside the root element.
     fn push_character_data(&mut self, content: &str) -> XmlResult<()> {
         if self.stack.is_empty() {
-            // rule: rule.well-formedness.document-production.md
+            // rule: rule.well-formedness.document-production
             if content.chars().all(char::is_whitespace) {
                 return Ok(());
             }
@@ -547,7 +547,7 @@ impl<'input> Parser<'input> {
     /// Fails unless the parser is currently inside the root element.
     fn require_inside_root(&self, what: &str) -> XmlResult<()> {
         if self.stack.is_empty() {
-            // rule: rule.well-formedness.document-production.md
+            // rule: rule.well-formedness.document-production
             let _ = what;
             return Err(XmlError::ContentOutsideRoot);
         }
@@ -564,10 +564,10 @@ impl<'input> Parser<'input> {
             .clone();
         for (prefix, uri) in Self::namespace_declarations(start)? {
             if prefix.is_none() && uri.is_empty() {
-                // rule: rule.namespace-usage.empty-default-namespace.md
+                // rule: rule.namespace-usage.empty-default-namespace
                 scope.remove(&None);
             } else {
-                // rule: rule.namespace-usage.prefix-declaration-scope.md
+                // rule: rule.namespace-usage.prefix-declaration-scope
                 scope.insert(prefix, uri);
             }
         }
@@ -579,10 +579,10 @@ impl<'input> Parser<'input> {
     /// # Errors
     ///
     /// Returns [`XmlError::InvalidNamespace`] if a prefix is undeclared with an empty value, which
-    /// the Namespaces specification forbids (`rule.namespace-usage.no-prefix-undeclaring`), and the
+    /// the Namespaces specification forbids ([`rule.namespace-usage.no-prefix-undeclaring`](crate::xml_spec::rule_set::rule_namespace_usage_no_prefix_undeclaring)), and the
     /// errors of [`NCName::try_from`] if a prefix is not a valid `NCName`. Duplicate declarations
     /// are already rejected by the attribute iterator
-    /// (`rule.namespace-usage.attributes-unique-expanded-name`).
+    /// ([`rule.namespace-usage.attributes-unique-expanded-name`](crate::xml_spec::rule_set::rule_namespace_usage_attributes_unique_expanded_name)).
     fn namespace_declarations(start: &BytesStart<'_>) -> XmlResult<Vec<(Option<NCName>, String)>> {
         let mut declarations = Vec::new();
         for attribute in start.attributes() {
@@ -590,7 +590,7 @@ impl<'input> Parser<'input> {
             let key = decode_bytes(attribute.key.into_inner(), "attribute name")?;
             let prefix = if let Some(prefix) = key.strip_prefix("xmlns:") {
                 if attribute.value.is_empty() {
-                    // rule: rule.namespace-usage.no-prefix-undeclaring.md
+                    // rule: rule.namespace-usage.no-prefix-undeclaring
                     return Err(XmlError::InvalidNamespace(format!(
                         "the namespace prefix `{prefix}` may not be undeclared with an empty value"
                     )));

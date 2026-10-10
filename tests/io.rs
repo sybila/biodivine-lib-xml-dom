@@ -39,8 +39,8 @@ fn parse_error(xml: &str) -> XmlError {
 
 #[test]
 fn predefined_entities_are_expanded() {
-    // rule: rule.entities.predefined-entities-recognized.md
-    rules::assert_rule_exists("rule.entities.predefined-entities-recognized.md");
+    // rule: rule.entities.predefined-entities-recognized
+    rules::assert_rule_exists("rule.entities.predefined-entities-recognized");
     assert_eq!(
         root_text(r#"<a>&amp; &lt; &gt; &apos; &quot;</a>"#),
         "& < > ' \""
@@ -52,17 +52,17 @@ fn predefined_entities_are_expanded() {
 
 #[test]
 fn character_references_are_expanded() {
-    // rule: rule.entities.charref-legal-character.md
-    // rule: rule.well-formedness.char-ref-legal-char.md
-    rules::assert_rule_exists("rule.entities.charref-legal-character.md");
-    rules::assert_rule_exists("rule.well-formedness.char-ref-legal-char.md");
+    // rule: rule.entities.charref-legal-character
+    // rule: rule.well-formedness.char-ref-legal-char
+    rules::assert_rule_exists("rule.entities.charref-legal-character");
+    rules::assert_rule_exists("rule.well-formedness.char-ref-legal-char");
     assert_eq!(root_text("<a>&#65;&#x42;&#x4a;</a>"), "ABJ");
     assert_eq!(root_text("<a>&#x9;&#xA;&#xD;</a>"), "\t\n\r");
 }
 
 #[test]
 fn illegal_character_references_are_rejected() {
-    // rule: rule.entities.charref-legal-character.md
+    // rule: rule.entities.charref-legal-character
     assert!(matches!(
         parse_error("<a>&#x0;</a>"),
         XmlError::InvalidCharacterReference(_)
@@ -83,9 +83,9 @@ fn illegal_character_references_are_rejected() {
 
 #[test]
 fn undeclared_entity_references_are_typed_errors_not_panics() {
-    // rule: rule.attributes.no-undeclared-entity-refs.md
-    // rule: rule.entities.entity-declared-wfc.md
-    rules::assert_rule_exists("rule.attributes.no-undeclared-entity-refs.md");
+    // rule: rule.attributes.no-undeclared-entity-refs
+    // rule: rule.entities.entity-declared-wfc
+    rules::assert_rule_exists("rule.attributes.no-undeclared-entity-refs");
     for input in [
         "<a>&undefined;</a>",
         "<a>&custom;</a>",
@@ -100,8 +100,8 @@ fn undeclared_entity_references_are_typed_errors_not_panics() {
 
 #[test]
 fn line_ends_are_normalised_in_text() {
-    // rule: rule.document-structure.processor-must-normalize-line-breaks.md
-    rules::assert_rule_exists("rule.document-structure.processor-must-normalize-line-breaks.md");
+    // rule: rule.document-structure.processor-must-normalize-line-breaks
+    rules::assert_rule_exists("rule.document-structure.processor-must-normalize-line-breaks");
     assert_eq!(root_text("<a>x\r\ny</a>"), "x\ny");
     assert_eq!(root_text("<a>x\ry</a>"), "x\ny");
     assert_eq!(root_text("<a>x\r\r\ny</a>"), "x\n\ny");
@@ -109,14 +109,14 @@ fn line_ends_are_normalised_in_text() {
 
 #[test]
 fn attribute_value_normalisation_in_both_directions() {
-    // rule: rule.attributes.values-must-be-normalized.md
-    // rule: rule.attributes.whitespace-normalized-to-space.md
-    // rule: rule.attributes.linebreaks-normalized-to-lf.md
-    // rule: rule.attributes.char-refs-expanded.md
-    // rule: rule.attributes.entity-refs-expanded.md
-    rules::assert_rule_exists("rule.attributes.values-must-be-normalized.md");
-    rules::assert_rule_exists("rule.attributes.whitespace-normalized-to-space.md");
-    rules::assert_rule_exists("rule.attributes.linebreaks-normalized-to-lf.md");
+    // rule: rule.attributes.values-must-be-normalized
+    // rule: rule.attributes.whitespace-normalized-to-space
+    // rule: rule.attributes.linebreaks-normalized-to-lf
+    // rule: rule.attributes.char-refs-expanded
+    // rule: rule.attributes.entity-refs-expanded
+    rules::assert_rule_exists("rule.attributes.values-must-be-normalized");
+    rules::assert_rule_exists("rule.attributes.whitespace-normalized-to-space");
+    rules::assert_rule_exists("rule.attributes.linebreaks-normalized-to-lf");
 
     // A *literal* whitespace character (tab, line feed, carriage return) becomes a space.
     let document = Document::parse_string("<a b=\"x\ty\"/>").unwrap();
@@ -175,10 +175,10 @@ fn attribute(document: &Document, name: &str) -> String {
 
 #[test]
 fn the_declaration_is_interpreted_and_preserved() {
-    // rule: rule.entities.encoding-must-match-declaration.md
-    // rule: rule.entities.encoding-name-case-insensitive.md
-    // rule: rule.entities.default-encoding-utf8.md
-    // rule: rule.entities.no-encoding-legal-utf-required.md
+    // rule: rule.entities.encoding-must-match-declaration
+    // rule: rule.entities.encoding-name-case-insensitive
+    // rule: rule.entities.default-encoding-utf8
+    // rule: rule.entities.no-encoding-legal-utf-required
     for encoding in ["UTF-8", "utf-8", "Utf8"] {
         let xml = format!(r#"<?xml version="1.0" encoding="{encoding}"?><a/>"#);
         let document = Document::parse_string(&xml).unwrap();
@@ -228,8 +228,8 @@ fn unsupported_declarations_are_rejected() {
 
 #[test]
 fn a_declaration_must_be_the_very_first_thing() {
-    // rule: rule.well-formedness.pi-target-not-xml.md
-    rules::assert_rule_exists("rule.well-formedness.pi-target-not-xml.md");
+    // rule: rule.well-formedness.pi-target-not-xml
+    rules::assert_rule_exists("rule.well-formedness.pi-target-not-xml");
 
     assert!(matches!(
         parse_error(r#"<a><?xml version="1.0"?></a>"#),
@@ -246,8 +246,8 @@ fn a_declaration_must_be_the_very_first_thing() {
 
 #[test]
 fn an_optional_utf8_byte_order_mark_is_accepted() {
-    // rule: rule.entities.utf8-bom-optional.md
-    rules::assert_rule_exists("rule.entities.utf8-bom-optional.md");
+    // rule: rule.entities.utf8-bom-optional
+    rules::assert_rule_exists("rule.entities.utf8-bom-optional");
     let with_bom = Document::parse_bytes(b"\xEF\xBB\xBF<a/>").unwrap();
     assert_eq!(with_bom.write_string().unwrap(), "<a/>");
 
@@ -258,8 +258,8 @@ fn an_optional_utf8_byte_order_mark_is_accepted() {
 
 #[test]
 fn invalid_utf8_is_a_typed_error() {
-    // rule: rule.entities.illegal-byte-sequence-fatal.md
-    rules::assert_rule_exists("rule.entities.illegal-byte-sequence-fatal.md");
+    // rule: rule.entities.illegal-byte-sequence-fatal
+    rules::assert_rule_exists("rule.entities.illegal-byte-sequence-fatal");
     assert!(matches!(
         Document::parse_bytes(b"<a>\xFF\xFE</a>"),
         Err(XmlError::InvalidUtf8(_))
@@ -276,8 +276,8 @@ fn invalid_utf8_is_a_typed_error() {
 
 #[test]
 fn there_must_be_exactly_one_root_element() {
-    // rule: rule.well-formedness.single-root-element.md
-    rules::assert_rule_exists("rule.well-formedness.single-root-element.md");
+    // rule: rule.well-formedness.single-root-element
+    rules::assert_rule_exists("rule.well-formedness.single-root-element");
     assert!(matches!(
         parse_error("<a/><b/>"),
         XmlError::MultipleRootElements
@@ -296,8 +296,8 @@ fn there_must_be_exactly_one_root_element() {
 
 #[test]
 fn top_level_content_policy() {
-    // rule: rule.well-formedness.document-production.md
-    rules::assert_rule_exists("rule.well-formedness.document-production.md");
+    // rule: rule.well-formedness.document-production
+    rules::assert_rule_exists("rule.well-formedness.document-production");
 
     // Whitespace around the root is allowed and is not represented.
     assert_eq!(
@@ -351,12 +351,12 @@ fn top_level_content_policy() {
 
 #[test]
 fn tags_must_nest_and_close() {
-    // rule: rule.elements-and-tags.end-tag-must-match-start-tag.md
-    // rule: rule.well-formedness.elements-nest-properly.md
-    // rule: rule.elements-and-tags.every-start-tag-must-have-end-tag.md
-    rules::assert_rule_exists("rule.elements-and-tags.end-tag-must-match-start-tag.md");
-    rules::assert_rule_exists("rule.well-formedness.elements-nest-properly.md");
-    rules::assert_rule_exists("rule.elements-and-tags.every-start-tag-must-have-end-tag.md");
+    // rule: rule.elements-and-tags.end-tag-must-match-start-tag
+    // rule: rule.well-formedness.elements-nest-properly
+    // rule: rule.elements-and-tags.every-start-tag-must-have-end-tag
+    rules::assert_rule_exists("rule.elements-and-tags.end-tag-must-match-start-tag");
+    rules::assert_rule_exists("rule.well-formedness.elements-nest-properly");
+    rules::assert_rule_exists("rule.elements-and-tags.every-start-tag-must-have-end-tag");
 
     assert!(matches!(parse_error("<a>"), XmlError::MalformedXml(_)));
     assert!(matches!(
@@ -396,12 +396,12 @@ fn namespaces_are_resolved_and_reported() {
         "v"
     );
 
-    // rule: rule.namespace-usage.prefix-declared.md
-    // rule: rule.namespace-usage.no-prefix-undeclaring.md
-    // rule: rule.namespace-usage.attributes-unique-expanded-name.md
-    rules::assert_rule_exists("rule.namespace-usage.prefix-declared.md");
-    rules::assert_rule_exists("rule.namespace-usage.no-prefix-undeclaring.md");
-    rules::assert_rule_exists("rule.namespace-usage.attributes-unique-expanded-name.md");
+    // rule: rule.namespace-usage.prefix-declared
+    // rule: rule.namespace-usage.no-prefix-undeclaring
+    // rule: rule.namespace-usage.attributes-unique-expanded-name
+    rules::assert_rule_exists("rule.namespace-usage.prefix-declared");
+    rules::assert_rule_exists("rule.namespace-usage.no-prefix-undeclaring");
+    rules::assert_rule_exists("rule.namespace-usage.attributes-unique-expanded-name");
 
     assert!(matches!(
         parse_error("<p:a/>"),
@@ -428,8 +428,8 @@ fn namespaces_are_resolved_and_reported() {
 
 #[test]
 fn an_empty_default_declaration_removes_the_default_namespace() {
-    // rule: rule.namespace-usage.empty-default-namespace.md
-    rules::assert_rule_exists("rule.namespace-usage.empty-default-namespace.md");
+    // rule: rule.namespace-usage.empty-default-namespace
+    rules::assert_rule_exists("rule.namespace-usage.empty-default-namespace");
     let document =
         Document::parse_string(r#"<root xmlns="http://d"><inner xmlns=""><leaf/></inner></root>"#)
             .unwrap();
@@ -454,13 +454,13 @@ fn an_empty_default_declaration_removes_the_default_namespace() {
 
 #[test]
 fn xml_lang_and_xml_space_round_trip_with_the_implicit_xml_prefix() {
-    // rule: rule.namespace-basics.xml-prefix-fixed-binding.md
-    // rule: rule.document-structure.xml-lang-must-be-bcp47-or-empty.md
-    // rule: rule.document-structure.xml-space-must-be-enumerated-default-preserve.md
-    rules::assert_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding.md");
-    rules::assert_rule_exists("rule.document-structure.xml-lang-must-be-bcp47-or-empty.md");
+    // rule: rule.namespace-basics.xml-prefix-fixed-binding
+    // rule: rule.document-structure.xml-lang-must-be-bcp47-or-empty
+    // rule: rule.document-structure.xml-space-must-be-enumerated-default-preserve
+    rules::assert_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding");
+    rules::assert_rule_exists("rule.document-structure.xml-lang-must-be-bcp47-or-empty");
     rules::assert_rule_exists(
-        "rule.document-structure.xml-space-must-be-enumerated-default-preserve.md",
+        "rule.document-structure.xml-space-must-be-enumerated-default-preserve",
     );
 
     let xml = r#"<a xml:lang="en-GB" xml:space="preserve"><b/></a>"#;
@@ -531,9 +531,9 @@ fn xml_lang_and_xml_space_round_trip_with_the_implicit_xml_prefix() {
 
 #[test]
 fn less_than_is_rejected_in_attribute_values() {
-    // rule: rule.attributes.no-lt-in-values.md
-    // rule: rule.elements-and-tags.no-less-than-in-attribute-values.md
-    rules::assert_rule_exists("rule.attributes.no-lt-in-values.md");
+    // rule: rule.attributes.no-lt-in-values
+    // rule: rule.elements-and-tags.no-less-than-in-attribute-values
+    rules::assert_rule_exists("rule.attributes.no-lt-in-values");
     assert!(matches!(
         parse_error(r#"<a b="x<y"/>"#),
         XmlError::MalformedXml(_)
@@ -547,8 +547,8 @@ fn less_than_is_rejected_in_attribute_values() {
 
 #[test]
 fn comments_must_be_well_formed() {
-    // rule: rule.well-formedness.comment-no-double-hyphen.md
-    rules::assert_rule_exists("rule.well-formedness.comment-no-double-hyphen.md");
+    // rule: rule.well-formedness.comment-no-double-hyphen
+    rules::assert_rule_exists("rule.well-formedness.comment-no-double-hyphen");
     assert!(matches!(
         parse_error("<a><!-- bad -- comment --></a>"),
         XmlError::InvalidComment(_) | XmlError::MalformedXml(_)
@@ -565,12 +565,12 @@ fn comments_must_be_well_formed() {
 
 #[test]
 fn cdata_and_processing_instructions_must_be_well_formed() {
-    // rule: rule.document-structure.cdata-section-must-not-contain-cdend.md
-    // rule: rule.well-formedness.pi-target-is-name.md
-    // rule: rule.well-formedness.pi-no-contains-close.md
-    rules::assert_rule_exists("rule.document-structure.cdata-section-must-not-contain-cdend.md");
-    rules::assert_rule_exists("rule.well-formedness.pi-target-is-name.md");
-    rules::assert_rule_exists("rule.well-formedness.pi-no-contains-close.md");
+    // rule: rule.document-structure.cdata-section-must-not-contain-cdend
+    // rule: rule.well-formedness.pi-target-is-name
+    // rule: rule.well-formedness.pi-no-contains-close
+    rules::assert_rule_exists("rule.document-structure.cdata-section-must-not-contain-cdend");
+    rules::assert_rule_exists("rule.well-formedness.pi-target-is-name");
+    rules::assert_rule_exists("rule.well-formedness.pi-no-contains-close");
 
     // `]]>` simply closes the section, so this is *valid*: the rest becomes text.
     let document = Document::parse_string("<a><![CDATA[x]]>y</a>").unwrap();
@@ -736,8 +736,8 @@ fn declaration_style_is_honoured() {
 
 #[test]
 fn text_is_escaped_so_that_it_round_trips() {
-    // rule: rule.well-formedness.escape-ampersand-and-lt.md
-    rules::assert_rule_exists("rule.well-formedness.escape-ampersand-and-lt.md");
+    // rule: rule.well-formedness.escape-ampersand-and-lt
+    rules::assert_rule_exists("rule.well-formedness.escape-ampersand-and-lt");
     let document = Document::empty();
     let root = element(&document, "a");
     document.set_root(root.clone());
@@ -799,8 +799,8 @@ fn adjacent_text_nodes_are_merged_on_output() {
 
 #[test]
 fn processing_instruction_content_is_kept_verbatim() {
-    // rule: rule.well-formedness.pi-pass-through.md
-    rules::assert_rule_exists("rule.well-formedness.pi-pass-through.md");
+    // rule: rule.well-formedness.pi-pass-through
+    rules::assert_rule_exists("rule.well-formedness.pi-pass-through");
 
     // The whitespace separating target and content is syntax: exactly one character of it is
     // removed, the rest of the content is data and is preserved (including leading and trailing
@@ -950,43 +950,43 @@ fn rules_referenced_by_the_parser_and_serializer_exist() {
     // "layer B/D rules are implemented" claim in `docs/design/evidence/rule-enforcement.md`
     // checkable rather than asserted.
     let rules_referenced = [
-        "rule.attributes.char-ref-legal-char.md",
-        "rule.attributes.char-refs-expanded.md",
-        "rule.attributes.entity-refs-expanded.md",
-        "rule.attributes.linebreaks-normalized-to-lf.md",
-        "rule.attributes.no-lt-in-values.md",
-        "rule.attributes.no-undeclared-entity-refs.md",
-        "rule.attributes.values-must-be-normalized.md",
-        "rule.attributes.whitespace-normalized-to-space.md",
-        "rule.document-structure.cdata-section-must-not-contain-cdend.md",
-        "rule.document-structure.processor-must-normalize-line-breaks.md",
-        "rule.elements-and-tags.end-tag-must-match-start-tag.md",
-        "rule.elements-and-tags.every-start-tag-must-have-end-tag.md",
-        "rule.elements-and-tags.no-less-than-in-attribute-values.md",
-        "rule.elements-and-tags.unique-attribute-specification.md",
-        "rule.entities.charref-legal-character.md",
-        "rule.entities.default-encoding-utf8.md",
-        "rule.entities.encoding-must-match-declaration.md",
-        "rule.entities.encoding-name-case-insensitive.md",
-        "rule.entities.entity-declared-wfc.md",
-        "rule.entities.illegal-byte-sequence-fatal.md",
-        "rule.entities.no-encoding-legal-utf-required.md",
-        "rule.entities.predefined-entities-recognized.md",
-        "rule.entities.utf8-bom-optional.md",
-        "rule.namespace-usage.attributes-unique-expanded-name.md",
-        "rule.namespace-usage.empty-default-namespace.md",
-        "rule.namespace-usage.no-prefix-undeclaring.md",
-        "rule.namespace-usage.prefix-declaration-scope.md",
-        "rule.namespace-usage.prefix-declared.md",
-        "rule.well-formedness.char-ref-legal-char.md",
-        "rule.well-formedness.comment-no-double-hyphen.md",
-        "rule.well-formedness.document-production.md",
-        "rule.well-formedness.elements-nest-properly.md",
-        "rule.well-formedness.escape-ampersand-and-lt.md",
-        "rule.well-formedness.pi-no-contains-close.md",
-        "rule.well-formedness.pi-target-is-name.md",
-        "rule.well-formedness.pi-target-not-xml.md",
-        "rule.well-formedness.single-root-element.md",
+        "rule.attributes.char-ref-legal-char",
+        "rule.attributes.char-refs-expanded",
+        "rule.attributes.entity-refs-expanded",
+        "rule.attributes.linebreaks-normalized-to-lf",
+        "rule.attributes.no-lt-in-values",
+        "rule.attributes.no-undeclared-entity-refs",
+        "rule.attributes.values-must-be-normalized",
+        "rule.attributes.whitespace-normalized-to-space",
+        "rule.document-structure.cdata-section-must-not-contain-cdend",
+        "rule.document-structure.processor-must-normalize-line-breaks",
+        "rule.elements-and-tags.end-tag-must-match-start-tag",
+        "rule.elements-and-tags.every-start-tag-must-have-end-tag",
+        "rule.elements-and-tags.no-less-than-in-attribute-values",
+        "rule.elements-and-tags.unique-attribute-specification",
+        "rule.entities.charref-legal-character",
+        "rule.entities.default-encoding-utf8",
+        "rule.entities.encoding-must-match-declaration",
+        "rule.entities.encoding-name-case-insensitive",
+        "rule.entities.entity-declared-wfc",
+        "rule.entities.illegal-byte-sequence-fatal",
+        "rule.entities.no-encoding-legal-utf-required",
+        "rule.entities.predefined-entities-recognized",
+        "rule.entities.utf8-bom-optional",
+        "rule.namespace-usage.attributes-unique-expanded-name",
+        "rule.namespace-usage.empty-default-namespace",
+        "rule.namespace-usage.no-prefix-undeclaring",
+        "rule.namespace-usage.prefix-declaration-scope",
+        "rule.namespace-usage.prefix-declared",
+        "rule.well-formedness.char-ref-legal-char",
+        "rule.well-formedness.comment-no-double-hyphen",
+        "rule.well-formedness.document-production",
+        "rule.well-formedness.elements-nest-properly",
+        "rule.well-formedness.escape-ampersand-and-lt",
+        "rule.well-formedness.pi-no-contains-close",
+        "rule.well-formedness.pi-target-is-name",
+        "rule.well-formedness.pi-target-not-xml",
+        "rule.well-formedness.single-root-element",
     ];
     for rule in rules_referenced {
         assert!(

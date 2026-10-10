@@ -7,13 +7,13 @@
 //!
 //! This crate only supports XML 1.0 with UTF-8 input, so the interesting part is the *checking*:
 //!
-//! * `rule.entities.encoding-must-match-declaration` — the declared encoding must describe the
+//! * [`rule.entities.encoding-must-match-declaration`](crate::xml_spec::rule_set::rule_entities_encoding_must_match_declaration) — the declared encoding must describe the
 //!   actual encoding of the input; since only UTF-8 is supported, anything else is an error;
-//! * `rule.entities.encoding-name-case-insensitive` — `UTF-8`, `utf-8` and `Utf8` all name the
+//! * [`rule.entities.encoding-name-case-insensitive`](crate::xml_spec::rule_set::rule_entities_encoding_name_case_insensitive) — `UTF-8`, `utf-8` and `Utf8` all name the
 //!   same encoding ("the name ... is case-insensitive");
-//! * `rule.entities.no-encoding-legal-utf-required` — a declaration without an encoding is legal
+//! * [`rule.entities.no-encoding-legal-utf-required`](crate::xml_spec::rule_set::rule_entities_no_encoding_legal_utf_required) — a declaration without an encoding is legal
 //!   as long as the input is valid UTF-8 (and it must be, for a character to be usable);
-//! * `rule.entities.default-encoding-utf8` — UTF-8 is the default when no encoding is declared.
+//! * [`rule.entities.default-encoding-utf8`](crate::xml_spec::rule_set::rule_entities_default_encoding_utf8) — UTF-8 is the default when no encoding is declared.
 
 use std::fmt;
 
@@ -107,7 +107,7 @@ impl fmt::Display for XmlDeclaration {
 
 /// Whether `encoding` names UTF-8.
 ///
-/// `rule.entities.encoding-name-case-insensitive`: the encoding name is compared
+/// [`rule.entities.encoding-name-case-insensitive`](crate::xml_spec::rule_set::rule_entities_encoding_name_case_insensitive): the encoding name is compared
 /// case-insensitively. The `UTF-8` spelling is also accepted in its `utf8` form, which is what
 /// every XML processor in practice accepts (the specification's own `EncName` production requires
 /// the letters and the digits with an optional separator, and `utf8` is a valid `EncName` that
@@ -164,11 +164,11 @@ mod tests {
 
     #[test]
     fn encoding_names_are_case_insensitive() {
-        // rule: rule.entities.encoding-name-case-insensitive.md
-        assert_rule_exists("rule.entities.encoding-name-case-insensitive.md");
-        assert_rule_exists("rule.entities.encoding-must-match-declaration.md");
-        assert_rule_exists("rule.entities.default-encoding-utf8.md");
-        assert_rule_exists("rule.entities.no-encoding-legal-utf-required.md");
+        // rule: rule.entities.encoding-name-case-insensitive
+        assert_rule_exists("rule.entities.encoding-name-case-insensitive");
+        assert_rule_exists("rule.entities.encoding-must-match-declaration");
+        assert_rule_exists("rule.entities.default-encoding-utf8");
+        assert_rule_exists("rule.entities.no-encoding-legal-utf-required");
 
         assert!(encoding_is_utf8("UTF-8"));
         assert!(encoding_is_utf8("utf-8"));

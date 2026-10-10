@@ -13,15 +13,10 @@
 //! | `Document::validate` failures | `XmlValidationError` |
 //! | anything else | `XmlError` |
 //!
-//! `XmlSyntaxError` covers [`XmlError::InvalidName`], [`XmlError::InvalidText`],
-//! [`XmlError::InvalidComment`], [`XmlError::InvalidCData`],
-//! [`XmlError::InvalidProcessingInstruction`], [`XmlError::DuplicateAttribute`],
-//! [`XmlError::MalformedXml`], [`XmlError::InvalidUtf8`], [`XmlError::UnsupportedEncoding`],
-//! [`XmlError::UnsupportedXmlVersion`], [`XmlError::UndeclaredEntityReference`],
-//! [`XmlError::InvalidCharacterReference`], [`XmlError::MultipleRootElements`],
-//! [`XmlError::ContentOutsideRoot`] and [`XmlError::MissingRoot`] — i.e. everything that is a
-//! property of the input document. `XmlNamespaceError` covers [`XmlError::InvalidNamespace`],
-//! [`XmlError::ReservedPrefix`] and [`XmlError::UndeclaredPrefix`].
+//! `XmlSyntaxError` covers every variant that is a property of the input document — the name,
+//! content, markup, encoding and reference variants of
+//! [`XmlError`](biodivine_lib_xml_dom::XmlError) — while `XmlNamespaceError` covers its namespace
+//! variants and `XmlIoError` covers [`Io`](biodivine_lib_xml_dom::XmlError::Io).
 //!
 //! Every exception message is the Rust `Display` of the error, so a Python user sees the same text
 //! a Rust user would.

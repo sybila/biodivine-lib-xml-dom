@@ -431,7 +431,7 @@ impl Arena {
     /// All bindings visible to `id`, innermost first.
     ///
     /// Namespace declarations are inherited along the ancestor chain
-    /// (`rule.namespace-usage.prefix-declaration-scope`), and a declaration on an inner element
+    /// ([`rule.namespace-usage.prefix-declaration-scope`](crate::xml_spec::rule_set::rule_namespace_usage_prefix_declaration_scope)), and a declaration on an inner element
     /// shadows one on an outer element. The walk is bounded like [`Arena::is_ancestor`].
     pub(crate) fn namespaces_in_scope(
         &self,

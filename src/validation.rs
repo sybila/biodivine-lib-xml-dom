@@ -19,17 +19,17 @@
 //!
 //! | group | rule files |
 //! | --- | --- |
-//! | structure (self-check of the arena's invariants) | `rule.well-formedness.single-root-element`, `rule.well-formedness.elements-nest-properly` |
-//! | namespace scope | `rule.namespace-usage.prefix-declared`, `prefix-declaration-scope`, `default-namespace-scope`, `default-namespace-not-attributes`, `rule.namespace-basics.xmlns-not-element-prefix`, `xml-prefix-fixed-binding` |
+//! | structure (self-check of the arena's invariants) | [`rule.well-formedness.single-root-element`](crate::xml_spec::rule_set::rule_well_formedness_single_root_element), [`rule.well-formedness.elements-nest-properly`](crate::xml_spec::rule_set::rule_well_formedness_elements_nest_properly) |
+//! | namespace scope | [`rule.namespace-usage.prefix-declared`](crate::xml_spec::rule_set::rule_namespace_usage_prefix_declared), `prefix-declaration-scope`, `default-namespace-scope`, `default-namespace-not-attributes`, [`rule.namespace-basics.xmlns-not-element-prefix`](crate::xml_spec::rule_set::rule_namespace_basics_xmlns_not_element_prefix), `xml-prefix-fixed-binding` |
 //! | namespace declarations | `rule.namespace-basics.*` reserved-binding rules |
-//! | values | `rule.attributes.id-must-be-name`, `id-must-be-unique`, `rule.document-structure.xml-lang-must-be-bcp47-or-empty`, `xml-space-must-be-enumerated-default-preserve` |
+//! | values | [`rule.attributes.id-must-be-name`](crate::xml_spec::rule_set::rule_attributes_id_must_be_name), `id-must-be-unique`, [`rule.document-structure.xml-lang-must-be-bcp47-or-empty`](crate::xml_spec::rule_set::rule_document_structure_xml_lang_must_be_bcp47_or_empty), `xml-space-must-be-enumerated-default-preserve` |
 //!
 //! # What is deliberately not checked
 //!
 //! Everything that needs DTD processing: attribute *types*, content models, and the two
 //! `xml:lang`/`xml:space` "must be declared" constraints. Those are validity, not well-formedness,
-//! and AGENTS.md puts `DOCTYPE` validation out of scope; the two rules are marked as such in
-//! `docs/design/evidence/rule-enforcement.md`.
+//! and `DOCTYPE` validation is out of scope for this library; the two rules are marked as such in
+//! the rule coverage list of the development documentation.
 //!
 //! # Detached nodes
 //!
@@ -68,29 +68,29 @@ pub enum ValidationErrorKind {
     // that the corresponding document-level rules have an explicit enforcement point. Only
     // `MissingRoot` is reachable through the public API (a document to which no root was set).
     // -------------------------------------------------------------------------------------
-    /// The document has no root element (`rule.well-formedness.document-production`).
+    /// The document has no root element ([`rule.well-formedness.document-production`](crate::xml_spec::rule_set::rule_well_formedness_document_production)).
     MissingRoot,
-    /// The root of the document is not an element (`rule.well-formedness.single-root-element`).
+    /// The root of the document is not an element ([`rule.well-formedness.single-root-element`](crate::xml_spec::rule_set::rule_well_formedness_single_root_element)).
     RootIsNotAnElement,
-    /// The root of the document has a parent (`rule.well-formedness.single-root-element`).
+    /// The root of the document has a parent ([`rule.well-formedness.single-root-element`](crate::xml_spec::rule_set::rule_well_formedness_single_root_element)).
     RootHasParent,
     /// A node's parent link and the parent's child list disagree
-    /// (`rule.well-formedness.elements-nest-properly`).
+    /// ([`rule.well-formedness.elements-nest-properly`](crate::xml_spec::rule_set::rule_well_formedness_elements_nest_properly)).
     ParentChildMismatch,
     /// Following parent links from a node returns to it
-    /// (`rule.well-formedness.elements-nest-properly`).
+    /// ([`rule.well-formedness.elements-nest-properly`](crate::xml_spec::rule_set::rule_well_formedness_elements_nest_properly)).
     CyclicStructure,
 
     // -------------------------------------------------------------------------------------
     // Namespace scope.
     // -------------------------------------------------------------------------------------
-    /// A name uses a prefix that is not declared in scope (`rule.namespace-usage.prefix-declared`).
+    /// A name uses a prefix that is not declared in scope ([`rule.namespace-usage.prefix-declared`](crate::xml_spec::rule_set::rule_namespace_usage_prefix_declared)).
     UndeclaredPrefix {
         /// The prefix of the name.
         prefix: NCName,
     },
     /// A name uses a prefix that is declared, but bound to a different URI
-    /// (`rule.namespace-usage.prefix-declaration-scope`).
+    /// ([`rule.namespace-usage.prefix-declaration-scope`](crate::xml_spec::rule_set::rule_namespace_usage_prefix_declaration_scope)).
     PrefixBoundToDifferentUri {
         /// The prefix of the name.
         prefix: NCName,
@@ -100,13 +100,13 @@ pub enum ValidationErrorKind {
         actual: String,
     },
     /// An element name is in the default namespace, but no default namespace is in scope
-    /// (`rule.namespace-usage.default-namespace-scope`).
+    /// ([`rule.namespace-usage.default-namespace-scope`](crate::xml_spec::rule_set::rule_namespace_usage_default_namespace_scope)).
     MissingDefaultNamespace {
         /// The URI the name carries.
         expected: String,
     },
     /// An element name is in the default namespace, but a different one is in scope
-    /// (`rule.namespace-usage.default-namespace-scope`).
+    /// ([`rule.namespace-usage.default-namespace-scope`](crate::xml_spec::rule_set::rule_namespace_usage_default_namespace_scope)).
     DefaultNamespaceMismatch {
         /// The URI the name carries.
         expected: String,
@@ -115,19 +115,19 @@ pub enum ValidationErrorKind {
     },
     /// An unprefixed element name has no namespace, but a default namespace is in scope, so the
     /// name would mean something else once written out
-    /// (`rule.namespace-usage.default-namespace-scope`).
+    /// ([`rule.namespace-usage.default-namespace-scope`](crate::xml_spec::rule_set::rule_namespace_usage_default_namespace_scope)).
     UnprefixedNameTakesDefaultNamespace {
         /// The default namespace that is in scope.
         default_uri: String,
     },
     /// An attribute name carries a namespace without a prefix, so it cannot be written
-    /// (`rule.namespace-usage.default-namespace-not-attributes`).
+    /// ([`rule.namespace-usage.default-namespace-not-attributes`](crate::xml_spec::rule_set::rule_namespace_usage_default_namespace_not_attributes)).
     AttributeNamespaceWithoutPrefix {
         /// The URI the name carries.
         uri: String,
     },
     /// A name uses the reserved `xmlns` prefix
-    /// (`rule.namespace-basics.xmlns-not-element-prefix`).
+    /// ([`rule.namespace-basics.xmlns-not-element-prefix`](crate::xml_spec::rule_set::rule_namespace_basics_xmlns_not_element_prefix)).
     ReservedPrefix {
         /// The prefix of the name.
         prefix: NCName,
@@ -146,24 +146,24 @@ pub enum ValidationErrorKind {
     // -------------------------------------------------------------------------------------
     // Values.
     // -------------------------------------------------------------------------------------
-    /// An `xml:id` value is not a valid `NCName` (`rule.attributes.id-must-be-name`).
+    /// An `xml:id` value is not a valid `NCName` ([`rule.attributes.id-must-be-name`](crate::xml_spec::rule_set::rule_attributes_id_must_be_name)).
     XmlIdIsNotAName {
         /// The offending value.
         value: String,
     },
-    /// Two elements carry the same `xml:id` value (`rule.attributes.id-must-be-unique`).
+    /// Two elements carry the same `xml:id` value ([`rule.attributes.id-must-be-unique`](crate::xml_spec::rule_set::rule_attributes_id_must_be_unique)).
     DuplicateXmlId {
         /// The repeated value.
         id: NCName,
     },
     /// An `xml:lang` value is not a language tag and not empty
-    /// (`rule.document-structure.xml-lang-must-be-bcp47-or-empty`).
+    /// ([`rule.document-structure.xml-lang-must-be-bcp47-or-empty`](crate::xml_spec::rule_set::rule_document_structure_xml_lang_must_be_bcp47_or_empty)).
     InvalidXmlLang {
         /// The offending value.
         value: String,
     },
     /// An `xml:space` value is neither `default` nor `preserve`
-    /// (`rule.document-structure.xml-space-must-be-enumerated-default-preserve`).
+    /// ([`rule.document-structure.xml-space-must-be-enumerated-default-preserve`](crate::xml_spec::rule_set::rule_document_structure_xml_space_must_be_enumerated_default_preserve)).
     InvalidXmlSpace {
         /// The offending value.
         value: String,
@@ -171,39 +171,41 @@ pub enum ValidationErrorKind {
 }
 
 impl ValidationErrorKind {
-    /// The rule file this kind comes from, for error messages and documentation.
+    /// The rule this kind enforces, as its identifier (`rule.well-formedness.document-production`),
+    /// for error messages and documentation. The summary itself is the corresponding module of
+    /// [`crate::xml_spec::rule_set`].
     pub fn rule(&self) -> &'static str {
         match self {
-            Self::MissingRoot => "rule.well-formedness.document-production.md",
+            Self::MissingRoot => "rule.well-formedness.document-production",
             Self::RootIsNotAnElement | Self::RootHasParent => {
-                "rule.well-formedness.single-root-element.md"
+                "rule.well-formedness.single-root-element"
             }
             Self::ParentChildMismatch | Self::CyclicStructure => {
-                "rule.well-formedness.elements-nest-properly.md"
+                "rule.well-formedness.elements-nest-properly"
             }
-            Self::UndeclaredPrefix { .. } => "rule.namespace-usage.prefix-declared.md",
+            Self::UndeclaredPrefix { .. } => "rule.namespace-usage.prefix-declared",
             Self::PrefixBoundToDifferentUri { .. } => {
-                "rule.namespace-usage.prefix-declaration-scope.md"
+                "rule.namespace-usage.prefix-declaration-scope"
             }
             Self::MissingDefaultNamespace { .. }
             | Self::DefaultNamespaceMismatch { .. }
             | Self::UnprefixedNameTakesDefaultNamespace { .. } => {
-                "rule.namespace-usage.default-namespace-scope.md"
+                "rule.namespace-usage.default-namespace-scope"
             }
             Self::AttributeNamespaceWithoutPrefix { .. } => {
-                "rule.namespace-usage.default-namespace-not-attributes.md"
+                "rule.namespace-usage.default-namespace-not-attributes"
             }
-            Self::ReservedPrefix { .. } => "rule.namespace-basics.xmlns-not-element-prefix.md",
+            Self::ReservedPrefix { .. } => "rule.namespace-basics.xmlns-not-element-prefix",
             Self::IllegalNamespaceDeclaration { .. } => {
-                "rule.namespace-basics.xml-prefix-fixed-binding.md"
+                "rule.namespace-basics.xml-prefix-fixed-binding"
             }
-            Self::XmlIdIsNotAName { .. } => "rule.attributes.id-must-be-name.md",
-            Self::DuplicateXmlId { .. } => "rule.attributes.id-must-be-unique.md",
+            Self::XmlIdIsNotAName { .. } => "rule.attributes.id-must-be-name",
+            Self::DuplicateXmlId { .. } => "rule.attributes.id-must-be-unique",
             Self::InvalidXmlLang { .. } => {
-                "rule.document-structure.xml-lang-must-be-bcp47-or-empty.md"
+                "rule.document-structure.xml-lang-must-be-bcp47-or-empty"
             }
             Self::InvalidXmlSpace { .. } => {
-                "rule.document-structure.xml-space-must-be-enumerated-default-preserve.md"
+                "rule.document-structure.xml-space-must-be-enumerated-default-preserve"
             }
         }
     }
@@ -469,7 +471,7 @@ fn check_xml_attribute_values(
     if let Some(value) = xml_id_attribute(element)
         && NCName::try_from(value).is_err()
     {
-        // rule: rule.attributes.id-must-be-name.md
+        // rule: rule.attributes.id-must-be-name
         errors.push(XmlValidationError::at(
             ValidationErrorKind::XmlIdIsNotAName {
                 value: value.to_string(),
@@ -481,7 +483,7 @@ fn check_xml_attribute_values(
     if let Some(value) = xml_lang_attribute(element)
         && !is_valid_language_tag(value)
     {
-        // rule: rule.document-structure.xml-lang-must-be-bcp47-or-empty.md
+        // rule: rule.document-structure.xml-lang-must-be-bcp47-or-empty
         errors.push(XmlValidationError::at(
             ValidationErrorKind::InvalidXmlLang {
                 value: value.to_string(),
@@ -493,7 +495,7 @@ fn check_xml_attribute_values(
     if let Some(value) = xml_space_attribute(element)
         && !is_valid_xml_space_value(value)
     {
-        // rule: rule.document-structure.xml-space-must-be-enumerated-default-preserve.md
+        // rule: rule.document-structure.xml-space-must-be-enumerated-default-preserve
         errors.push(XmlValidationError::at(
             ValidationErrorKind::InvalidXmlSpace {
                 value: value.to_string(),
@@ -532,7 +534,7 @@ fn check_xml_id_uniqueness(arena: &Arena, errors: &mut Vec<XmlValidationError>) 
             && let Some(value) = xml_id_attribute(element)
             && let Ok(name) = NCName::try_from(value)
         {
-            // rule: rule.attributes.id-must-be-unique.md
+            // rule: rule.attributes.id-must-be-unique
             if let Some(previous) = seen.insert(value.to_string(), id) {
                 errors.push(XmlValidationError::at(
                     ValidationErrorKind::DuplicateXmlId { id: name },

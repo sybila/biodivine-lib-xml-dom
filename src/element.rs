@@ -101,7 +101,7 @@ impl Element {
     ///
     /// Because the attributes live in a map keyed by [`QualifiedName`], two attributes with the
     /// same expanded name are unrepresentable — requirement (4)(1) and
-    /// `rule.elements-and-tags.unique-attribute-specification` are enforced by the storage type.
+    /// [`rule.elements-and-tags.unique-attribute-specification`](crate::xml_spec::rule_set::rule_elements_and_tags_unique_attribute_specification) are enforced by the storage type.
     pub fn attributes(&self) -> BTreeMap<QualifiedName, Arc<str>> {
         let id = self.0.id;
         self.0.document.read_arena("Element::attributes", |arena| {
@@ -121,7 +121,7 @@ impl Element {
     ///
     /// This is the common case (`<a href="…">`) and is the only way an unprefixed attribute can
     /// be spelled, because the default namespace never applies to attributes
-    /// (`rule.namespace-usage.default-namespace-not-attributes`).
+    /// ([`rule.namespace-usage.default-namespace-not-attributes`](crate::xml_spec::rule_set::rule_namespace_usage_default_namespace_not_attributes)).
     pub fn attribute_local(&self, local_name: &NCName) -> Option<Arc<str>> {
         self.attribute(&QualifiedName::new(local_name.clone(), None))
     }
@@ -147,7 +147,7 @@ impl Element {
     ///
     /// The value is stored verbatim; the serializer escapes it. In particular `<` and `&` are
     /// legal to store and are written back as `&lt;` and `&amp;`
-    /// (`rule.well-formedness.escape-ampersand-and-lt`).
+    /// ([`rule.well-formedness.escape-ampersand-and-lt`](crate::xml_spec::rule_set::rule_well_formedness_escape_ampersand_and_lt)).
     #[track_caller]
     pub fn set_attribute(&self, name: QualifiedName, value: impl AsRef<str>) {
         match self.set_attribute_checked(name, value) {
@@ -161,7 +161,7 @@ impl Element {
     /// # Errors
     ///
     /// Returns [`XmlError::InvalidText`] if `value` contains characters that are not legal XML
-    /// characters (`rule.well-formedness.legal-characters`).
+    /// characters ([`rule.well-formedness.legal-characters`](crate::xml_spec::rule_set::rule_well_formedness_legal_characters)).
     pub fn set_attribute_checked(
         &self,
         name: QualifiedName,
@@ -207,7 +207,7 @@ impl Element {
     ///
     /// The key is the prefix (`None` for the default namespace); the value is the binding, where
     /// `Some(None)` denotes an empty declaration (`xmlns=""`) that removes the default namespace
-    /// from scope (`rule.namespace-usage.empty-default-namespace`).
+    /// from scope ([`rule.namespace-usage.empty-default-namespace`](crate::xml_spec::rule_set::rule_namespace_usage_empty_default_namespace)).
     pub fn namespace_declarations(&self) -> BTreeMap<Option<NCName>, Option<Namespace>> {
         let id = self.0.id;
         self.0
@@ -220,7 +220,7 @@ impl Element {
     /// All namespace bindings visible to this element, innermost first.
     ///
     /// Namespace declarations are inherited down the tree
-    /// (`rule.namespace-usage.prefix-declaration-scope`); an inner declaration shadows an outer
+    /// ([`rule.namespace-usage.prefix-declaration-scope`](crate::xml_spec::rule_set::rule_namespace_usage_prefix_declaration_scope)); an inner declaration shadows an outer
     /// one, and an empty default declaration (`xmlns=""`) appears in the result as a binding to
     /// "no namespace".
     pub fn namespaces_in_scope(&self) -> Vec<(Option<NCName>, Option<Namespace>)> {
@@ -298,7 +298,7 @@ impl Element {
     }
 
     /// Declares `xmlns=""` on this element, removing the default namespace from its scope
-    /// (`rule.namespace-usage.empty-default-namespace`).
+    /// ([`rule.namespace-usage.empty-default-namespace`](crate::xml_spec::rule_set::rule_namespace_usage_empty_default_namespace)).
     pub fn undeclare_default_namespace(&self) {
         let id = self.0.id;
         self.0
@@ -340,7 +340,7 @@ impl Element {
     /// at all, including when the default namespace has been removed by an empty declaration.
     ///
     /// The predefined `xml` prefix is *not* resolved here: it is implicitly bound even without a
-    /// declaration (Namespaces 1.0 §3, `rule.namespace-basics.xml-prefix-fixed-binding`), which
+    /// declaration (Namespaces 1.0 §3, [`rule.namespace-basics.xml-prefix-fixed-binding`](crate::xml_spec::rule_set::rule_namespace_basics_xml_prefix_fixed_binding)), which
     /// [`Element::resolve_qualified_name`] handles.
     pub fn get_namespace(&self, prefix: Option<&NCName>) -> Option<Namespace> {
         let id = self.0.id;
@@ -361,11 +361,11 @@ impl Element {
     /// # Errors
     ///
     /// - [`XmlError::InvalidName`] if the string is not a syntactically valid `QName`
-    ///   (`rule.namespace-usage.qname-format`, `rule.namespace-usage.zero-or-one-colon`).
+    ///   ([`rule.namespace-usage.qname-format`](crate::xml_spec::rule_set::rule_namespace_usage_qname_format), [`rule.namespace-usage.zero-or-one-colon`](crate::xml_spec::rule_set::rule_namespace_usage_zero_or_one_colon)).
     /// - [`XmlError::UndeclaredPrefix`] if the prefix is not declared in scope
-    ///   (`rule.namespace-usage.prefix-declared`).
+    ///   ([`rule.namespace-usage.prefix-declared`](crate::xml_spec::rule_set::rule_namespace_usage_prefix_declared)).
     /// - [`XmlError::ReservedPrefix`] for the `xmlns` prefix
-    ///   (`rule.namespace-basics.xmlns-not-element-prefix`).
+    ///   ([`rule.namespace-basics.xmlns-not-element-prefix`](crate::xml_spec::rule_set::rule_namespace_basics_xmlns_not_element_prefix)).
     pub fn resolve_qualified_name(&self, name: &str) -> XmlResult<QualifiedName> {
         QualifiedName::resolve_element(self, name)
     }
@@ -374,7 +374,7 @@ impl Element {
     /// are in scope for this element.
     ///
     /// The default namespace never applies to attributes
-    /// (`rule.namespace-usage.default-namespace-not-attributes`).
+    /// ([`rule.namespace-usage.default-namespace-not-attributes`](crate::xml_spec::rule_set::rule_namespace_usage_default_namespace_not_attributes)).
     ///
     /// # Errors
     ///

@@ -3,7 +3,7 @@
 //! Everything here is a `Document` method (or, for parsing, an associated function) rather than a
 //! free function, so that the whole lifetime of a document — create, parse, edit, validate,
 //! serialize — is discoverable from one place. The conceptual contract these methods implement is
-//! documented on [`Document`](crate::Document) itself; this module contains the methods and their
+//! documented on [`Document`] itself; this module contains the methods and their
 //! error conditions.
 
 use std::io::{BufRead, Write};
@@ -27,7 +27,7 @@ impl Document {
     /// XML document that this library supports:
     ///
     /// - [`XmlError::InvalidUtf8`] if the input is not valid UTF-8
-    ///   (`rule.entities.illegal-byte-sequence-fatal`);
+    ///   ([`rule.entities.illegal-byte-sequence-fatal`](crate::xml_spec::rule_set::rule_entities_illegal_byte_sequence_fatal));
     /// - [`XmlError::UnsupportedEncoding`] / [`XmlError::UnsupportedXmlVersion`] if the XML
     ///   declaration names an encoding other than UTF-8 or a version other than 1.0;
     /// - [`XmlError::MalformedXml`] for malformed markup (unbalanced, mismatched or unclosed tags,
@@ -59,7 +59,7 @@ impl Document {
     /// Parses an XML document from raw bytes.
     ///
     /// The bytes must be UTF-8; an optional UTF-8 byte-order mark is accepted and ignored
-    /// (`rule.entities.utf8-bom-optional`).
+    /// ([`rule.entities.utf8-bom-optional`](crate::xml_spec::rule_set::rule_entities_utf8_bom_optional)).
     ///
     /// # Errors
     ///

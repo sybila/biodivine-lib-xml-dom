@@ -125,10 +125,7 @@ fn a_validation_failure_carries_every_problem() {
                 .collect::<Vec<_>>(),
             vec!["undeclared_prefix", "invalid_xml_space"]
         );
-        assert_eq!(
-            problems[0].rule(),
-            "rule.namespace-usage.prefix-declared.md"
-        );
+        assert_eq!(problems[0].rule(), "rule.namespace-usage.prefix-declared");
         assert!(document.validate(py).is_err());
         assert!(!document.is_valid(py));
     });

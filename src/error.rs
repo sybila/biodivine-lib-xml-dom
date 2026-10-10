@@ -25,18 +25,18 @@ pub enum XmlError {
     #[error("invalid XML name: {0}")]
     InvalidName(String),
     /// A string contains characters that are not legal XML characters
-    /// (`rule.well-formedness.legal-characters`).
+    /// ([`rule.well-formedness.legal-characters`](crate::xml_spec::rule_set::rule_well_formedness_legal_characters)).
     #[error("invalid XML text: {0}")]
     InvalidText(String),
-    /// A comment contains `--` or ends with `-` (`rule.well-formedness.comment-no-double-hyphen`).
+    /// A comment contains `--` or ends with `-` ([`rule.well-formedness.comment-no-double-hyphen`](crate::xml_spec::rule_set::rule_well_formedness_comment_no_double_hyphen)).
     #[error("invalid XML comment: {0}")]
     InvalidComment(String),
     /// CDATA content contains `]]>`
-    /// (`rule.document-structure.cdata-section-must-not-contain-cdend`).
+    /// ([`rule.document-structure.cdata-section-must-not-contain-cdend`](crate::xml_spec::rule_set::rule_document_structure_cdata_section_must_not_contain_cdend)).
     #[error("invalid CDATA section: {0}")]
     InvalidCData(String),
     /// A processing instruction is malformed
-    /// (`rule.well-formedness.pi-target-is-name`, `rule.well-formedness.pi-no-contains-close`).
+    /// ([`rule.well-formedness.pi-target-is-name`](crate::xml_spec::rule_set::rule_well_formedness_pi_target_is_name), [`rule.well-formedness.pi-no-contains-close`](crate::xml_spec::rule_set::rule_well_formedness_pi_no_contains_close)).
     #[error("invalid processing instruction: {0}")]
     InvalidProcessingInstruction(String),
     /// A namespace URI/prefix combination violates the Namespaces specification.
@@ -46,25 +46,25 @@ pub enum XmlError {
     #[error("reserved namespace prefix: {0}")]
     ReservedPrefix(String),
     /// Two attributes of one element share the same expanded name
-    /// (`rule.elements-and-tags.unique-attribute-specification`).
+    /// ([`rule.elements-and-tags.unique-attribute-specification`](crate::xml_spec::rule_set::rule_elements_and_tags_unique_attribute_specification)).
     #[error("duplicate attribute `{0}`")]
     DuplicateAttribute(String),
 
     // ---------------------------------------------------------------------------------------
     // Document well-formedness (raised while parsing).
     // ---------------------------------------------------------------------------------------
-    /// A namespace prefix is used but never declared (`rule.namespace-usage.prefix-declared`).
+    /// A namespace prefix is used but never declared ([`rule.namespace-usage.prefix-declared`](crate::xml_spec::rule_set::rule_namespace_usage_prefix_declared)).
     #[error("undeclared namespace prefix `{0}`")]
     UndeclaredPrefix(String),
-    /// The document has no root element (`rule.well-formedness.document-production`).
+    /// The document has no root element ([`rule.well-formedness.document-production`](crate::xml_spec::rule_set::rule_well_formedness_document_production)).
     #[error("the document has no root element")]
     MissingRoot,
     /// The input contains more than one root element
-    /// (`rule.well-formedness.single-root-element`).
+    /// ([`rule.well-formedness.single-root-element`](crate::xml_spec::rule_set::rule_well_formedness_single_root_element)).
     #[error("the document has more than one root element")]
     MultipleRootElements,
     /// Non-whitespace content appeared outside the root element
-    /// (`rule.well-formedness.document-production`).
+    /// ([`rule.well-formedness.document-production`](crate::xml_spec::rule_set::rule_well_formedness_document_production)).
     #[error("content is not allowed outside the root element")]
     ContentOutsideRoot,
     /// The declared encoding is not supported (this crate is UTF-8 only).
@@ -74,17 +74,17 @@ pub enum XmlError {
     #[error("unsupported XML version `{0}`: only 1.0 is supported")]
     UnsupportedXmlVersion(String),
     /// A general entity reference that is not one of the five predefined entities
-    /// (`rule.attributes.no-undeclared-entity-refs`, `rule.entities.predefined-entities-recognized`).
+    /// ([`rule.attributes.no-undeclared-entity-refs`](crate::xml_spec::rule_set::rule_attributes_no_undeclared_entity_refs), [`rule.entities.predefined-entities-recognized`](crate::xml_spec::rule_set::rule_entities_predefined_entities_recognized)).
     #[error("undeclared entity reference `&{0};` (only the predefined entities are supported)")]
     UndeclaredEntityReference(String),
     /// A character reference denotes a character that is not legal in XML
-    /// (`rule.entities.charref-legal-character`).
+    /// ([`rule.entities.charref-legal-character`](crate::xml_spec::rule_set::rule_entities_charref_legal_character)).
     #[error("invalid character reference `{0}`")]
     InvalidCharacterReference(String),
     /// The input is not well-formed XML.
     #[error("malformed XML: {0}")]
     MalformedXml(String),
-    /// The input is not valid UTF-8 (`rule.entities.illegal-byte-sequence-fatal`).
+    /// The input is not valid UTF-8 ([`rule.entities.illegal-byte-sequence-fatal`](crate::xml_spec::rule_set::rule_entities_illegal_byte_sequence_fatal)).
     #[error("invalid UTF-8: {0}")]
     InvalidUtf8(String),
 

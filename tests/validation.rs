@@ -45,8 +45,8 @@ fn assert_valid(document: &Document) {
 
 #[test]
 fn an_empty_document_has_no_root() {
-    // rule: rule.well-formedness.document-production.md
-    rules::assert_rule_exists("rule.well-formedness.document-production.md");
+    // rule: rule.well-formedness.document-production
+    rules::assert_rule_exists("rule.well-formedness.document-production");
     let document = Document::empty();
     assert!(!document.is_valid());
     let errors = document.validate().unwrap_err();
@@ -103,8 +103,8 @@ fn every_parsed_fixture_is_valid() {
 
 #[test]
 fn an_element_in_a_namespace_needs_it_declared() {
-    // rule: rule.namespace-usage.prefix-declared.md
-    rules::assert_rule_exists("rule.namespace-usage.prefix-declared.md");
+    // rule: rule.namespace-usage.prefix-declared
+    rules::assert_rule_exists("rule.namespace-usage.prefix-declared");
 
     let document = Document::empty();
     let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
@@ -125,8 +125,8 @@ fn an_element_in_a_namespace_needs_it_declared() {
 
 #[test]
 fn a_prefix_bound_to_a_different_uri_is_reported() {
-    // rule: rule.namespace-usage.prefix-declaration-scope.md
-    rules::assert_rule_exists("rule.namespace-usage.prefix-declaration-scope.md");
+    // rule: rule.namespace-usage.prefix-declaration-scope
+    rules::assert_rule_exists("rule.namespace-usage.prefix-declaration-scope");
 
     let document = Document::empty();
     let root = element(&document, "root");
@@ -152,8 +152,8 @@ fn a_prefix_bound_to_a_different_uri_is_reported() {
 
 #[test]
 fn default_namespace_scope_must_match_the_name() {
-    // rule: rule.namespace-usage.default-namespace-scope.md
-    rules::assert_rule_exists("rule.namespace-usage.default-namespace-scope.md");
+    // rule: rule.namespace-usage.default-namespace-scope
+    rules::assert_rule_exists("rule.namespace-usage.default-namespace-scope");
 
     // (a) A name in the default namespace with no declaration in scope.
     let document = Document::empty();
@@ -223,8 +223,8 @@ fn default_namespace_scope_must_match_the_name() {
 
 #[test]
 fn attributes_are_not_affected_by_the_default_namespace() {
-    // rule: rule.namespace-usage.default-namespace-not-attributes.md
-    rules::assert_rule_exists("rule.namespace-usage.default-namespace-not-attributes.md");
+    // rule: rule.namespace-usage.default-namespace-not-attributes
+    rules::assert_rule_exists("rule.namespace-usage.default-namespace-not-attributes");
 
     // An unprefixed attribute inside a default-namespace scope is perfectly fine.
     let document = Document::empty();
@@ -255,8 +255,8 @@ fn attributes_are_not_affected_by_the_default_namespace() {
 
 #[test]
 fn the_xml_prefix_is_always_available() {
-    // rule: rule.namespace-basics.xml-prefix-fixed-binding.md
-    rules::assert_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding.md");
+    // rule: rule.namespace-basics.xml-prefix-fixed-binding
+    rules::assert_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding");
 
     let document = Document::empty();
     let root = element(&document, "root");
@@ -299,10 +299,10 @@ fn detached_subtrees_are_validated_against_their_own_scope() {
 
 #[test]
 fn xml_id_values_must_be_names_and_unique() {
-    // rule: rule.attributes.id-must-be-name.md
-    // rule: rule.attributes.id-must-be-unique.md
-    rules::assert_rule_exists("rule.attributes.id-must-be-name.md");
-    rules::assert_rule_exists("rule.attributes.id-must-be-unique.md");
+    // rule: rule.attributes.id-must-be-name
+    // rule: rule.attributes.id-must-be-unique
+    rules::assert_rule_exists("rule.attributes.id-must-be-name");
+    rules::assert_rule_exists("rule.attributes.id-must-be-unique");
 
     let document = Document::empty();
     let root = element(&document, "root");
@@ -355,10 +355,10 @@ fn a_detached_copy_does_not_conflict_with_its_original() {
 
 #[test]
 fn the_xml_id_policy_is_pinned_in_both_directions() {
-    // rule: rule.attributes.id-must-be-unique.md
-    // rule: rule.attributes.id-must-be-name.md
-    rules::assert_rule_exists("rule.attributes.id-must-be-unique.md");
-    rules::assert_rule_exists("rule.attributes.id-must-be-name.md");
+    // rule: rule.attributes.id-must-be-unique
+    // rule: rule.attributes.id-must-be-name
+    rules::assert_rule_exists("rule.attributes.id-must-be-unique");
+    rules::assert_rule_exists("rule.attributes.id-must-be-name");
 
     let document = Document::empty();
     let root = element(&document, "root");
@@ -413,9 +413,9 @@ fn the_xml_id_policy_is_pinned_in_both_directions() {
             .map(|error| error.kind().rule())
             .collect::<Vec<_>>(),
         vec![
-            "rule.attributes.id-must-be-name.md",
-            "rule.document-structure.xml-lang-must-be-bcp47-or-empty.md",
-            "rule.document-structure.xml-space-must-be-enumerated-default-preserve.md",
+            "rule.attributes.id-must-be-name",
+            "rule.document-structure.xml-lang-must-be-bcp47-or-empty",
+            "rule.document-structure.xml-space-must-be-enumerated-default-preserve",
         ]
     );
     // Fixing the detached node removes its issues without attaching it.
@@ -525,11 +525,11 @@ fn consistent_documents_produce_no_structural_issues() {
 
 #[test]
 fn xml_lang_and_xml_space_values_are_checked() {
-    // rule: rule.document-structure.xml-lang-must-be-bcp47-or-empty.md
-    // rule: rule.document-structure.xml-space-must-be-enumerated-default-preserve.md
-    rules::assert_rule_exists("rule.document-structure.xml-lang-must-be-bcp47-or-empty.md");
+    // rule: rule.document-structure.xml-lang-must-be-bcp47-or-empty
+    // rule: rule.document-structure.xml-space-must-be-enumerated-default-preserve
+    rules::assert_rule_exists("rule.document-structure.xml-lang-must-be-bcp47-or-empty");
     rules::assert_rule_exists(
-        "rule.document-structure.xml-space-must-be-enumerated-default-preserve.md",
+        "rule.document-structure.xml-space-must-be-enumerated-default-preserve",
     );
 
     let document = Document::empty();
@@ -564,7 +564,7 @@ fn xml_lang_and_xml_space_values_are_checked() {
 
 #[test]
 fn all_problems_are_reported_in_one_call() {
-    // rule: rule.attributes.id-must-be-unique.md
+    // rule: rule.attributes.id-must-be-unique
     let document = Document::empty();
     // Problem 1: no root element (yet).
     assert_eq!(kinds(&document).len(), 1);
@@ -601,10 +601,10 @@ fn all_problems_are_reported_in_one_call() {
             .map(|error| error.kind().rule())
             .collect::<Vec<_>>(),
         vec![
-            "rule.namespace-usage.prefix-declared.md",
-            "rule.namespace-usage.default-namespace-not-attributes.md",
-            "rule.document-structure.xml-lang-must-be-bcp47-or-empty.md",
-            "rule.document-structure.xml-space-must-be-enumerated-default-preserve.md",
+            "rule.namespace-usage.prefix-declared",
+            "rule.namespace-usage.default-namespace-not-attributes",
+            "rule.document-structure.xml-lang-must-be-bcp47-or-empty",
+            "rule.document-structure.xml-space-must-be-enumerated-default-preserve",
         ]
     );
     // Every issue points at the node it belongs to.
@@ -662,11 +662,11 @@ fn every_error_kind_names_an_existing_rule_file() {
     }
     // And the set of rules referenced covers the layer-C rules this goal implements.
     let referenced: Vec<&str> = errors.iter().map(|error| error.kind().rule()).collect();
-    assert!(referenced.contains(&"rule.namespace-usage.prefix-declared.md"));
-    assert!(referenced.contains(&"rule.attributes.id-must-be-name.md"));
+    assert!(referenced.contains(&"rule.namespace-usage.prefix-declared"));
+    assert!(referenced.contains(&"rule.attributes.id-must-be-name"));
     assert!(
         referenced
-            .contains(&"rule.document-structure.xml-space-must-be-enumerated-default-preserve.md")
+            .contains(&"rule.document-structure.xml-space-must-be-enumerated-default-preserve")
     );
 
     // Missing-root is the only kind that can be reported without a node.

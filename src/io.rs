@@ -5,8 +5,9 @@
 //! implement is documented. This module keeps the code, the option types the serializer accepts,
 //! and the reasoning that is only interesting to someone changing it.
 //!
-//! * [`parse`] turns bytes into a [`Document`](crate::Document);
-//! * [`write`] turns a document back into bytes.
+//! * the `parse` submodule turns bytes into a [`Document`](crate::Document);
+//! * the `write` submodule turns a document back into bytes, using the serializer settings in
+//!   [`WriteOptions`].
 //!
 //! The two option enums and [`WriteOptions`] are re-exported from the crate root, next to the
 //! methods that take them.

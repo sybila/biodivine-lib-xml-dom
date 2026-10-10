@@ -108,7 +108,7 @@ def test_undeclared_prefix_is_reported_by_validation() -> None:
 
     problems = document.validation_errors()
     assert [problem.kind for problem in problems] == ["undeclared_prefix", "undeclared_prefix"]
-    assert all(problem.rule == "rule.namespace-usage.prefix-declared.md" for problem in problems)
+    assert all(problem.rule == "rule.namespace-usage.prefix-declared" for problem in problems)
     assert problems[0].node is not None and int(problems[0].node) == 0
 
     # Declaring the prefix on the root makes the whole subtree valid.
@@ -353,7 +353,7 @@ def test_validation_error_carries_every_problem() -> None:
         "invalid_xml_space",
         "undeclared_prefix",
     ]
-    assert all(problem.rule.endswith(".md") for problem in errors)
+    assert all(problem.rule.startswith("rule.") for problem in errors)
     assert [problem.kind for problem in errors] == [problem.kind() for problem in payload.errors()]
     assert len(errors) == 3
 

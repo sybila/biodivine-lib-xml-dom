@@ -57,17 +57,17 @@ pub(crate) enum NodeData {
     /// An element: a name, attributes, namespace declarations and children.
     Element(ElementData),
     /// A text node. The payload is validated at construction
-    /// (`rule.well-formedness.legal-characters`).
+    /// ([`rule.well-formedness.legal-characters`](crate::xml_spec::rule_set::rule_well_formedness_legal_characters)).
     Text(Text),
-    /// A comment node (`rule.well-formedness.comment-no-double-hyphen`).
+    /// A comment node ([`rule.well-formedness.comment-no-double-hyphen`](crate::xml_spec::rule_set::rule_well_formedness_comment_no_double_hyphen)).
     Comment(Comment),
-    /// A CDATA section (`rule.document-structure.cdata-section-must-not-contain-cdend`).
+    /// A CDATA section ([`rule.document-structure.cdata-section-must-not-contain-cdend`](crate::xml_spec::rule_set::rule_document_structure_cdata_section_must_not_contain_cdend)).
     CData(CData),
     /// A processing instruction.
     ProcessingInstruction {
-        /// The PI target (`rule.well-formedness.pi-target-is-name`).
+        /// The PI target ([`rule.well-formedness.pi-target-is-name`](crate::xml_spec::rule_set::rule_well_formedness_pi_target_is_name)).
         target: PiTarget,
-        /// The PI content (`rule.well-formedness.pi-no-contains-close`).
+        /// The PI content ([`rule.well-formedness.pi-no-contains-close`](crate::xml_spec::rule_set::rule_well_formedness_pi_no_contains_close)).
         data: PiData,
     },
 }
@@ -81,14 +81,14 @@ pub(crate) struct ElementData {
     ///
     /// A map keyed by [`QualifiedName`] (whose equality compares the local name and the namespace
     /// *URI*) makes two attributes with the same expanded name unrepresentable, and
-    /// `rule.elements-and-tags.unique-attribute-specification` at the storage level. Setting an
+    /// [`rule.elements-and-tags.unique-attribute-specification`](crate::xml_spec::rule_set::rule_elements_and_tags_unique_attribute_specification) at the storage level. Setting an
     /// attribute that is already present therefore *overwrites* the old value.
     pub(crate) attributes: BTreeMap<QualifiedName, Arc<str>>,
     /// Namespace declarations written on *this* element.
     ///
     /// The key is the prefix (`None` for the default namespace) and the value is the binding.
     /// `Some(None)` is an empty declaration (`xmlns=""`), which removes the default namespace
-    /// from scope (`rule.namespace-usage.empty-default-namespace`).
+    /// from scope ([`rule.namespace-usage.empty-default-namespace`](crate::xml_spec::rule_set::rule_namespace_usage_empty_default_namespace)).
     pub(crate) namespace_declarations: BTreeMap<Option<NCName>, Option<Namespace>>,
     /// The children, in document order.
     pub(crate) children: Vec<NodeId>,

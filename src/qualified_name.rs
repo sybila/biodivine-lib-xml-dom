@@ -220,7 +220,8 @@ impl QualifiedName {
         Ok(Self::new(local_name, Some(Self::xml_namespace().clone())))
     }
 
-    /// Internal resolver shared by [`resolve_element`] and [`resolve_attribute`].
+    /// Internal resolver shared by [`QualifiedName::resolve_element`] and
+    /// [`QualifiedName::resolve_attribute`].
     ///
     /// When `apply_default_namespace` is `true`, unprefixed names are bound to the default
     /// namespace if one is in scope (element behavior). When `false`, unprefixed names

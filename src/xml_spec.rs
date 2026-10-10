@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 pub mod declaration;
+pub mod rule_set;
 pub mod rules;
 pub mod validation;
 
@@ -11,8 +12,8 @@ pub use declaration::{UTF8_ENCODING_NAME, XML_VERSION, XmlDeclaration};
 /// Validates `s` and returns it as an `Arc<str>`, or a validation error naming the expected
 /// content type.
 ///
-/// This is the single place where the "not a valid X" error message is produced, so all
-/// [`validated_string_newtype!`] types report failures consistently.
+/// This is the single place where the "not a valid X" error message is produced, so every
+/// validated string newtype reports failures consistently.
 ///
 /// # Errors
 ///
@@ -37,7 +38,7 @@ where
 }
 
 /// Normalises the line ends of `input` exactly as an XML processor must before parsing
-/// (`rule.document-structure.processor-must-normalize-line-breaks`): `\r\n` and a lone `\r`
+/// ([`rule.document-structure.processor-must-normalize-line-breaks`](crate::xml_spec::rule_set::rule_document_structure_processor_must_normalize_line_breaks)): `\r\n` and a lone `\r`
 /// become `\n`.
 ///
 /// This is applied at construction time to the node kinds whose content cannot be escaped on
@@ -462,7 +463,7 @@ fn is_name_char(c: char, allow_colon: bool) -> bool {
 
 /// Whether `value` is a legal value for the `xml:space` attribute.
 ///
-/// `rule.document-structure.xml-space-must-be-enumerated-default-preserve`: the attribute is an
+/// [`rule.document-structure.xml-space-must-be-enumerated-default-preserve`](crate::xml_spec::rule_set::rule_document_structure_xml_space_must_be_enumerated_default_preserve): the attribute is an
 /// enumerated type with the values `default` and `preserve`. (The rule itself is stated for a DTD
 /// declaration, which this crate does not process; the part that is observable without a DTD is the
 /// value of the attribute, and that is what this predicate checks.)
@@ -472,7 +473,7 @@ pub fn is_valid_xml_space_value(value: &str) -> bool {
 
 /// Whether `value` is a legal value for the `xml:lang` attribute, or the empty string.
 ///
-/// `rule.document-structure.xml-lang-must-be-bcp47-or-empty`: the value must be a language
+/// [`rule.document-structure.xml-lang-must-be-bcp47-or-empty`](crate::xml_spec::rule_set::rule_document_structure_xml_lang_must_be_bcp47_or_empty): the value must be a language
 /// identifier as defined by IETF BCP 47, or the empty string.
 ///
 /// BCP 47's full grammar (including the registry of registered subtags) is deliberately not
@@ -683,18 +684,18 @@ pub fn nc_name(s: &str) -> NCName {
 mod tests {
     use super::*;
 
-    /// Helper function to verify that a rule file exists for the test
-    /// This ensures that if a rule is removed, the test will break and be noticed
+    /// Asserts that a rule summary exists, so that a rule cannot be renamed or deleted while the
+    /// code (and its documentation link) still claims to implement it.
     fn verify_rule_exists(rule_file: &str) {
         crate::xml_spec::rules::assert_rule_exists(rule_file);
     }
 
     #[test]
     fn test_ncname_helper() {
-        // rule: rule.well-formedness.name-starts-with-valid-char.md
-        verify_rule_exists("rule.well-formedness.name-starts-with-valid-char.md");
-        // rule: rule.well-formedness.name-valid-chars.md
-        verify_rule_exists("rule.well-formedness.name-valid-chars.md");
+        // rule: rule.well-formedness.name-starts-with-valid-char
+        verify_rule_exists("rule.well-formedness.name-starts-with-valid-char");
+        // rule: rule.well-formedness.name-valid-chars
+        verify_rule_exists("rule.well-formedness.name-valid-chars");
         assert!(is_valid_ncname("a"));
         assert!(is_valid_ncname("_"));
         assert!(is_valid_ncname("a1"));
@@ -728,8 +729,8 @@ mod tests {
 
     #[test]
     fn test_namespace_validation() {
-        // rule: rule.namespace-basics.empty-string-not-namespace-name.md
-        verify_rule_exists("rule.namespace-basics.empty-string-not-namespace-name.md");
+        // rule: rule.namespace-basics.empty-string-not-namespace-name
+        verify_rule_exists("rule.namespace-basics.empty-string-not-namespace-name");
         // Valid namespace
         assert!(validate_namespace("http://example.com", Some(&nc_name("ex"))).is_ok());
         // Empty URI
@@ -746,12 +747,12 @@ mod tests {
 
     #[test]
     fn test_reserved_xml_prefix() {
-        // rule: rule.namespace-basics.xml-prefix-fixed-binding.md
-        verify_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding.md");
-        // rule: rule.namespace-basics.no-other-prefix-to-xml-namespace.md
-        verify_rule_exists("rule.namespace-basics.no-other-prefix-to-xml-namespace.md");
-        // rule: rule.namespace-basics.xml-namespace-not-default.md
-        verify_rule_exists("rule.namespace-basics.xml-namespace-not-default.md");
+        // rule: rule.namespace-basics.xml-prefix-fixed-binding
+        verify_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding");
+        // rule: rule.namespace-basics.no-other-prefix-to-xml-namespace
+        verify_rule_exists("rule.namespace-basics.no-other-prefix-to-xml-namespace");
+        // rule: rule.namespace-basics.xml-namespace-not-default
+        verify_rule_exists("rule.namespace-basics.xml-namespace-not-default");
         // `xml` prefix with its reserved URI is valid
         assert!(validate_namespace(RESERVED_XML_URI, Some(&nc_name("xml"))).is_ok());
 
@@ -768,12 +769,12 @@ mod tests {
 
     #[test]
     fn test_reserved_xmlns_prefix() {
-        // rule: rule.namespace-basics.xmlns-prefix-not-declared.md
-        verify_rule_exists("rule.namespace-basics.xmlns-prefix-not-declared.md");
-        // rule: rule.namespace-basics.no-other-prefix-to-xmlns-namespace.md
-        verify_rule_exists("rule.namespace-basics.no-other-prefix-to-xmlns-namespace.md");
-        // rule: rule.namespace-basics.xmlns-namespace-not-default.md
-        verify_rule_exists("rule.namespace-basics.xmlns-namespace-not-default.md");
+        // rule: rule.namespace-basics.xmlns-prefix-not-declared
+        verify_rule_exists("rule.namespace-basics.xmlns-prefix-not-declared");
+        // rule: rule.namespace-basics.no-other-prefix-to-xmlns-namespace
+        verify_rule_exists("rule.namespace-basics.no-other-prefix-to-xmlns-namespace");
+        // rule: rule.namespace-basics.xmlns-namespace-not-default
+        verify_rule_exists("rule.namespace-basics.xmlns-namespace-not-default");
         // `xmlns` prefix must never be declared
         assert!(validate_namespace("http://example.com", Some(&nc_name("xmlns"))).is_err());
         assert!(validate_namespace(RESERVED_XMLNS_URI, Some(&nc_name("xmlns"))).is_err());
@@ -788,12 +789,12 @@ mod tests {
 
     #[test]
     fn test_prefix_ncname_validation() {
-        // rule: rule.namespace-usage.prefix-and-localpart-ncname.md
-        verify_rule_exists("rule.namespace-usage.prefix-and-localpart-ncname.md");
-        // rule: rule.well-formedness.name-starts-with-valid-char.md
-        verify_rule_exists("rule.well-formedness.name-starts-with-valid-char.md");
-        // rule: rule.well-formedness.name-valid-chars.md
-        verify_rule_exists("rule.well-formedness.name-valid-chars.md");
+        // rule: rule.namespace-usage.prefix-and-localpart-ncname
+        verify_rule_exists("rule.namespace-usage.prefix-and-localpart-ncname");
+        // rule: rule.well-formedness.name-starts-with-valid-char
+        verify_rule_exists("rule.well-formedness.name-starts-with-valid-char");
+        // rule: rule.well-formedness.name-valid-chars
+        verify_rule_exists("rule.well-formedness.name-valid-chars");
         // Valid prefixes
         assert!(validate_namespace("http://example.com", Some(&nc_name("ex"))).is_ok());
         assert!(validate_namespace("http://example.com", Some(&nc_name("ex_1"))).is_ok());
@@ -814,20 +815,20 @@ mod tests {
 
     #[test]
     fn test_uri_comparison_case_sensitive() {
-        // rule: rule.namespace-basics.uri-comparison-literal-case-sensitive.md
-        verify_rule_exists("rule.namespace-basics.uri-comparison-literal-case-sensitive.md");
+        // rule: rule.namespace-basics.uri-comparison-literal-case-sensitive
+        verify_rule_exists("rule.namespace-basics.uri-comparison-literal-case-sensitive");
         assert!(validate_namespace("http://example.org/ns", Some(&nc_name("ex"))).is_ok());
         assert!(validate_namespace("http://example.org/NS", Some(&nc_name("ex"))).is_ok());
     }
 
     #[test]
     fn test_split_qname_valid() {
-        // rule: rule.namespace-usage.qname-format.md
-        verify_rule_exists("rule.namespace-usage.qname-format.md");
-        // rule: rule.namespace-usage.zero-or-one-colon.md
-        verify_rule_exists("rule.namespace-usage.zero-or-one-colon.md");
-        // rule: rule.namespace-usage.prefix-and-localpart-ncname.md
-        verify_rule_exists("rule.namespace-usage.prefix-and-localpart-ncname.md");
+        // rule: rule.namespace-usage.qname-format
+        verify_rule_exists("rule.namespace-usage.qname-format");
+        // rule: rule.namespace-usage.zero-or-one-colon
+        verify_rule_exists("rule.namespace-usage.zero-or-one-colon");
+        // rule: rule.namespace-usage.prefix-and-localpart-ncname
+        verify_rule_exists("rule.namespace-usage.prefix-and-localpart-ncname");
         // Unprefixed
         let (prefix, local) = split_qname("foo").unwrap();
         assert_eq!(prefix, None);
@@ -846,8 +847,8 @@ mod tests {
 
     #[test]
     fn test_split_qname_invalid() {
-        // rule: rule.namespace-usage.zero-or-one-colon.md
-        verify_rule_exists("rule.namespace-usage.zero-or-one-colon.md");
+        // rule: rule.namespace-usage.zero-or-one-colon
+        verify_rule_exists("rule.namespace-usage.zero-or-one-colon");
         // Multiple colons
         assert!(split_qname("a:b:c").is_err());
 
@@ -872,8 +873,8 @@ mod tests {
 
     #[test]
     fn test_validate_resolved_prefix() {
-        // rule: rule.namespace-basics.xml-prefix-fixed-binding.md
-        verify_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding.md");
+        // rule: rule.namespace-basics.xml-prefix-fixed-binding
+        verify_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding");
         // Valid: regular prefix
         assert!(validate_resolved_prefix("ex", Some("http://example.com")).is_ok());
         assert!(validate_resolved_prefix("ex", None).is_ok());
@@ -893,8 +894,8 @@ mod tests {
 
     #[test]
     fn test_text_wrapper() {
-        // rule: rule.well-formedness.legal-characters.md
-        verify_rule_exists("rule.well-formedness.legal-characters.md");
+        // rule: rule.well-formedness.legal-characters
+        verify_rule_exists("rule.well-formedness.legal-characters");
         // Valid text
         let text: Text = "Hello, World!".try_into().unwrap();
         assert_eq!(text.as_str(), "Hello, World!");
@@ -918,8 +919,8 @@ mod tests {
 
     #[test]
     fn test_cdata_wrapper() {
-        // rule: rule.document-structure.cdata-section-must-not-contain-cdend.md
-        verify_rule_exists("rule.document-structure.cdata-section-must-not-contain-cdend.md");
+        // rule: rule.document-structure.cdata-section-must-not-contain-cdend
+        verify_rule_exists("rule.document-structure.cdata-section-must-not-contain-cdend");
         // Valid CDATA
         let cdata: CData = "This is safe content".try_into().unwrap();
         assert_eq!(cdata.as_str(), "This is safe content");
@@ -935,10 +936,10 @@ mod tests {
 
     #[test]
     fn test_comment_wrapper() {
-        // rule: rule.well-formedness.comment-no-double-hyphen.md
-        verify_rule_exists("rule.well-formedness.comment-no-double-hyphen.md");
-        // rule: rule.well-formedness.comment-no-triple-hyphen.md
-        verify_rule_exists("rule.well-formedness.comment-no-triple-hyphen.md");
+        // rule: rule.well-formedness.comment-no-double-hyphen
+        verify_rule_exists("rule.well-formedness.comment-no-double-hyphen");
+        // rule: rule.well-formedness.comment-no-triple-hyphen
+        verify_rule_exists("rule.well-formedness.comment-no-triple-hyphen");
         // Valid comment
         let comment: Comment = " This is valid ".try_into().unwrap();
         assert_eq!(comment.as_str(), " This is valid ");
@@ -959,10 +960,10 @@ mod tests {
 
     #[test]
     fn test_pi_target_wrapper() {
-        // rule: rule.well-formedness.pi-target-is-name.md
-        verify_rule_exists("rule.well-formedness.pi-target-is-name.md");
-        // rule: rule.well-formedness.pi-target-not-xml.md
-        verify_rule_exists("rule.well-formedness.pi-target-not-xml.md");
+        // rule: rule.well-formedness.pi-target-is-name
+        verify_rule_exists("rule.well-formedness.pi-target-is-name");
+        // rule: rule.well-formedness.pi-target-not-xml
+        verify_rule_exists("rule.well-formedness.pi-target-not-xml");
         // Valid PI targets
         let target: PiTarget = "xml-stylesheet".try_into().unwrap();
         assert_eq!(target.as_str(), "xml-stylesheet");
@@ -986,8 +987,8 @@ mod tests {
 
     #[test]
     fn test_pi_data_wrapper() {
-        // rule: rule.well-formedness.pi-no-contains-close.md
-        verify_rule_exists("rule.well-formedness.pi-no-contains-close.md");
+        // rule: rule.well-formedness.pi-no-contains-close
+        verify_rule_exists("rule.well-formedness.pi-no-contains-close");
         // Valid PI data
         let data: PiData = r#"type="text/css" href="style.css""#.try_into().unwrap();
         assert_eq!(data.as_str(), r#"type="text/css" href="style.css""#);
@@ -1007,10 +1008,8 @@ mod g3_tests {
 
     #[test]
     fn line_end_normalisation() {
-        // rule: rule.document-structure.processor-must-normalize-line-breaks.md
-        rules::assert_rule_exists(
-            "rule.document-structure.processor-must-normalize-line-breaks.md",
-        );
+        // rule: rule.document-structure.processor-must-normalize-line-breaks
+        rules::assert_rule_exists("rule.document-structure.processor-must-normalize-line-breaks");
 
         assert_eq!(normalize_line_ends("plain"), "plain");
         assert_eq!(normalize_line_ends("a\r\nb"), "a\nb");
@@ -1043,9 +1042,9 @@ mod g3_tests {
 
     #[test]
     fn xml_space_values() {
-        // rule: rule.document-structure.xml-space-must-be-enumerated-default-preserve.md
+        // rule: rule.document-structure.xml-space-must-be-enumerated-default-preserve
         rules::assert_rule_exists(
-            "rule.document-structure.xml-space-must-be-enumerated-default-preserve.md",
+            "rule.document-structure.xml-space-must-be-enumerated-default-preserve",
         );
         assert!(is_valid_xml_space_value("default"));
         assert!(is_valid_xml_space_value("preserve"));
@@ -1056,8 +1055,8 @@ mod g3_tests {
 
     #[test]
     fn language_tags() {
-        // rule: rule.document-structure.xml-lang-must-be-bcp47-or-empty.md
-        rules::assert_rule_exists("rule.document-structure.xml-lang-must-be-bcp47-or-empty.md");
+        // rule: rule.document-structure.xml-lang-must-be-bcp47-or-empty
+        rules::assert_rule_exists("rule.document-structure.xml-lang-must-be-bcp47-or-empty");
 
         // The empty string is explicitly allowed.
         assert!(is_valid_language_tag(""));

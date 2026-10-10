@@ -7,11 +7,11 @@
 //! Two rules are worth calling out because they are the ones a "no magic" editing API needs
 //! (requirement (3)):
 //!
-//! * `rule.namespace-usage.prefix-declaration-scope` — a declaration applies from the start-tag in
+//! * [`rule.namespace-usage.prefix-declaration-scope`](crate::xml_spec::rule_set::rule_namespace_usage_prefix_declaration_scope) — a declaration applies from the start-tag in
 //!   which it appears to the end of the corresponding end-tag, so it applies to the element itself
 //!   and to all of its descendants, and an inner declaration shadows an outer one. This module
 //!   models that with [`NamespaceScope`].
-//! * `rule.namespace-usage.default-namespace-scope` — the same for the default namespace, with the
+//! * [`rule.namespace-usage.default-namespace-scope`](crate::xml_spec::rule_set::rule_namespace_usage_default_namespace_scope) — the same for the default namespace, with the
 //!   extra twist that an *unprefixed element name* takes whatever default namespace is in scope,
 //!   while an unprefixed *attribute* name never does. Moving an element into a
 //!   default-namespace scope therefore changes the meaning of its name, which is exactly the kind of
@@ -73,7 +73,7 @@ impl NamespaceScope {
 
     /// The binding of `prefix` as seen by a name, i.e. including the predefined `xml` prefix.
     ///
-    /// `rule.namespace-basics.xml-prefix-fixed-binding`: `xml` is bound to
+    /// [`rule.namespace-basics.xml-prefix-fixed-binding`](crate::xml_spec::rule_set::rule_namespace_basics_xml_prefix_fixed_binding): `xml` is bound to
     /// `http://www.w3.org/XML/1998/namespace` whether or not it is declared, and it must not be
     /// bound to anything else (which [`Namespace`] already refuses to construct).
     pub fn resolve(&self, prefix: Option<&NCName>) -> Option<Option<&str>> {
@@ -96,7 +96,7 @@ impl NamespaceScope {
 pub enum ScopeViolation {
     /// The name uses a prefix that is not declared in scope.
     ///
-    /// `rule.namespace-usage.prefix-declared`.
+    /// [`rule.namespace-usage.prefix-declared`](crate::xml_spec::rule_set::rule_namespace_usage_prefix_declared).
     UndeclaredPrefix {
         /// The prefix of the name.
         prefix: NCName,
@@ -125,7 +125,7 @@ pub enum ScopeViolation {
     /// The name has no namespace while a default namespace is in scope, so writing the name would
     /// place it into that namespace.
     ///
-    /// `rule.namespace-usage.default-namespace-scope`.
+    /// [`rule.namespace-usage.default-namespace-scope`](crate::xml_spec::rule_set::rule_namespace_usage_default_namespace_scope).
     UnprefixedNameTakesDefaultNamespace {
         /// The default namespace that is in scope.
         default_uri: String,
@@ -138,7 +138,7 @@ pub enum ScopeViolation {
     },
     /// The reserved `xmlns` prefix is used as a name prefix.
     ///
-    /// `rule.namespace-basics.xmlns-not-element-prefix`.
+    /// [`rule.namespace-basics.xmlns-not-element-prefix`](crate::xml_spec::rule_set::rule_namespace_basics_xmlns_not_element_prefix).
     ReservedPrefix {
         /// The prefix of the name.
         prefix: NCName,
@@ -148,7 +148,7 @@ pub enum ScopeViolation {
 /// Checks an *element* name against the namespace scope of the element.
 ///
 /// The element's own declarations are part of its scope: a declaration applies from the start-tag
-/// in which it appears (`rule.namespace-usage.prefix-declaration-scope`), so the caller must
+/// in which it appears ([`rule.namespace-usage.prefix-declaration-scope`](crate::xml_spec::rule_set::rule_namespace_usage_prefix_declaration_scope)), so the caller must
 /// include them.
 ///
 /// # Errors
@@ -160,7 +160,7 @@ pub fn check_element_name(
 ) -> Result<(), ScopeViolation> {
     match name.namespace() {
         None => match scope.resolve(None) {
-            // rule: rule.namespace-usage.default-namespace-scope.md
+            // rule: rule.namespace-usage.default-namespace-scope
             Some(Some(default_uri)) => Err(ScopeViolation::UnprefixedNameTakesDefaultNamespace {
                 default_uri: default_uri.to_string(),
             }),
@@ -186,7 +186,7 @@ pub fn check_element_name(
 /// Checks an *attribute* name against the namespace scope of the element that carries it.
 ///
 /// The default namespace never applies to attributes
-/// (`rule.namespace-usage.default-namespace-not-attributes`), so an unprefixed attribute name is
+/// ([`rule.namespace-usage.default-namespace-not-attributes`](crate::xml_spec::rule_set::rule_namespace_usage_default_namespace_not_attributes)), so an unprefixed attribute name is
 /// always fine, but an attribute *with* a namespace must have a prefix.
 ///
 /// # Errors
@@ -210,7 +210,7 @@ pub fn check_attribute_name(
 /// The shared prefix-resolution rule for names that carry a prefix.
 fn resolve(prefix: &NCName, uri: &str, scope: &NamespaceScope) -> Result<(), ScopeViolation> {
     if prefix == "xmlns" {
-        // rule: rule.namespace-basics.xmlns-not-element-prefix.md
+        // rule: rule.namespace-basics.xmlns-not-element-prefix
         //
         // Unreachable through the public API: `Namespace::prefixed` refuses the reserved prefixes,
         // so no `QualifiedName` can carry `xmlns`. The check is kept because the rule is a
@@ -227,7 +227,7 @@ fn resolve(prefix: &NCName, uri: &str, scope: &NamespaceScope) -> Result<(), Sco
             expected: uri.to_string(),
             actual: bound.to_string(),
         }),
-        // rule: rule.namespace-usage.prefix-declared.md
+        // rule: rule.namespace-usage.prefix-declared
         _ => Err(ScopeViolation::UndeclaredPrefix {
             prefix: prefix.clone(),
         }),
@@ -237,8 +237,8 @@ fn resolve(prefix: &NCName, uri: &str, scope: &NamespaceScope) -> Result<(), Sco
 /// The `xml:id` attribute of an element, if it has one.
 ///
 /// `xml:id` is the only attribute this library can prove to be of type `ID` without DTD processing,
-/// so it is the one used for `rule.attributes.id-must-be-name` and
-/// `rule.attributes.id-must-be-unique`. Crate-internal because it exposes the arena's element
+/// so it is the one used for [`rule.attributes.id-must-be-name`](crate::xml_spec::rule_set::rule_attributes_id_must_be_name) and
+/// [`rule.attributes.id-must-be-unique`](crate::xml_spec::rule_set::rule_attributes_id_must_be_unique). Crate-internal because it exposes the arena's element
 /// payload, which is itself crate-internal.
 pub(crate) fn xml_id_attribute(element: &crate::arena::ElementData) -> Option<&str> {
     let name = QualifiedName::new(
@@ -281,7 +281,7 @@ fn attribute_in_xml_namespace<'a>(
 /// [`Namespace`] already refuses to construct such a declaration, so this can only fail for a value
 /// that did not come from [`Namespace`]; it is checked anyway so that the validation pass is
 /// self-contained (and because the rule is a document-level one:
-/// `rule.namespace-basics.xml-prefix-fixed-binding`, `xmlns-prefix-not-declared`,
+/// [`rule.namespace-basics.xml-prefix-fixed-binding`](crate::xml_spec::rule_set::rule_namespace_basics_xml_prefix_fixed_binding), `xmlns-prefix-not-declared`,
 /// `xml-namespace-not-default`, `xmlns-namespace-not-default`,
 /// `no-other-prefix-to-xml-namespace`, `no-other-prefix-to-xmlns-namespace`).
 ///
@@ -330,8 +330,8 @@ mod tests {
 
     #[test]
     fn prefixed_names_must_be_declared() {
-        // rule: rule.namespace-usage.prefix-declared.md
-        assert_rule_exists("rule.namespace-usage.prefix-declared.md");
+        // rule: rule.namespace-usage.prefix-declared
+        assert_rule_exists("rule.namespace-usage.prefix-declared");
         let scope = scope(&[("ex", "http://example.com")]);
         assert_eq!(
             check_element_name(&name(Some("ex"), Some("http://example.com"), "a"), &scope),
@@ -355,8 +355,8 @@ mod tests {
 
     #[test]
     fn the_xml_prefix_needs_no_declaration() {
-        // rule: rule.namespace-basics.xml-prefix-fixed-binding.md
-        assert_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding.md");
+        // rule: rule.namespace-basics.xml-prefix-fixed-binding
+        assert_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding");
         let scope = NamespaceScope::new();
         assert_eq!(
             check_element_name(&name(Some("xml"), Some(RESERVED_XML_URI), "a"), &scope),
@@ -366,8 +366,8 @@ mod tests {
 
     #[test]
     fn default_namespace_rules() {
-        // rule: rule.namespace-usage.default-namespace-scope.md
-        assert_rule_exists("rule.namespace-usage.default-namespace-scope.md");
+        // rule: rule.namespace-usage.default-namespace-scope
+        assert_rule_exists("rule.namespace-usage.default-namespace-scope");
 
         let with_default = scope(&[("", "http://default")]);
         // A name in the default namespace matches.
@@ -403,8 +403,8 @@ mod tests {
 
     #[test]
     fn attributes_ignore_the_default_namespace() {
-        // rule: rule.namespace-usage.default-namespace-not-attributes.md
-        assert_rule_exists("rule.namespace-usage.default-namespace-not-attributes.md");
+        // rule: rule.namespace-usage.default-namespace-not-attributes
+        assert_rule_exists("rule.namespace-usage.default-namespace-not-attributes");
         let with_default = scope(&[("", "http://default"), ("ex", "http://example.com")]);
 
         // Unprefixed attribute: fine even inside a default-namespace scope.
@@ -431,8 +431,8 @@ mod tests {
 
     #[test]
     fn the_xmlns_prefix_can_never_become_a_name_prefix() {
-        // rule: rule.namespace-basics.xmlns-not-element-prefix.md
-        assert_rule_exists("rule.namespace-basics.xmlns-not-element-prefix.md");
+        // rule: rule.namespace-basics.xmlns-not-element-prefix
+        assert_rule_exists("rule.namespace-basics.xmlns-not-element-prefix");
 
         // The rule is enforced at *construction*: no `Namespace` can carry the reserved prefix, so
         // no name can either, and `ScopeViolation::ReservedPrefix` can only be reached by a name
@@ -451,8 +451,8 @@ mod tests {
 
     #[test]
     fn inner_declarations_shadow_outer_ones() {
-        // rule: rule.namespace-usage.prefix-declaration-scope.md
-        assert_rule_exists("rule.namespace-usage.prefix-declaration-scope.md");
+        // rule: rule.namespace-usage.prefix-declaration-scope
+        assert_rule_exists("rule.namespace-usage.prefix-declaration-scope");
         let inner = Namespace::prefixed("http://inner", "ex").unwrap();
         let outer = Namespace::prefixed("http://outer", "ex").unwrap();
         let scope = NamespaceScope::from_declarations([

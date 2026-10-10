@@ -397,7 +397,7 @@ impl Document {
     /// # Errors
     ///
     /// Returns [`XmlError::InvalidText`] if the content contains characters that are not legal in
-    /// XML (`rule.well-formedness.legal-characters`), which is checked here so that an invalid
+    /// XML ([`rule.well-formedness.legal-characters`](crate::xml_spec::rule_set::rule_well_formedness_legal_characters)), which is checked here so that an invalid
     /// text node cannot be created at all — requirement (4)(1).
     pub fn create_text(&self, text: impl AsRef<str>) -> XmlResult<Node> {
         let text = Text::try_from(text.as_ref())?;
@@ -414,7 +414,7 @@ impl Document {
     /// # Errors
     ///
     /// Returns [`XmlError::InvalidComment`] if the content contains `--` or ends with `-`
-    /// (`rule.well-formedness.comment-no-double-hyphen`).
+    /// ([`rule.well-formedness.comment-no-double-hyphen`](crate::xml_spec::rule_set::rule_well_formedness_comment_no_double_hyphen)).
     pub fn create_comment(&self, comment: impl AsRef<str>) -> XmlResult<Node> {
         let comment = Comment::try_from(comment.as_ref())?;
         let node = self
@@ -430,7 +430,7 @@ impl Document {
     /// # Errors
     ///
     /// Returns [`XmlError::InvalidCData`] if the content contains `]]>`
-    /// (`rule.document-structure.cdata-section-must-not-contain-cdend`).
+    /// ([`rule.document-structure.cdata-section-must-not-contain-cdend`](crate::xml_spec::rule_set::rule_document_structure_cdata_section_must_not_contain_cdend)).
     pub fn create_cdata(&self, cdata: impl AsRef<str>) -> XmlResult<Node> {
         let cdata = CData::try_from(cdata.as_ref())?;
         let node = self
@@ -446,9 +446,9 @@ impl Document {
     /// # Errors
     ///
     /// Returns [`XmlError::InvalidProcessingInstruction`] if the target is not a valid XML `Name`
-    /// or matches `xml` case-insensitively (`rule.well-formedness.pi-target-is-name`,
-    /// `rule.well-formedness.pi-target-not-xml`), or if the content contains `?>`
-    /// (`rule.well-formedness.pi-no-contains-close`).
+    /// or matches `xml` case-insensitively ([`rule.well-formedness.pi-target-is-name`](crate::xml_spec::rule_set::rule_well_formedness_pi_target_is_name),
+    /// [`rule.well-formedness.pi-target-not-xml`](crate::xml_spec::rule_set::rule_well_formedness_pi_target_not_xml)), or if the content contains `?>`
+    /// ([`rule.well-formedness.pi-no-contains-close`](crate::xml_spec::rule_set::rule_well_formedness_pi_no_contains_close)).
     pub fn create_processing_instruction(
         &self,
         target: impl AsRef<str>,
@@ -485,7 +485,7 @@ impl Document {
     /// * *Document-wide* rules — currently `xml:id` uniqueness — are checked over the tree
     ///   reachable from the root only. A detached [`Node::deep_clone`] legitimately repeats its
     ///   original's `xml:id` values, and attaching it is what creates the duplicate that
-    ///   `rule.attributes.id-must-be-unique` is about.
+    ///   [`rule.attributes.id-must-be-unique`](crate::xml_spec::rule_set::rule_attributes_id_must_be_unique) is about.
     /// * Being *detached* is never an error by itself (requirement (2) makes detached nodes a
     ///   normal state), and neither is a missing root: [`crate::ValidationErrorKind::MissingRoot`] is
     ///   reported, and the rest of the document is still checked.

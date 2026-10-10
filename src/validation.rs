@@ -44,7 +44,8 @@
 
 use std::fmt;
 
-use crate::arena::{Arena, NodeData, NodeId};
+use crate::arena::{Arena, NodeData};
+use crate::node_id::NodeId;
 use crate::qualified_name::QualifiedName;
 use crate::xml_spec::validation::{
     NamespaceScope, ScopeViolation, check_attribute_name, check_element_name,
@@ -375,7 +376,7 @@ fn check_structure(arena: &Arena, errors: &mut Vec<XmlValidationError>) {
         }
     }
 
-    for id in arena.ids() {
+    for id in arena.occupied_ids() {
         let Some(parent) = arena.parent(id) else {
             continue;
         };
@@ -407,7 +408,7 @@ fn check_structure(arena: &Arena, errors: &mut Vec<XmlValidationError>) {
                 break;
             }
             steps += 1;
-            if steps > arena.len() {
+            if steps > arena.live() {
                 errors.push(XmlValidationError::at(
                     ValidationErrorKind::CyclicStructure,
                     id,
@@ -422,7 +423,7 @@ fn check_structure(arena: &Arena, errors: &mut Vec<XmlValidationError>) {
 
 /// The per-node checks: names against their scope, and attribute values.
 fn check_nodes(arena: &Arena, errors: &mut Vec<XmlValidationError>) {
-    for id in arena.ids() {
+    for id in arena.occupied_ids() {
         let NodeData::Element(element) = arena.data(id) else {
             continue;
         };
@@ -523,7 +524,7 @@ fn check_xml_id_uniqueness(arena: &Arena, errors: &mut Vec<XmlValidationError>) 
     let mut visited = 0usize;
     while let Some(id) = queue.pop_front() {
         visited += 1;
-        if visited > arena.len() {
+        if visited > arena.live() {
             // Structure problems are reported by `check_structure`; do not loop here as well.
             return;
         }

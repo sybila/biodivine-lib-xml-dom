@@ -1,23 +1,26 @@
 //! Public node handles.
 //!
-//! A [`Node`] is nothing but an id into a document's arena plus a clone of the [`Document`]
-//! handle, exactly as requirement (1) prescribes. All data access goes through the document's
-//! single lock, which is acquired and released inside each method.
+//! A [`Node`] is an id into a document's arena, a counted external reference that keeps that slot
+//! alive, and a clone of the [`Document`] handle. All data access goes through the document's
+//! single lock, which is acquired and released inside each method; only cloning and dropping the
+//! handle touch state outside the lock, and that state is a single atomic counter.
 //!
 //! # Cloning
 //!
 //! `Clone` copies the *handle*, not the node: the clone refers to the same arena slot and is
-//! therefore [`Node::ptr_eq`]-equal to the original. The two operations that create new nodes are
-//! [`Node::shallow_clone`] (same payload, no children) and [`Node::deep_clone`] (whole subtree) —
-//! plus their `_into` variants, which copy the subtree into another document.
+//! therefore [`Node::ptr_eq`]-equal to the original. It also keeps the node alive, so a handle is an
+//! owning reference. The two operations that duplicate data are [`Node::shallow_clone`] (same
+//! payload, no children) and [`Node::deep_clone`] (whole subtree) — plus their `_into` variants,
+//! which copy the subtree into another document.
 
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-use crate::arena::NodeId;
 use crate::document::Document;
 use crate::element::Element;
 use crate::error::{XmlError, XmlResult};
+use crate::node_id::NodeId;
+use crate::ref_count::NodeRef;
 use crate::xml_spec::{CData, Comment, PiData, PiTarget, Text};
 
 /// The kind of a node, without its payload.
@@ -55,8 +58,12 @@ pub enum NodeContent {
 
 /// A handle to one node of a [`Document`].
 ///
-/// The handle is `Send + Sync`, cheap to clone, and remains valid even if the node is later
-/// detached from the tree. It becomes invalid only if the document itself is dropped.
+/// The handle is `Send + Sync`, cheap to clone, and valid for as long as it exists: it counts as an
+/// external reference to the node, so the node is never reclaimed while the handle is alive, not even
+/// if it is detached from the tree or its whole subtree is discarded elsewhere.
+///
+/// A handle also keeps the ancestors of its node reachable, because it can walk upwards
+/// ([`Node::parent`], [`Node::is_attached`], namespace resolution).
 ///
 /// # Examples
 ///
@@ -72,18 +79,42 @@ pub enum NodeContent {
 /// assert_eq!(parent.children().len(), 1);
 /// assert!(child.is_attached());
 /// ```
-#[derive(Clone)]
 pub struct Node {
     /// The document this handle refers to.
     pub(crate) document: Document,
     /// The arena slot of this node.
     pub(crate) id: NodeId,
+    /// The counted external reference that keeps the node alive.
+    external: NodeRef,
+}
+
+impl Clone for Node {
+    /// Clones the *handle*, not the node: the clone refers to the same arena slot and is therefore
+    /// [`Node::ptr_eq`]-equal to the original.
+    ///
+    /// Cloning only increments an atomic counter; it never takes the arena lock. The node is kept
+    /// alive by the clone just like by the original, which is why a handle is a cheap but *owning*
+    /// reference to a node.
+    fn clone(&self) -> Self {
+        Self {
+            document: self.document.clone(),
+            id: self.id,
+            external: self.external.clone(),
+        }
+    }
 }
 
 impl Node {
-    /// Wraps an id that is known to be valid for `document`.
-    pub(crate) fn new(document: Document, id: NodeId) -> Self {
-        Self { document, id }
+    /// Wraps a counted external reference that the arena handed out for `id`.
+    ///
+    /// This is deliberately the only constructor and it is crate-private: an external reference can
+    /// only come from [`Document`]'s arena, which is what keeps the collector's root set complete.
+    pub(crate) fn from_ref(document: Document, id: NodeId, external: NodeRef) -> Self {
+        Self {
+            document,
+            id,
+            external,
+        }
     }
 
     /// The document this node belongs to.
@@ -93,8 +124,10 @@ impl Node {
 
     /// The arena id of this node.
     ///
-    /// Ids are only meaningful together with the document that produced them; use
-    /// [`Node::belongs_to`] or [`Node::ptr_eq`] to compare handles instead of raw ids.
+    /// An id is only meaningful together with the document that produced it, and only while the node
+    /// is alive: once the node is unreachable and reclaimed, the slot can hold a different node. Use
+    /// [`Node::belongs_to`] or [`Node::ptr_eq`] to compare handles instead of raw ids, and
+    /// [`Document::node`] to resolve an id back to a handle.
     pub fn id(&self) -> NodeId {
         self.id
     }
@@ -126,19 +159,21 @@ impl Node {
     /// The payload of this node.
     pub fn content(&self) -> NodeContent {
         use crate::arena::NodeData;
-        let document = self.document.clone();
         let id = self.id;
-        document.read_arena("Node::content", |arena| match arena.data(id) {
-            NodeData::Element(_) => {
-                NodeContent::Element(Element::new_unchecked(Node::new(document.clone(), id)))
-            }
-            NodeData::Text(text) => NodeContent::Text(text.clone()),
-            NodeData::Comment(comment) => NodeContent::Comment(comment.clone()),
-            NodeData::CData(cdata) => NodeContent::CData(cdata.clone()),
-            NodeData::ProcessingInstruction { target, data } => {
-                NodeContent::ProcessingInstruction(target.clone(), data.clone())
-            }
-        })
+        self.document
+            .read_arena("Node::content", |arena| match arena.data(id) {
+                NodeData::Element(_) => {
+                    // Cloning the handle creates the counted reference for the element; it needs no
+                    // arena lookup, so no reference is created outside the lock either.
+                    NodeContent::Element(Element::new_unchecked(self.clone()))
+                }
+                NodeData::Text(text) => NodeContent::Text(text.clone()),
+                NodeData::Comment(comment) => NodeContent::Comment(comment.clone()),
+                NodeData::CData(cdata) => NodeContent::CData(cdata.clone()),
+                NodeData::ProcessingInstruction { target, data } => {
+                    NodeContent::ProcessingInstruction(target.clone(), data.clone())
+                }
+            })
     }
 
     /// This node as an [`Element`], or `None` if it has a different kind.
@@ -188,10 +223,8 @@ impl Node {
 
     /// The parent of this node, or `None` if it is detached or is the document root.
     pub fn parent(&self) -> Option<Node> {
-        let document = self.document.clone();
-        document
-            .read_arena("Node::parent", |arena| arena.parent(self.id))
-            .map(|id| Node::new(document, id))
+        self.document
+            .read_one("Node::parent", |arena| arena.parent(self.id))
     }
 
     /// Whether this node is reachable from the document root.
@@ -214,12 +247,8 @@ impl Node {
 
     /// The children of this node in document order (empty for non-elements).
     pub fn children(&self) -> Vec<Node> {
-        let document = self.document.clone();
-        document
-            .read_arena("Node::children", |arena| arena.children(self.id).to_vec())
-            .into_iter()
-            .map(|id| Node::new(document.clone(), id))
-            .collect()
+        self.document
+            .read_many("Node::children", |arena| arena.children(self.id).to_vec())
     }
 
     /// The element children of this node in document order.
@@ -232,22 +261,16 @@ impl Node {
 
     /// The first child of this node, if any.
     pub fn first_child(&self) -> Option<Node> {
-        let document = self.document.clone();
-        document
-            .read_arena("Node::first_child", |arena| {
-                arena.children(self.id).first().copied()
-            })
-            .map(|id| Node::new(document, id))
+        self.document.read_one("Node::first_child", |arena| {
+            arena.children(self.id).first().copied()
+        })
     }
 
     /// The last child of this node, if any.
     pub fn last_child(&self) -> Option<Node> {
-        let document = self.document.clone();
-        document
-            .read_arena("Node::last_child", |arena| {
-                arena.children(self.id).last().copied()
-            })
-            .map(|id| Node::new(document, id))
+        self.document.read_one("Node::last_child", |arena| {
+            arena.children(self.id).last().copied()
+        })
     }
 
     /// The next sibling of this node, if any.
@@ -265,8 +288,7 @@ impl Node {
     /// The search is bounded by the length of the parent's child list, so it terminates even for
     /// a malformed document.
     fn sibling(&self, offset: isize) -> Option<Node> {
-        let document = self.document.clone();
-        let id = document.read_arena("Node::sibling", |arena| {
+        self.document.read_one("Node::sibling", |arena| {
             let parent = arena.parent(self.id)?;
             let children = arena.children(parent);
             let position = children.iter().position(|&child| child == self.id)?;
@@ -276,8 +298,7 @@ impl Node {
                 children.get(position.checked_add(offset.unsigned_abs())?)
             }
             .copied()
-        });
-        id.map(|id| Node::new(document, id))
+        })
     }
 
     /// The index of this node in its parent's child list, if it has a parent.
@@ -296,8 +317,7 @@ impl Node {
     /// The traversal is iterative, so it cannot overflow the stack, and it is bounded by the
     /// number of slots in the document.
     pub fn descendants(&self) -> Vec<Node> {
-        let document = self.document.clone();
-        let ids = document.read_arena("Node::descendants", |arena| {
+        self.document.read_many("Node::descendants", |arena| {
             let mut result = Vec::new();
             let mut stack: Vec<NodeId> = arena.children(self.id).iter().rev().copied().collect();
             while let Some(current) = stack.pop() {
@@ -305,17 +325,14 @@ impl Node {
                 for &child in arena.children(current).iter().rev() {
                     stack.push(child);
                 }
-                if result.len() > arena.len() {
+                if result.len() > arena.live() {
                     // Cannot happen for an acyclic tree; the bound keeps a hypothetical
                     // inconsistency from turning into an infinite loop.
                     break;
                 }
             }
             result
-        });
-        ids.into_iter()
-            .map(|id| Node::new(document.clone(), id))
-            .collect()
+        })
     }
 
     // -------------------------------------------------------------------------------------
@@ -328,10 +345,8 @@ impl Node {
     /// cloned and attached again. Detaching a node that is already detached does nothing and
     /// returns `None`.
     pub fn detach(&self) -> Option<Node> {
-        let document = self.document.clone();
-        document
-            .write_arena("Node::detach", |arena| arena.detach(self.id))
-            .map(|id| Node::new(document, id))
+        self.document
+            .write_one("Node::detach", |arena| arena.detach(self.id))
     }
 
     /// Detaches this node and returns the node itself, so that it can be re-attached in one
@@ -589,10 +604,11 @@ impl Node {
 
     /// Shared implementation of the same-document clones.
     fn copy_within(&self, with_children: bool) -> Node {
-        let id = self.document.write_arena("Node::copy_within", |arena| {
-            arena.copy_within(self.id, with_children)
-        });
-        Node::new(self.document.clone(), id)
+        self.document
+            .write_one("Node::copy_within", |arena| {
+                Some(arena.copy_within(self.id, with_children))
+            })
+            .expect("the copy was just created")
     }
 
     /// Shared implementation of the cross-document clones.
@@ -607,10 +623,11 @@ impl Node {
                 arena.snapshot(self.id, with_children)
             });
         // ... release it, and only then take the target lock.
-        let id = target.write_arena("Node::copy_into (insert)", |arena| {
-            arena.insert_snapshot(snapshot)
-        });
-        Node::new(target.clone(), id)
+        target
+            .write_one("Node::copy_into (insert)", |arena| {
+                Some(arena.insert_snapshot(snapshot))
+            })
+            .expect("the copy was just created")
     }
 }
 

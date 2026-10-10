@@ -164,7 +164,9 @@ mod interner;
 pub mod io;
 mod namespace;
 mod node;
+mod node_id;
 mod qualified_name;
+mod ref_count;
 pub mod validation;
 
 /// XML specification types and checks.
@@ -180,7 +182,7 @@ pub mod validation;
 /// corresponding file in `specification/rules/`.
 pub mod xml_spec;
 
-pub use crate::arena::{MAX_NODES, NodeId};
+pub use crate::arena::{GcConfig, GcStats};
 pub use crate::document::Document;
 pub use crate::element::Element;
 pub use crate::error::{XmlError, XmlResult};
@@ -191,6 +193,7 @@ pub use crate::io::{
 };
 pub use crate::namespace::Namespace;
 pub use crate::node::{Node, NodeContent, NodeKind};
+pub use crate::node_id::{MAX_NODES, NodeId};
 pub use crate::qualified_name::QualifiedName;
 pub use crate::validation::{ValidationErrorKind, XmlValidationError, XmlValidationErrors};
 

@@ -205,8 +205,18 @@ struct Parser<'input> {
 }
 
 impl<'input> Parser<'input> {
-    /// Creates a parser for `input`.
+    /// Creates a parser that builds its tree into a fresh document.
     fn new(input: &'input str) -> Self {
+        Self::with_document(input, Document::empty())
+    }
+
+    /// Creates a parser that builds its tree into `document`.
+    ///
+    /// The document's capacity policy applies while parsing, so a document with a small arena
+    /// collects garbage during the parse. That is safe because every node the parser still needs is
+    /// externally referenced: the elements that are still open are held on the parser's stack, and
+    /// the root element is installed in the document as soon as its start tag is seen.
+    fn with_document(input: &'input str, document: Document) -> Self {
         let mut reader = Reader::from_str(input);
         // rule: rule.well-formedness.comment-no-double-hyphen.md
         reader.config_mut().check_comments = true;
@@ -214,7 +224,7 @@ impl<'input> Parser<'input> {
         reader.config_mut().check_end_names = true;
         Self {
             reader,
-            document: Document::empty(),
+            document,
             stack: Vec::new(),
             scopes: vec![HashMap::new()],
             pending_text: String::new(),
@@ -605,4 +615,86 @@ fn utf8_error(what: &str, error: std::str::Utf8Error) -> XmlError {
 /// Decodes a byte slice as UTF-8 with a typed [`XmlError::InvalidUtf8`].
 fn decode_bytes<'a>(bytes: &'a [u8], what: &str) -> XmlResult<&'a str> {
     std::str::from_utf8(bytes).map_err(|error| utf8_error(what, error))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::arena::GcConfig;
+    use crate::io::write_string;
+
+    /// Builds `<root>` with `count` children, each carrying an attribute and a text node.
+    fn sample(count: usize) -> String {
+        let mut xml = String::from("<root>");
+        for index in 0..count {
+            xml.push_str(&format!("<child n=\"{index}\">text {index}</child>"));
+        }
+        xml.push_str("</root>");
+        xml
+    }
+
+    /// Parses `input` into a document whose arena fills up immediately, so that the parser triggers
+    /// a collection before almost every allocation.
+    fn parse_with_tiny_arena(input: &str) -> Document {
+        let document = Document::with_gc_config(
+            GcConfig::new()
+                .with_initial_capacity(2)
+                .with_minimum_free_fraction(0.25),
+        );
+        let parsed = Parser::with_document(input, document.clone())
+            .run()
+            .expect("the sample is well formed");
+        assert!(parsed.ptr_eq(&document));
+        assert!(
+            document.capacity() > 2,
+            "the tiny arena should have collected and grown while parsing"
+        );
+        document
+    }
+
+    /// The parser keeps every node it still needs externally referenced: open elements are held on
+    /// its stack, and the root is installed in the document as soon as its start tag is read. A
+    /// collection in the middle of a parse therefore cannot lose a node.
+    #[test]
+    fn a_collection_during_parsing_keeps_the_tree_intact() {
+        let xml = sample(40);
+        let reference = parse_string(&xml).expect("parses with the default configuration");
+        let tiny = parse_with_tiny_arena(&xml);
+
+        assert_eq!(tiny.node_count(), reference.node_count());
+        assert_eq!(
+            write_string(&tiny).expect("serializes"),
+            write_string(&reference).expect("serializes")
+        );
+        let root = tiny.root().expect("the root survived");
+        assert_eq!(root.children().len(), 40);
+        assert_eq!(
+            root.children()[39]
+                .as_element()
+                .expect("a child element")
+                .local_name(),
+            "child"
+        );
+        assert!(tiny.validate().is_ok());
+    }
+
+    /// The error path must not be disturbed by a collection either: an unclosed element is still
+    /// reported, and the document it was parsed into is still consistent.
+    #[test]
+    fn a_collection_does_not_hide_a_parse_error() {
+        let mut unclosed = sample(20);
+        unclosed.truncate(unclosed.len() - "</root>".len());
+
+        let document = Document::with_gc_config(GcConfig::new().with_initial_capacity(2));
+        let parsed = Parser::with_document(&unclosed, document.clone()).run();
+        assert!(matches!(parsed, Err(XmlError::MalformedXml(_))));
+        assert!(
+            document.capacity() > 2,
+            "the tiny arena should have collected while parsing the failing input"
+        );
+
+        // A mismatched end tag is reported as well.
+        let parsed = Parser::with_document("<root><child></root>", Document::empty()).run();
+        assert!(matches!(parsed, Err(XmlError::MalformedXml(_))));
+    }
 }

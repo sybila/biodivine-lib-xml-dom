@@ -1,16 +1,49 @@
 //! The node arena of a single [`crate::Document`].
 //!
-//! Requirement (1) replaces the previous design — one `RwLock` per element, with `Arc` handles
-//! both upwards and downwards — by an *arena*: all node payloads of a document live in one
-//! `Vec<NodeSlot>`, and everything that refers to a node does so through an index ([`NodeId`]).
+//! All node payloads of one document live in one [`Arena`]: a vector of slots plus a document root.
+//! Everything that refers to a node does so through an index ([`NodeId`]), so parent/child links are
+//! plain integers, there is no reference cycle, and every structural invariant is maintained by this
+//! module under a single `&mut self` borrow. A half-linked state is therefore unrepresentable
+//! outside of it, and no check-then-act sequence can be interleaved by another thread.
 //!
-//! Two properties follow directly, and both were the reason for the rewrite (REVIEW D3 and D4):
+//! # Slots, ids and reuse
 //!
-//! * there is no `Arc` cycle, because parent/child links are plain indices, so dropping a
-//!   document frees all of its nodes;
-//! * every structural invariant is maintained by this module under a single `&mut self` borrow,
-//!   so a half-linked state is unrepresentable outside of it and no check-then-act sequence can
-//!   be interleaved by another thread.
+//! The arena never *compacts*: a slot index always keeps its meaning, so no id ever moves, and the
+//! arena can only grow. Slots are reused, though. A slot whose node has become unreachable is
+//! reclaimed by the collector and handed out again by a later allocation, which is why an id is only
+//! usable while the node it was created for is alive (see [`NodeId`]).
+//!
+//! # External references and the collector
+//!
+//! The only things that keep a node alive are
+//!
+//! 1. **external references** — the handles that the outside world holds, counted per slot with a
+//!    lock-free atomic ([`crate::ref_count`]), and
+//! 2. **the document root**, which the arena itself owns as an implicit root of the mark phase.
+//!
+//! Internal links do not count: a detached subtree built by a copy operation or by the parser does
+//! not become reachable merely because it exists. Consequently, when a collection runs, it keeps
+//! every node reachable from the root or from a handle (following both parent and child links, so a
+//! handle to a deep node also keeps its ancestors) and reclaims everything else.
+//!
+//! The two invariants that make this sound are enforced in the code:
+//!
+//! * *a slot can only become externally referenced while the arena lock is held* — the sole way to
+//!   create a handle is [`Arena::external_ref`], which is called inside a critical section, so the
+//!   collector (which holds the write lock) can never miss a fresh reference;
+//! * *a bare [`NodeId`] never crosses a critical section into a context that allocates later* —
+//!   every operation that hands out a node for later use creates its handle inside the same
+//!   critical section, so no collection can run between "the node exists" and "the node is
+//!   referenced". Bulk construction ([`Arena::insert_snapshot`]) reserves its slot count up front
+//!   for the same reason.
+//!
+//! # Capacity policy
+//!
+//! An allocation reuses a free slot, then takes a fresh one, and only when the arena is full does it
+//! collect and possibly grow the capacity (see [`GcConfig`] for the thresholds). Collection is
+//! therefore automatic, and [`Arena::collect`] exposes it for manual use. The name interner and the
+//! capacity itself never shrink: releasing memory to the allocator is the one thing this design
+//! deliberately does not do.
 //!
 //! # Invariants maintained by [`Arena`]
 //!
@@ -19,10 +52,16 @@
 //! 2. `root` is an element whose `parent` is `None`.
 //! 3. No node is reachable from itself (the tree is acyclic).
 //! 4. `root` never occurs in anybody's child list.
+//! 5. A slot is either free or occupied, never both, and the free list contains exactly the free
+//!    slots.
 //!
 //! All mutating methods validate *everything they can fail on* first and only then perform
-//! infallible index writes. A failed operation therefore never changes the arena — this is the
-//! operational meaning of the panic-safety argument in `docs/design/PLAN.md` §3.2.
+//! infallible index writes. A failed operation therefore never changes the arena.
+
+mod config;
+mod gc;
+mod slot;
+mod snapshot;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -30,184 +69,122 @@ use std::sync::Arc;
 use crate::error::{XmlError, XmlResult};
 use crate::interner::Interner;
 use crate::namespace::Namespace;
+use crate::node_id::{MAX_NODES, NodeId};
 use crate::qualified_name::QualifiedName;
-use crate::xml_spec::{CData, Comment, NCName, PiData, PiTarget, Text, XmlDeclaration};
+use crate::ref_count::{ExternalRefCount, NodeRef};
+use crate::xml_spec::{NCName, XmlDeclaration};
 
-/// The maximum number of nodes a single document can hold.
-///
-/// [`NodeId`] is a `u32` index, so this is `u32::MAX`. Reaching this limit requires allocating
-/// more than four billion nodes in one document (hundreds of gigabytes of node payloads); it is
-/// nevertheless checked explicitly rather than wrapping silently: allocating past the
-/// limit panics instead of wrapping the index.
-pub const MAX_NODES: usize = u32::MAX as usize;
+pub use crate::arena::config::{GcConfig, GcStats};
+pub(crate) use crate::arena::slot::{ElementData, NodeData, NodeSlot, Slot};
+pub(crate) use crate::arena::snapshot::{Snapshot, SnapshotNode};
 
-/// An opaque index of a node inside the arena of a [`crate::Document`].
-///
-/// `NodeId` values are only ever produced by the document itself. They are stable for the whole
-/// lifetime of the document: the arena never reuses a slot, so an id can never start referring to
-/// a different node (this design deliberately trades memory — one slot per node ever created —
-/// for the absence of dangling or aliasing handles).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct NodeId(u32);
-
-impl NodeId {
-    /// The zero-based index of this node in its document's arena.
-    pub fn index(self) -> usize {
-        self.0 as usize
-    }
-}
-
-impl std::fmt::Display for NodeId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-/// The payload of a node.
+/// All slots of one document, plus its root, its XML declaration, its name interner and its
+/// collector configuration.
 #[derive(Debug)]
-pub(crate) enum NodeData {
-    /// An element: a name, attributes, namespace declarations and children.
-    Element(ElementData),
-    /// A text node. The payload is validated at construction
-    /// (`rule.well-formedness.legal-characters`).
-    Text(Text),
-    /// A comment node (`rule.well-formedness.comment-no-double-hyphen`).
-    Comment(Comment),
-    /// A CDATA section (`rule.document-structure.cdata-section-must-not-contain-cdend`).
-    CData(CData),
-    /// A processing instruction.
-    ProcessingInstruction {
-        /// The PI target (`rule.well-formedness.pi-target-is-name`).
-        target: PiTarget,
-        /// The PI content (`rule.well-formedness.pi-no-contains-close`).
-        data: PiData,
-    },
-}
-
-/// The payload of an element node.
-#[derive(Debug)]
-pub(crate) struct ElementData {
-    /// The element's expanded name (local name plus optional namespace).
-    pub(crate) name: QualifiedName,
-    /// Attributes, keyed by expanded name.
-    ///
-    /// A map keyed by [`QualifiedName`] (whose equality compares the local name and the namespace
-    /// *URI*) makes two attributes with the same expanded name unrepresentable — requirement
-    /// (4)(1), and `rule.elements-and-tags.unique-attribute-specification` at the storage level.
-    /// Setting an attribute that is already present therefore *overwrites* the old value; that is
-    /// the documented default behaviour required by the task description.
-    pub(crate) attributes: BTreeMap<QualifiedName, Arc<str>>,
-    /// Namespace declarations written on *this* element.
-    ///
-    /// The key is the prefix (`None` for the default namespace) and the value is the binding.
-    /// `Some(None)` is an empty declaration (`xmlns=""`), which removes the default namespace
-    /// from scope (`rule.namespace-usage.empty-default-namespace`).
-    pub(crate) namespace_declarations: BTreeMap<Option<NCName>, Option<Namespace>>,
-    /// The children, in document order.
-    pub(crate) children: Vec<NodeId>,
-}
-
-/// One slot of the arena: the payload plus the link to the parent.
-#[derive(Debug)]
-pub(crate) struct NodeSlot {
-    /// The parent node, or `None` if the node is detached or is the document root.
-    pub(crate) parent: Option<NodeId>,
-    /// The node payload.
-    pub(crate) data: NodeData,
-}
-
-/// Checks that one more node can be allocated.
-///
-/// `NodeId` is a `u32` index, so the number of slots is bounded by [`MAX_NODES`]; the bound is
-/// checked explicitly (rather than letting the index wrap) even though reaching it requires more
-/// than four billion live nodes in a single document.
-///
-/// # Panics
-///
-/// Panics if `used` has already reached [`MAX_NODES`].
-fn ensure_capacity(used: usize) {
-    assert!(
-        used < MAX_NODES,
-        "document arena exhausted: a document can hold at most {MAX_NODES} nodes"
-    );
-}
-
-/// A detached, fully owned copy of a subtree.
-///
-/// The representation is deliberately *flat*: nodes are stored in a `Vec` (in an order where a
-/// child always has a larger index than its parent) and the parent/child relation is a list of
-/// indices rather than nested values. Two things follow, and both matter for the same reason:
-///
-/// * taking and rebuilding a snapshot is iterative, so it cannot overflow the stack on a deeply
-///   nested document — a stack overflow aborts the process and could therefore not be reported as
-///   a typed error (see `docs/design/PLAN.md` §16, advisor condition C2);
-/// * dropping a snapshot is a flat `Vec` drop rather than a recursive one.
-///
-/// Snapshots are also what makes cross-document copies deadlock-free: the source subtree is
-/// snapshotted under a read lock of the source document, that lock is released, and only then is
-/// the snapshot inserted under a write lock of the target document.
-#[derive(Debug, Clone, Default)]
-pub(crate) struct Snapshot {
-    /// The node payloads. See [`SnapshotNode`].
-    nodes: Vec<SnapshotNode>,
-    /// `children[i]` lists the indices in `nodes` that are children of `nodes[i]`, in document
-    /// order. Only elements can have children, so the entries of non-elements are empty.
-    children: Vec<Vec<usize>>,
-    /// The index of the copied subtree's root.
-    root: usize,
-}
-
-/// The payload of one node of a [`Snapshot`].
-#[derive(Debug, Clone)]
-pub(crate) enum SnapshotNode {
-    /// An element, without its children (they live in [`Snapshot::children`]).
-    Element {
-        name: QualifiedName,
-        attributes: BTreeMap<QualifiedName, Arc<str>>,
-        namespace_declarations: BTreeMap<Option<NCName>, Option<Namespace>>,
-    },
-    /// A text node.
-    Text(Text),
-    /// A comment node.
-    Comment(Comment),
-    /// A CDATA section.
-    CData(CData),
-    /// A processing instruction.
-    ProcessingInstruction(PiTarget, PiData),
-}
-
-/// All nodes of one document, plus its root, its XML declaration and its name interner.
-#[derive(Debug, Default)]
 pub(crate) struct Arena {
-    nodes: Vec<NodeSlot>,
+    /// The slots. Its length is the high-water mark of used slots: a slot at or beyond `capacity`
+    /// cannot exist, because reaching `capacity` triggers a collection and a growth.
+    slots: Vec<Slot>,
+    /// The ids of the free slots, in LIFO order so that the most recently freed slot is reused
+    /// first (which keeps the working set of a document that repeatedly builds and discards one
+    /// subtree small).
+    free: Vec<NodeId>,
+    /// The number of occupied slots.
+    live: usize,
+    /// The number of slots the arena may hold before it considers itself full.
+    capacity: usize,
+    /// The document root, if any. It is a mark root of the collector.
     root: Option<NodeId>,
+    /// The XML declaration of the document, if any. It is not a node and is never collected.
     declaration: Option<XmlDeclaration>,
+    /// The interner of names and namespaces used by this document.
     interner: Interner,
+    /// The capacity policy and collector thresholds of this document.
+    config: GcConfig,
+}
+
+impl Default for Arena {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Arena {
-    /// Creates an empty arena.
+    /// Creates an empty arena with the default capacity policy.
     pub(crate) fn new() -> Self {
-        Self::default()
+        Self::with_config(GcConfig::DEFAULT)
+    }
+
+    /// Creates an empty arena with the given capacity policy.
+    pub(crate) fn with_config(config: GcConfig) -> Self {
+        Self {
+            slots: Vec::new(),
+            free: Vec::new(),
+            live: 0,
+            capacity: config.initial_capacity().min(MAX_NODES),
+            root: None,
+            declaration: None,
+            interner: Interner::default(),
+            config,
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // Capacity and configuration
+    // -------------------------------------------------------------------------------------
+
+    /// The capacity policy of this document.
+    pub(crate) fn config(&self) -> GcConfig {
+        self.config
+    }
+
+    /// Replaces the capacity policy, raising the capacity if the new initial capacity is larger.
+    ///
+    /// The capacity never shrinks, so a configuration that asks for a smaller initial capacity only
+    /// changes the thresholds of the next growth.
+    pub(crate) fn set_config(&mut self, config: GcConfig) {
+        self.config = config;
+        self.capacity = self.capacity.max(config.initial_capacity().min(MAX_NODES));
+    }
+
+    /// The number of slots this arena may hold before it considers itself full.
+    pub(crate) fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    /// The number of occupied slots.
+    pub(crate) fn live(&self) -> usize {
+        self.live
+    }
+
+    /// The number of slots that can be allocated without growing the arena.
+    pub(crate) fn free_slots(&self) -> usize {
+        self.capacity - self.live
     }
 
     // -------------------------------------------------------------------------------------
     // Allocation
     // -------------------------------------------------------------------------------------
 
-    /// Stores `data` and returns its (freshly assigned, never reused) id.
+    /// Stores `data` in a slot and returns its id.
     ///
-    /// The new node is detached: it has no parent and is not the document root.
+    /// The new node is detached: it has no parent, is not the document root and has no external
+    /// reference, so it is only kept alive once the caller turns the id into a handle *inside the
+    /// same critical section*.
     ///
     /// # Panics
     ///
-    /// Panics if the arena already holds [`MAX_NODES`] nodes. This is unreachable in practice
-    /// (it requires more than four billion live nodes in one document) and is checked explicitly
-    /// so that the `u32` index never wraps silently.
+    /// Panics if the arena has reached [`MAX_NODES`] live nodes and a collection cannot free one.
+    /// This is unreachable in practice (it requires more than four billion live nodes in one
+    /// document) and is checked explicitly so that the `u32` index never wraps silently.
     pub(crate) fn alloc(&mut self, data: NodeData) -> NodeId {
-        ensure_capacity(self.nodes.len());
-        let id = NodeId(self.nodes.len() as u32);
-        self.nodes.push(NodeSlot { parent: None, data });
+        let id = self.reserve_slot();
+        self.slots[id.index()] = Slot::Occupied(NodeSlot {
+            parent: None,
+            data,
+            external: ExternalRefCount::new(),
+        });
+        self.live += 1;
         id
     }
 
@@ -215,6 +192,74 @@ impl Arena {
     pub(crate) fn alloc_element(&mut self, element: ElementData) -> NodeId {
         let element = self.intern_element(element);
         self.alloc(NodeData::Element(element))
+    }
+
+    /// Returns a slot for a new node, collecting and growing the arena if it is full.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the arena cannot grow any further (see [`Arena::alloc`]).
+    fn reserve_slot(&mut self) -> NodeId {
+        loop {
+            if let Some(id) = self.free.pop() {
+                return id;
+            }
+            if self.slots.len() < self.capacity {
+                let id = NodeId::from_index(self.slots.len());
+                self.slots.push(Slot::Free);
+                return id;
+            }
+            // The arena is full: reclaim what is unreachable, and grow if that was not enough.
+            self.collect_internal();
+            if self.free.is_empty()
+                || self.capacity_free_fraction() < self.config.minimum_free_fraction()
+            {
+                self.grow();
+            }
+        }
+    }
+
+    /// Makes room for `count` new slots without running a collection in the middle.
+    ///
+    /// This is what makes bulk construction safe: a subtree is built by allocating its nodes one by
+    /// one, and none of those nodes is externally referenced yet, so a collection between two
+    /// allocations would reclaim the nodes that were already built. Reserving the slots up front
+    /// means the collection (and the growth) happen before the first allocation, and the allocation
+    /// loop cannot be interrupted.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `count` slots cannot be made available because the arena is limited to [`MAX_NODES`]
+    /// slots (in other words, if `count` exceeds what is left of the limit).
+    fn reserve_slots(&mut self, count: usize) {
+        while self.free_slots() < count {
+            self.collect_internal();
+            if self.free_slots() >= count {
+                return;
+            }
+            if !self.grow() {
+                panic!(
+                    "document arena exhausted: a document can hold at most {MAX_NODES} nodes, \
+                     and {count} more slots were requested"
+                );
+            }
+        }
+    }
+
+    /// Grows the capacity by the configured factor, capped at [`MAX_NODES`].
+    ///
+    /// Returns `false` if the capacity is already at the limit.
+    fn grow(&mut self) -> bool {
+        if self.capacity >= MAX_NODES {
+            return false;
+        }
+        let grown = self
+            .capacity
+            .saturating_mul(self.config.growth_factor())
+            .max(self.capacity + 1)
+            .min(MAX_NODES);
+        self.capacity = grown;
+        true
     }
 
     /// Returns the document's canonical value for `name`.
@@ -229,9 +274,9 @@ impl Arena {
 
     /// Interns everything inside `element` that is stored in the arena.
     ///
-    /// Attribute *values* are `Arc<str>` and are intentionally not deduplicated by value: they
-    /// are frequently unique, so a per-document map of all values would be pure overhead. They are
-    /// still shared whenever a node is cloned.
+    /// Attribute *values* are `Arc<str>` and are intentionally not deduplicated by value: they are
+    /// frequently unique, so a per-document map of all values would be pure overhead. They are still
+    /// shared whenever a node is cloned.
     fn intern_element(&mut self, element: ElementData) -> ElementData {
         let mut attributes = BTreeMap::new();
         for (name, value) in element.attributes {
@@ -255,38 +300,54 @@ impl Arena {
     // Read access
     // -------------------------------------------------------------------------------------
 
-    /// The number of slots used. Slots of detached nodes are counted too.
-    pub(crate) fn len(&self) -> usize {
-        self.nodes.len()
-    }
-
     /// The document root, if any.
     pub(crate) fn root(&self) -> Option<NodeId> {
         self.root
     }
 
-    /// All node ids, in allocation order (attached and detached alike).
-    pub(crate) fn ids(&self) -> impl Iterator<Item = NodeId> + '_ {
-        (0..self.nodes.len()).map(|i| NodeId(i as u32))
+    /// The occupied slot of `id`, or `None` if the slot is free or out of range.
+    pub(crate) fn occupied(&self, id: NodeId) -> Option<&NodeSlot> {
+        self.slots.get(id.index()).and_then(Slot::occupied)
+    }
+
+    /// Creates a counted external reference to `id`, or returns `None` if the slot holds no node.
+    ///
+    /// This is the only way an external reference comes into existence, and it is deliberately an
+    /// arena method: callers hold the arena lock while they call it, so a slot cannot be reclaimed
+    /// between the lookup and the creation of the handle. The returned [`NodeRef`] owns one count,
+    /// which nothing but cloning and dropping the handle changes (see [`crate::ref_count`]).
+    pub(crate) fn external_ref(&self, id: NodeId) -> Option<NodeRef> {
+        let slot = self.occupied(id)?;
+        Some(NodeRef::new(Arc::clone(&slot.external)))
+    }
+
+    /// The ids of all occupied slots, in allocation order.
+    pub(crate) fn occupied_ids(&self) -> impl Iterator<Item = NodeId> + '_ {
+        self.slots
+            .iter()
+            .enumerate()
+            .filter(|(_, slot)| slot.occupied().is_some())
+            .map(|(index, _)| NodeId::from_index(index))
     }
 
     /// The slot of `id`.
     ///
     /// # Panics
     ///
-    /// Panics if `id` does not belong to this arena. Every id used internally is produced by this
-    /// arena, and [`crate::Document::node`] bounds-checks ids that come from the outside.
+    /// Panics if `id` does not refer to an occupied slot of this arena. Every id used internally is
+    /// produced by this arena for a node that the caller holds a handle to, and
+    /// [`crate::Document::node`] rejects ids that come from the outside.
     pub(crate) fn slot(&self, id: NodeId) -> &NodeSlot {
-        self.nodes
-            .get(id.index())
-            .expect("node id does not belong to this document")
+        self.occupied(id)
+            .expect("node id does not refer to a live node of this document")
     }
 
     /// The mutable slot of `id`. See [`Arena::slot`] for the panic conditions.
     fn slot_mut(&mut self, id: NodeId) -> &mut NodeSlot {
-        self.nodes
+        self.slots
             .get_mut(id.index())
-            .expect("node id does not belong to this document")
+            .and_then(Slot::occupied_mut)
+            .expect("node id does not refer to a live node of this document")
     }
 
     /// The payload of `id`. See [`Arena::slot`] for the panic conditions.
@@ -298,8 +359,8 @@ impl Arena {
     ///
     /// # Panics
     ///
-    /// Panics if `id` is not an element. Call sites either know the kind statically or check it
-    /// first (e.g. via [`Arena::is_element`]).
+    /// Panics if `id` is not an element. Call sites either know the kind statically or check it first
+    /// (e.g. via [`Arena::is_element`]).
     pub(crate) fn element(&self, id: NodeId) -> &ElementData {
         match self.data(id) {
             NodeData::Element(element) => element,
@@ -315,9 +376,15 @@ impl Arena {
         }
     }
 
-    /// Whether `id` refers to an element.
+    /// Whether `id` is an element. Returns `false` for a free or out-of-range slot.
     pub(crate) fn is_element(&self, id: NodeId) -> bool {
-        matches!(self.data(id), NodeData::Element(_))
+        matches!(
+            self.occupied(id),
+            Some(NodeSlot {
+                data: NodeData::Element(_),
+                ..
+            })
+        )
     }
 
     /// The parent of `id`.
@@ -336,11 +403,11 @@ impl Arena {
     /// Whether `ancestor` is a strict ancestor of `node`.
     ///
     /// The walk is bounded by the number of slots in the arena. Invariant 3 says the tree is
-    /// acyclic, so the bound is never reached; it exists so that even a hypothetical bug cannot
-    /// turn this into an infinite loop.
+    /// acyclic, so the bound is never reached; it exists so that even a hypothetical bug cannot turn
+    /// this into an infinite loop.
     pub(crate) fn is_ancestor(&self, ancestor: NodeId, node: NodeId) -> bool {
         let mut current = self.slot(node).parent;
-        for _ in 0..self.nodes.len() {
+        for _ in 0..self.slots.len() {
             match current {
                 Some(parent) if parent == ancestor => return true,
                 Some(parent) => current = self.slot(parent).parent,
@@ -370,7 +437,7 @@ impl Arena {
         let mut result: Vec<(Option<NCName>, Option<Namespace>)> = Vec::new();
         let mut seen: Vec<Option<NCName>> = Vec::new();
         let mut current = Some(id);
-        for _ in 0..self.nodes.len() {
+        for _ in 0..self.slots.len() {
             let Some(node) = current else { break };
             if let NodeData::Element(element) = self.data(node) {
                 for (prefix, namespace) in &element.namespace_declarations {
@@ -387,15 +454,15 @@ impl Arena {
 
     /// Resolves a prefix in the scope of `id` (`None` = the default namespace).
     ///
-    /// Iterative on purpose: the previous implementation recursed through `Arc` handles, which
-    /// limited the usable document depth by the stack size.
+    /// Iterative on purpose: an implementation that recursed through handles would limit the usable
+    /// document depth by the stack size.
     pub(crate) fn resolve_prefix(
         &self,
         id: NodeId,
         prefix: Option<&NCName>,
     ) -> Option<Option<Namespace>> {
         let mut current = Some(id);
-        for _ in 0..self.nodes.len() {
+        for _ in 0..self.slots.len() {
             let Some(node) = current else { break };
             if let NodeData::Element(element) = self.data(node)
                 && let Some(binding) = element.namespace_declarations.get(&prefix.cloned())
@@ -416,8 +483,10 @@ impl Arena {
     /// Returns the previous parent, or `None` if the node was already detached. This operation is
     /// infallible: it is the primitive that all other structural edits build on.
     ///
-    /// Note that the slot itself is *not* reclaimed: `NodeId` values stay valid forever, so a
-    /// detached node remains fully usable (it can be inspected, edited, cloned and re-attached).
+    /// Detaching does *not* reclaim the slot: a detached node stays fully usable (it can be
+    /// inspected, edited, cloned and re-attached) as long as something keeps it reachable, typically
+    /// the handle the caller got back. Once nothing does, the slot is reclaimed by the next
+    /// collection.
     pub(crate) fn detach(&mut self, id: NodeId) -> Option<NodeId> {
         let parent = self.slot_mut(id).parent.take()?;
         let children = &mut self.element_mut(parent).children;
@@ -429,13 +498,13 @@ impl Arena {
 
     /// Attaches `child` as the `index`-th child of `parent`.
     ///
-    /// `index` is interpreted in the child list *after* `child` has been detached from any
-    /// previous parent, so it is always possible to say "move this node to position `i`".
+    /// `index` is interpreted in the child list *after* `child` has been detached from any previous
+    /// parent, so it is always possible to say "move this node to position `i`".
     ///
     /// # Errors
     ///
-    /// - [`XmlError::CycleDetected`] if `parent` is `child` or if `child` is an ancestor of
-    ///   `parent` (invariant 3).
+    /// - [`XmlError::CycleDetected`] if `parent` is `child` or if `child` is an ancestor of `parent`
+    ///   (invariant 3).
     /// - [`XmlError::CannotAttachRoot`] if `child` is the document root (invariant 4).
     /// - [`XmlError::NotAnElement`] if `parent` is not an element.
     /// - [`XmlError::IndexOutOfBounds`] if `index` is greater than the resulting child count.
@@ -515,27 +584,27 @@ impl Arena {
         Ok(())
     }
 
-    /// Replaces the node `old` by `new` in `old`'s parent, leaving both in the arena (`old` ends
-    /// up detached).
+    /// Replaces the node `old` by `new` in `old`'s parent, leaving both in the arena (`old` ends up
+    /// detached).
     ///
     /// Replacing a node by itself is a **no-op that reports success**, mirroring
-    /// [`Arena::attach_relative`], where inserting a node before or after itself is also a no-op.
-    /// A no-op is preferable to an error here because "replace X by X" is a well-defined request
-    /// with an obvious meaning (the document already satisfies it), and because the node's
-    /// attachment state must not change the outcome: an attached node can no more be "replaced by
-    /// itself" than a detached one.
+    /// [`Arena::attach_relative`], where inserting a node before or after itself is also a no-op. A
+    /// no-op is preferable to an error here because "replace X by X" is a well-defined request with
+    /// an obvious meaning (the document already satisfies it), and because the node's attachment
+    /// state must not change the outcome: an attached node can no more be "replaced by itself" than
+    /// a detached one.
     ///
     /// # Errors
     ///
     /// - [`XmlError::NodeHasNoParent`] if `old` is detached (`old != new`), because then there is
     ///   nothing to replace it in.
     /// - [`XmlError::CycleDetected`] if `new` would create a cycle — either because it is an
-    ///   ancestor of `old`'s parent, or because it is an ancestor of `old` itself (the latter
-    ///   would leave `old` inside `new`'s subtree while claiming it is detached).
+    ///   ancestor of `old`'s parent, or because it is an ancestor of `old` itself (the latter would
+    ///   leave `old` inside `new`'s subtree while claiming it is detached).
     /// - [`XmlError::CannotAttachRoot`] if `new` is the document root.
     ///
-    /// [`XmlError::NotAnElement`] cannot occur here: the parent link of a node is only ever set
-    /// by [`Arena::attach`], which requires the parent to be an element.
+    /// [`XmlError::NotAnElement`] cannot occur here: the parent link of a node is only ever set by
+    /// [`Arena::attach`], which requires the parent to be an element.
     ///
     /// Nothing is modified when an error is returned.
     pub(crate) fn replace(&mut self, old: NodeId, new: NodeId) -> XmlResult<()> {
@@ -566,7 +635,8 @@ impl Arena {
 
     /// Sets the document root, returning the previous root.
     ///
-    /// The previous root is left in the arena in a detached state.
+    /// The previous root is left in the arena in a detached state; the caller is responsible for
+    /// creating a handle for it before the arena lock is released if it should survive a collection.
     ///
     /// # Errors
     ///
@@ -615,8 +685,8 @@ impl Arena {
     /// Creates an owned copy of the subtree rooted at `id`.
     ///
     /// When `with_children` is `false` the copy contains no children (a shallow clone). The copy is
-    /// detached and is not the document root. Shared `Arc` payloads (`QualifiedName`,
-    /// `Namespace`, `Arc<str>`) are reused as-is, which is what makes cloning cheap.
+    /// detached and is not the document root. Shared `Arc` payloads (`QualifiedName`, `Namespace`,
+    /// `Arc<str>`) are reused as-is, which is what makes cloning cheap.
     ///
     /// The traversal is iterative (see [`Snapshot`]), so a deeply nested document cannot overflow
     /// the stack.
@@ -666,10 +736,19 @@ impl Arena {
     ///
     /// The rebuild is iterative too: nodes are allocated from the last index to the first (which
     /// works because every child has a larger index than its parent), and the parent links are
-    /// written in a second pass.
+    /// written in a second pass. The slots are reserved before the first allocation, so the
+    /// half-built subtree cannot be reclaimed by a collection in the middle of the loop; the caller
+    /// is responsible for turning the returned id into a handle inside the same critical section.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the arena cannot hold `snapshot.nodes.len()` more nodes (see
+    /// [`Arena::reserve_slots`]).
     pub(crate) fn insert_snapshot(&mut self, snapshot: Snapshot) -> NodeId {
         let count = snapshot.nodes.len();
-        let mut ids: Vec<NodeId> = vec![NodeId(0); count];
+        self.reserve_slots(count);
+        let live_before = self.live;
+        let mut ids: Vec<NodeId> = vec![NodeId::from_index(0); count];
         for index in (0..count).rev() {
             ids[index] = match &snapshot.nodes[index] {
                 SnapshotNode::Element {
@@ -693,6 +772,14 @@ impl Arena {
                 }
             };
         }
+        // The reservation above guaranteed that no allocation in the loop could trigger a
+        // collection, so the subtree is complete and neither the capacity nor the live count moved
+        // for any other reason than these allocations.
+        debug_assert_eq!(
+            self.live,
+            live_before + count,
+            "bulk construction must allocate exactly the reserved number of slots"
+        );
         for index in 0..count {
             let children: Vec<NodeId> = snapshot.children[index]
                 .iter()
@@ -730,6 +817,7 @@ mod tests {
     use super::*;
     use crate::xml_spec::nc_name;
 
+    /// Creates a detached element with no children.
     fn element(arena: &mut Arena, name: &str) -> NodeId {
         arena.alloc_element(ElementData {
             name: QualifiedName::without_namespace(name).unwrap(),
@@ -741,15 +829,60 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "document arena exhausted")]
-    fn exceeding_the_arena_capacity_panics_instead_of_wrapping() {
-        // The guard is checked directly, because allocating `u32::MAX` nodes is not feasible.
-        ensure_capacity(MAX_NODES);
+    fn reserving_more_slots_than_the_arena_can_hold_panics() {
+        // The arena can never hold more than `MAX_NODES` slots, so a larger reservation fails. The
+        // growth loop performs the doubling before it gives up, but it never allocates memory: the
+        // slots themselves are created lazily.
+        let mut arena = Arena::with_config(GcConfig::new().with_initial_capacity(1));
+        arena.reserve_slots(MAX_NODES + 1);
     }
 
     #[test]
-    fn the_capacity_guard_allows_everything_below_the_limit() {
-        ensure_capacity(0);
-        ensure_capacity(MAX_NODES - 1);
+    fn the_capacity_grows_by_the_configured_factor_and_stops_at_the_limit() {
+        let mut arena = Arena::with_config(GcConfig::new().with_initial_capacity(2));
+        assert_eq!(arena.capacity(), 2);
+        assert!(arena.grow());
+        assert_eq!(arena.capacity(), 4);
+        assert!(arena.grow());
+        assert_eq!(arena.capacity(), 8);
+
+        // A larger factor grows faster.
+        let mut arena = Arena::with_config(
+            GcConfig::new()
+                .with_initial_capacity(3)
+                .with_growth_factor(3),
+        );
+        assert!(arena.grow());
+        assert_eq!(arena.capacity(), 9);
+
+        // The capacity never exceeds the id space, so growth eventually reports failure.
+        let mut arena = Arena::with_config(GcConfig::new().with_initial_capacity(MAX_NODES));
+        assert_eq!(arena.capacity(), MAX_NODES);
+        assert!(!arena.grow());
+    }
+
+    #[test]
+    fn a_reclaimed_slot_is_reused_by_the_next_allocation() {
+        let mut arena = Arena::new();
+        let node = element(&mut arena, "a");
+        let handle = arena.external_ref(node).expect("the slot is occupied");
+
+        // A handle keeps the node through a collection.
+        assert_eq!(arena.collect().collected, 0);
+        assert_eq!(arena.live(), 1);
+        assert!(arena.occupied(node).is_some());
+
+        // Without it, the node is reclaimed and its slot is handed out again.
+        drop(handle);
+        let stats = arena.collect();
+        assert_eq!(stats.collected, 1);
+        assert_eq!(stats.live, 0);
+        assert!(arena.occupied(node).is_none());
+        assert!(arena.external_ref(node).is_none());
+
+        let reused = element(&mut arena, "b");
+        assert_eq!(reused, node);
+        assert_eq!(arena.live(), 1);
     }
 
     #[test]
@@ -757,7 +890,6 @@ mod tests {
         let mut arena = Arena::new();
         let parent = element(&mut arena, "p");
         let child = element(&mut arena, "c");
-
         arena.append(parent, child).unwrap();
         assert_eq!(arena.children(parent), &[child]);
         assert_eq!(arena.parent(child), Some(parent));
@@ -830,8 +962,8 @@ mod tests {
         assert_eq!(arena.parent(detached), None);
         assert_eq!(arena.parent(child), Some(parent));
 
-        // Moving an existing child interprets the index in the list *after* detaching it, so
-        // the resulting count is 0 and only index 0 is in range.
+        // Moving an existing child interprets the index in the list *after* detaching it, so the
+        // resulting count is 0 and only index 0 is in range.
         assert!(matches!(
             arena.attach(parent, 1, child),
             Err(XmlError::IndexOutOfBounds { index: 1, len: 0 })

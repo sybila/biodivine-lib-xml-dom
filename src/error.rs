@@ -12,7 +12,7 @@
 //! Whole-document integrity (requirement (4)(2)) is *not* reported through this type: it is
 //! collected by `Document::validate` so that every issue can be reported at once.
 
-use crate::arena::NodeId;
+use crate::node_id::NodeId;
 use thiserror::Error;
 
 /// The error type returned by fallible operations of this crate.

@@ -23,7 +23,12 @@ fn element(document: &Document, name: &str) -> Element {
 
 /// Builds `<root><child>text</child>...</root>` with `count` children and returns the document.
 fn tree(count: usize) -> Document {
-    let document = Document::empty();
+    tree_with(count, GcConfig::default())
+}
+
+/// Builds the same tree in a document that uses `config`.
+fn tree_with(count: usize, config: GcConfig) -> Document {
+    let document = Document::with_gc_config(config);
     let root = element(&document, "root");
     document.set_root(root.clone());
     for index in 0..count {
@@ -246,17 +251,38 @@ fn a_collection_during_a_cross_document_copy_keeps_the_copy_intact() {
 
 #[test]
 fn a_collection_during_a_same_document_copy_keeps_the_copy_intact() {
-    let document = tree(20);
+    // The tree lives in a document whose arena is far too small for it, so building the tree
+    // already collects (and grows) repeatedly, and so does the copy below.
+    let document = tree_with(30, small_arena());
     let root = document.root().unwrap();
-    let before = document.node_count();
+    let expected = root.to_string();
+    let tree_nodes = document.node_count();
+    assert_eq!(tree_nodes, 61);
+
+    // Leave garbage behind: the collection that runs *inside* the copy has to reclaim it.
+    for index in 0..10 {
+        let garbage = element(&document, &format!("garbage{index}"));
+        garbage.append_child(document.create_text("payload").unwrap());
+    }
+    // Some of that garbage may already be reclaimed while the next piece is created, because the
+    // arena is tiny; what matters is that garbage exists when the copy starts.
+    assert!(document.node_count() > tree_nodes);
 
     let copy = root.deep_clone();
-    // A detached copy is referenced by its handle, so a collection leaves it alone.
-    assert_eq!(document.collect_garbage().collected, 0);
-    assert_eq!(document.node_count(), 2 * before);
-    assert_eq!(copy.children().len(), 20);
-    assert_eq!(copy.as_element().unwrap().to_string(), root.to_string());
+
+    // The copy is complete and the garbage is gone, which proves that the copy itself collected:
+    // had it not, the twenty unreachable nodes would still be here.
+    assert_eq!(copy.to_string(), expected);
+    assert_eq!(copy.children().len(), 30);
     assert!(!copy.is_attached());
+    assert_eq!(document.node_count(), 2 * tree_nodes);
+    assert_eq!(
+        document.collect_garbage().collected,
+        0,
+        "the collection inside the copy should already have reclaimed the garbage"
+    );
+    assert_eq!(root.to_string(), expected, "the source is untouched");
+    assert!(document.validate().is_ok());
 }
 
 #[test]

@@ -211,10 +211,13 @@ impl Arena {
             }
             // The arena is full: reclaim what is unreachable, and grow if that was not enough.
             self.collect_internal();
-            if self.free.is_empty()
-                || self.capacity_free_fraction() < self.config.minimum_free_fraction()
-            {
-                self.grow();
+            let grow = self.free.is_empty()
+                || self.capacity_free_fraction() < self.config.minimum_free_fraction();
+            if grow && !self.grow() {
+                // The capacity is at `MAX_NODES` and the collection freed nothing, so there is
+                // nothing left to grow into. Panicking here is what makes the documented behaviour
+                // of [`Arena::alloc`] true instead of spinning forever.
+                panic!("document arena exhausted: a document can hold at most {MAX_NODES} nodes");
             }
         }
     }

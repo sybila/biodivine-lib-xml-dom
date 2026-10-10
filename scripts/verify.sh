@@ -13,6 +13,8 @@
 #     feature is deliberately enabled only by maturin for wheel builds; turning it on for `cargo
 #     clippy` would check the configuration that is explicitly not the in-process-test one.
 #   * clippy runs with `-D warnings`, so the "0 warnings" claim is a gate rather than a snapshot.
+#     Both profiles are linted: a debug-only import or an unreachable arm can be dead code in one
+#     profile and live code in the other, so the dev gate alone would not notice it.
 #   * the MSRV run uses the oldest toolchain the project declares (see `[workspace.package]`).
 set -uo pipefail
 
@@ -52,6 +54,7 @@ done
 # --- Rust: format, lint, test -----------------------------------------------------------------
 run cargo fmt --check
 run cargo clippy --workspace --all-targets -- -D warnings
+run cargo clippy --workspace --all-targets --release -- -D warnings
 run cargo clippy -p biodivine-lib-xml-dom --all-targets --all-features -- -D warnings
 run cargo test --workspace
 run cargo test --workspace --release

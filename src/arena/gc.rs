@@ -15,6 +15,7 @@
 //! slot goes onto the free list. Collection never shrinks the capacity and never compacts: an id
 //! keeps referring to the same slot, which may then hold a different node.
 
+#[cfg(debug_assertions)]
 use std::sync::Arc;
 
 use crate::arena::config::free_fraction;

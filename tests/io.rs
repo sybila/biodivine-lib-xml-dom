@@ -636,7 +636,7 @@ fn parser_never_panics_on_odd_input() {
 
 #[test]
 fn prefixes_are_preserved() {
-    // This was REVIEW D2: the pre-rewrite serializer dropped the element prefix.
+    // The element prefix must survive a round trip: dropping it loses information that a re-parse cannot recover.
     let xml = r#"<html:html xmlns:html="http://www.w3.org/1999/xhtml"><html:body>hi</html:body></html:html>"#;
     let document = Document::parse_string(xml).unwrap();
     assert_eq!(document.write_string().unwrap(), xml);

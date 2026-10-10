@@ -46,7 +46,7 @@ fn sig_document(document: &Document) -> Sig {
 fn sig_element(element: &Element) -> Sig {
     let name = element.qualified_name();
     // `prefix|uri|local`, spelled exactly like the attribute signature below, so that a serializer
-    // or parser that drops, renames or mangles an element's *local name* (the REVIEW D2 bug class)
+    // or parser that drops, renames or mangles an element's *local name*
     // is caught by the round-trip property rather than passing unnoticed.
     let name = format!(
         "{}|{}|{}",

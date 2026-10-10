@@ -1,9 +1,9 @@
 # API reference
 
 Every public module of the `biodivine_lib_xml_dom` package. The docstrings come from the Python
-wrappers and, where a method delegates, from the native bindings — which is why the Rust-level
-documentation of the same behaviour is in `docs/design/BINDINGS.md` and the rustdoc of
-`biodivine-lib-xml-dom`.
+wrappers and, where a method delegates, from the native bindings; the Rust-level documentation of
+the same behaviour, including how this package maps onto the Rust API, is in the rustdoc of
+`biodivine-lib-xml-dom` (its `documentation` module).
 
 ## Package
 

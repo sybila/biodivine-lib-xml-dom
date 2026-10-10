@@ -80,7 +80,13 @@ for example in $(ls examples/book_*.rs examples/tour.rs | sed 's|examples/||; s|
 done
 
 # --- documentation ----------------------------------------------------------------------------
+# The public documentation is built into a clean target/doc first: the audit sweep inspects the
+# rendered pages, and a previous `--document-private-items` run would leave pages of internal
+# modules behind that a public build never produces.
+rm -rf target/doc
 run env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
+run "$PYTHON" docs/audit_docs.py --include-book --self-test
+run "$PYTHON" docs/audit_docs.py --include-book
 run env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace --document-private-items
 run "$PYTHON" scripts/gen_rule_set.py --check
 run "$PYTHON" scripts/gen_rule_coverage.py --check

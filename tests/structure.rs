@@ -2,9 +2,9 @@
 //! that hold when an operation fails.
 //!
 //! The tests are written against the public API only. The panic-safety tests are the operational
-//! proof of the claim in `docs/design/PLAN.md` §3.2: an operation validates everything it can fail
-//! on *before* touching the arena, so a rejected (or panicking) call leaves the document exactly
-//! as it was and fully consistent.
+//! proof of a claim the design notes make: an operation validates everything it can fail on
+//! *before* touching the arena, so a rejected (or panicking) call leaves the document exactly as it
+//! was and fully consistent.
 
 mod common;
 

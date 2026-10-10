@@ -1,4 +1,5 @@
-//! Parsing and serialization: the public entry points of the two halves in [`crate::io`].
+//! Parsing and serialization: the public entry points, implemented by the parser and the
+//! serializer that back them.
 //!
 //! Everything here is a `Document` method (or, for parsing, an associated function) rather than a
 //! free function, so that the whole lifetime of a document — create, parse, edit, validate,

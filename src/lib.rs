@@ -379,7 +379,7 @@ mod tests {
     fn test_dropping_a_document_frees_its_nodes() {
         use std::sync::{Arc as StdArc, Weak};
 
-        // Regression test for REVIEW D4: with the previous per-node `Arc` design, the
+        // Regression test for the absence of reference cycles: with a per-node `Arc` design, the
         // parent <-> child links formed a reference cycle and the whole tree stayed alive.
         // The arena stores indices instead, so dropping every handle must free the document.
         let weak: Weak<crate::document::DocumentInner> = {

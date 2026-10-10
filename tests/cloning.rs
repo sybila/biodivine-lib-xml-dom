@@ -14,14 +14,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use common::{assert_consistent, element};
 
-/// Builds a namespaced tree:
-///
-/// ```text
-/// ex:root (xmlns:ex="http://example.com", xmlns="http://default")
-/// ├── ex:child (ex:attr="v", attr="plain")
-/// │   └── "text"
-/// └── "tail"
-/// ```
+/// Builds a namespaced tree: `ex:root` declares the `ex` prefix and a default namespace, and has
+/// one `ex:child` child (with an `ex:attr` and a plain `attr`, plus a text child) followed by a text
+/// node of its own.
 fn namespaced_tree(document: &Document) -> (Element, Element) {
     let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
     let default = Namespace::without_prefix("http://default").unwrap();

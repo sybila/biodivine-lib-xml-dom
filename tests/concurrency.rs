@@ -1,6 +1,6 @@
 //! Concurrency: the guarantees that follow from a single document-level lock.
 //!
-//! These tests cover the two failure modes of the previous design (REVIEW D3 and D4):
+//! These tests cover the two failure modes the storage design had to eliminate:
 //! interleaved check-then-act sequences creating cycles, and per-node locking making the edits
 //! non-atomic. They also act as a deadlock detector: every worker reports back over a channel and
 //! the test fails on a timeout instead of hanging forever.

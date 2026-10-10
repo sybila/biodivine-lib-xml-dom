@@ -45,7 +45,7 @@ where
 /// output — comments, CDATA sections and processing-instruction data — so that the stored value is
 /// exactly the value a re-parse would produce. Text nodes and attribute values are *not* normalised
 /// here, because the serializer can escape a literal `\r` as `&#xD;` and therefore preserve the
-/// caller's bytes; see `docs/design/PLAN.md` §16.
+/// caller's bytes; the parser reads the input as a whole on purpose.
 pub(crate) fn normalize_line_ends(input: &str) -> Cow<'_, str> {
     if !input.contains('\r') {
         return Cow::Borrowed(input);
@@ -70,14 +70,14 @@ pub(crate) fn normalize_line_ends(input: &str) -> Cow<'_, str> {
 /// The generated type stores its content in an `Arc<str>`, so cloning it (and cloning anything
 /// that stores one, such as an attribute value or a text node) is a pointer bump rather than a
 /// copy. Equality, ordering and hashing are value-based because `Arc<T>` forwards them to `T`;
-/// nothing in the public API exposes the pointer identity. This also satisfies requirement (1)'s
-/// "keep the Arc-based scheme for deduplication" for repetitive content.
+/// nothing in the public API exposes the pointer identity. This is also what deduplicates
+/// repetitive content such as an attribute value or a fully qualified name.
 ///
 /// `validate` is called with the raw string; a failing argument produces `error(...)` with the
 /// message `'<value>' is not a valid <display_name>`.
 ///
 /// The type is deliberately only constructible through [`TryFrom`], so a value of this type is
-/// always valid (requirement (4)(1): low-level integrity enforced by construction).
+/// always valid: low-level integrity is enforced by construction.
 macro_rules! validated_string_newtype {
     (
         $(#[$meta:meta])*

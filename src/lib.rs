@@ -237,6 +237,7 @@
 
 mod arena;
 mod document;
+pub mod documentation;
 mod element;
 mod error;
 mod interner;

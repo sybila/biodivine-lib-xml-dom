@@ -486,11 +486,10 @@ fn parse_file_reports_io_errors() {
     );
 }
 
-/// The two parser gaps the G2 audit found are now errors (fixed in G3).
+/// Unclosed elements and `xml`-target processing instructions are both rejected.
 ///
-/// This test used to be a characterisation test that pinned the *wrong* behaviour, precisely so
-/// that the fix could not happen silently. It is now the positive counterpart; the corresponding
-/// rows in `docs/design/REVIEW.md` (D8) record the fix.
+/// The test was originally a characterisation test that pinned the *wrong* behaviour, precisely so
+/// that a fix could not happen silently; it is now the positive counterpart of that behaviour.
 #[test]
 fn unclosed_elements_and_xml_target_pis_are_rejected() {
     assert_variant(

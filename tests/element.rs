@@ -1,4 +1,4 @@
-//! The element and namespace API (requirement (3)).
+//! The element and namespace API.
 //!
 //! The contract under test is "no magic": names are *expanded* names that carry their namespace,
 //! and no editing operation ever adds, removes or rewrites a namespace declaration. Making the
@@ -219,7 +219,7 @@ fn an_empty_default_declaration_removes_the_default_namespace() {
 
 #[test]
 fn removing_a_declaration_is_silent_even_though_the_subtree_relies_on_it() {
-    // Requirement (3): editing never checks namespace integrity; validation reports it instead.
+    // Editing never checks namespace integrity; validation reports it instead.
     let document = Document::empty();
     let root = element(&document, "root");
     let child = document.create_element(name("http://example.com", "ex", "item"));

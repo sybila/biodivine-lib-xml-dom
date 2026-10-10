@@ -137,7 +137,7 @@ impl QualifiedName {
     /// Whether this value and `other` share the same `Arc` allocation.
     ///
     /// See [`Namespace::shares_data_with`](crate::Namespace::shares_data_with); used to verify the
-    /// per-document interning of requirement (1).
+    /// per-document interning described in the design notes.
     #[cfg(test)]
     pub(crate) fn shares_data_with(&self, other: &QualifiedName) -> bool {
         Arc::ptr_eq(&self.data, &other.data)

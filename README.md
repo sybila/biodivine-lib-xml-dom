@@ -28,7 +28,7 @@ biodivine_lib_xml_dom            the pure-Python package: coercion, Pythonic pro
 ```
 
 The mapping between the Rust API and the Python one is itemised in
-[`docs/design/BINDINGS.md`](docs/design/BINDINGS.md), including what is deliberately not mirrored.
+[`docs/design/bindings.md`](docs/design/bindings.md), including what is deliberately not mirrored.
 
 ## Examples
 
@@ -98,23 +98,27 @@ cargo test --workspace
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 
 python3 -m venv .venv
-.venv/bin/pip install maturin pytest sphinx sphinx-design myst-parser
+.venv/bin/pip install maturin pytest
+.venv/bin/pip install -r docs/requirements.txt
 cd biodivine-lib-xml-dom-py-sys && VIRTUAL_ENV=../.venv ../.venv/bin/maturin develop --release && cd ..
 .venv/bin/python -m pytest biodivine-lib-xml-dom-py-sys/tests-python
 docs/build_docs.sh
 ```
 
+`docs/design/build.md` has the full setup, including the minimum supported Rust version and every
+`make` target.
+
 ## Documentation
 
 | where | what |
 | --- | --- |
-| `cargo doc --open` | the Rust API (rustdoc) |
+| `cargo doc --open` | the Rust API (rustdoc), including the `documentation` module with the design notes |
 | [`docs/book`](docs/book) | the book: tutorials with Rust/Python examples you can switch between |
 | `biodivine-lib-xml-dom-py-sys/docs` | the Python API reference (Sphinx autodoc) |
-| [`docs/design/REVIEW.md`](docs/design/REVIEW.md) | the audit of the original implementation: per-requirement status and eleven ranked defects |
-| [`docs/design/PLAN.md`](docs/design/PLAN.md) | the architecture, the deadlock-freedom and panic-safety arguments, the API sketch, the risks, and §15 with every deviation and its reason |
-| [`docs/design/BINDINGS.md`](docs/design/BINDINGS.md) | the Python bindings audit: mirroring verdicts, error mapping, GIL policy, `Send`/`Sync` justifications |
-| [`docs/design/evidence`](docs/design/evidence) | reproducible evidence: baseline gates, defect probes with raw transcripts, the rule inventory, the rule-enforcement verdicts, the docs/bindings build transcripts |
+| [`docs/design/architecture.md`](docs/design/architecture.md) | how the library is built and why: the arena model, the collector, the concurrency argument, the trade-offs |
+| [`docs/design/build.md`](docs/design/build.md) | setting the project up and running the checks |
+| [`docs/design/bindings.md`](docs/design/bindings.md) | the Rust ↔ Python mapping, item by item |
+| [`docs/design/rule-coverage.md`](docs/design/rule-coverage.md) | which XML rules this library acts on, in which layer, and what is out of scope |
 | [`specification`](specification) | the XML 1.0 and Namespaces 1.0 specifications and one file per rule |
 
 ## Scope and limitations
@@ -122,8 +126,8 @@ docs/build_docs.sh
 XML 1.0 (fifth edition) and Namespaces in XML 1.0 (third edition), UTF-8 only. `DOCTYPE`
 declarations are read and ignored, so there is no DTD processing: no DTD-defined entities, attribute
 types or content models, and no validity checking. The book's
-[Known limitations and gotchas](docs/book/limitations.md) chapter lists every deliberate
-limitation, from top-level comments being discarded to arena slots never being reclaimed.
+[Known limitations and gotchas](docs/book/limitations.md) chapter lists every deliberate limitation,
+from top-level comments being discarded to the name interner never shrinking.
 
 ## License
 

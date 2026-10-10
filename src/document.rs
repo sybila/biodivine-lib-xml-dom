@@ -1,7 +1,8 @@
 //! Wiring between the arena and the outside world: type [`Document`], the single document lock,
 //! and the debug-only re-entrancy detector.
 //!
-//! See `docs/design/PLAN.md` §3 for the reasoning. In short:
+//! See [`documentation::architecture`](crate::documentation::architecture) for the reasoning, and
+//! the summary below:
 //!
 //! * **Locking invariant L**: a document owns exactly one lock ([`parking_lot::RwLock`] around the
 //!   [`Arena`]). It is acquired only in the outermost frame of a public `Document`/`Node`/`Element`
@@ -398,7 +399,7 @@ impl Document {
     ///
     /// Returns [`XmlError::InvalidText`] if the content contains characters that are not legal in
     /// XML ([`rule.well-formedness.legal-characters`](crate::xml_spec::rule_set::rule_well_formedness_legal_characters)), which is checked here so that an invalid
-    /// text node cannot be created at all — requirement (4)(1).
+    /// text node cannot be created at all, because validity is enforced by the type.
     pub fn create_text(&self, text: impl AsRef<str>) -> XmlResult<Node> {
         let text = Text::try_from(text.as_ref())?;
         let node = self
@@ -466,13 +467,13 @@ impl Document {
 
     /// Checks the whole document and reports **every** problem it can find.
     ///
-    /// This is requirement (4)(2): the checks that need a holistic view — namespace scope
+    /// Whole-document validation: the checks that need a holistic view — namespace scope
     /// integrity, the structural invariants, and the document-wide value rules — are collected in
     /// one pass instead of failing at the first problem, so that a caller can fix everything in one
     /// sweep. The checks themselves are described in the [crate documentation](crate#validation) and
     /// the individual findings are listed in [`ValidationErrorKind`](crate::ValidationErrorKind).
     ///
-    /// Editing operations deliberately do *not* perform these checks (requirement (3)): removing a
+    /// Editing operations deliberately do *not* perform these checks: removing a
     /// namespace declaration that a subtree relies on, or moving an element into a scope where its
     /// prefix means something else, succeeds silently and is reported here.
     ///
@@ -486,8 +487,8 @@ impl Document {
     ///   reachable from the root only. A detached [`Node::deep_clone`] legitimately repeats its
     ///   original's `xml:id` values, and attaching it is what creates the duplicate that
     ///   [`rule.attributes.id-must-be-unique`](crate::xml_spec::rule_set::rule_attributes_id_must_be_unique) is about.
-    /// * Being *detached* is never an error by itself (requirement (2) makes detached nodes a
-    ///   normal state), and neither is a missing root: [`crate::ValidationErrorKind::MissingRoot`] is
+    /// * Being *detached* is never an error by itself (a detached node is a normal state of the data
+    ///   model), and neither is a missing root: [`crate::ValidationErrorKind::MissingRoot`] is
     ///   reported, and the rest of the document is still checked.
     ///
     /// The structural diagnostics ([`crate::ValidationErrorKind::ParentChildMismatch`],

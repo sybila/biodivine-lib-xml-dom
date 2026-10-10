@@ -5,10 +5,10 @@
 #     scripts/verify.sh          # from the repository root, or anywhere
 #     make verify                # same thing
 #
-# The transcript in `docs/design/VERIFICATION.md` is generated from a run of this script, so the
-# document and the artefact cannot disagree: re-run it and you get the same evidence.
+# It prints every command with its exit code, so a report of "the gates pass" can be checked by
+# re-running this script rather than by trusting a transcript.
 #
-# Scope notes (see `docs/design/VERIFICATION.md` for why):
+# Scope notes:
 #   * `--all-features` is applied to the *core* crate only. The binding crate's `extension-module`
 #     feature is deliberately enabled only by maturin for wheel builds; turning it on for `cargo
 #     clippy` would check the configuration that is explicitly not the in-process-test one.
@@ -82,6 +82,7 @@ done
 # --- documentation ----------------------------------------------------------------------------
 run env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 run "$PYTHON" scripts/gen_rule_set.py --check
+run "$PYTHON" scripts/gen_rule_coverage.py --check
 run "$PYTHON" docs/check_doc_sections.py --self-test
 run "$PYTHON" docs/check_doc_sections.py
 run "$PYTHON" docs/check_book.py

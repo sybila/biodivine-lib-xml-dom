@@ -37,10 +37,11 @@ attribute types, no content models, no validity checking. Consequences worth kno
 * `xml:id` is the only attribute whose type this library can know, so "unique IDs" is checked for
   `xml:id` only;
 * the two `xml:lang`/`xml:space` "must be declared" rules are validity constraints and are not
-  checked — their *value* shapes are (see `docs/design/evidence/rule-enforcement.md`).
+  checked — their *value* shapes are (see [`docs/design/rule-coverage.md`](../design/rule-coverage.md)).
 
 **UTF-8 only.** Other encodings are rejected with a typed error rather than silently mis-decoded.
-`docs/design/evidence/rule-inventory.md` lists every rule file and whether this library enforces it,
+[`docs/design/rule-coverage.md`](../design/rule-coverage.md) lists every rule file and whether this
+library acts on it,
 and `rule-enforcement.md` gives the verdict for each rule in the parser, validation and serializer
 layers — 54 enforced, 6 partial (the DTD half), 4 deferred (UTF-16, DTD validity) and 2 not
 applicable.
@@ -54,7 +55,7 @@ contract, and the reason edits stay fast and predictable.
 
 **`Document::validate` is the only reporter.** A parsed document is well-formed by construction, but
 a document assembled through the API can be inconsistent, and until you validate it nothing will tell
-you. (`it_ns_silent_loss` in `docs/design/evidence/probes/` is the probe that pins this.)
+you: the document stays as it is and validation reports it.
 
 **Arena slots are never reclaimed.** `NodeId`s stay valid forever, which is why handles never dangle
 and slots are never reused — but it also means `node_count()` only grows, even for detached nodes.
@@ -73,7 +74,8 @@ the supported API is the Python package; a test enumerates exactly what is expor
 typed accessors (`text()`, `comment()`, …) carry the same information without a discriminator dance.
 
 **No `abi3` wheels yet.** The extension is built for the interpreter maturin finds, so a wheel is
-specific to one CPython version (`docs/design/BINDINGS.md` §8).
+specific to one CPython version (see
+[the bindings document](../design/bindings.md#8-known-gaps)).
 
 **Compound edits are not transactional.** Each operation is atomic, but a sequence of them is not;
 see [Thread safety](thread-safety.md#what-thread-safe-does-not-mean).

@@ -1,11 +1,10 @@
 //! Whole-document validation.
 //!
-//! Requirement (4)(2): some properties of a document can only be judged by looking at the document
-//! as a whole — is every used prefix actually declared *here*, rather than somewhere else? are all
+//! Some properties of a document can only be judged by looking at the document as a whole — is every used prefix actually declared *here*, rather than somewhere else? are all
 //! `xml:id` values distinct? is the tree still a tree? Those are the checks in this module, and
 //! they are deliberately separate from the editing API:
 //!
-//! * editing never checks namespace integrity (requirement (3)) — you can remove a declaration that
+//! * editing never checks namespace integrity — you can remove a declaration that
 //!   a subtree still relies on, or move an element into a scope where its prefix means something
 //!   else, and nothing complains;
 //! * [`Document::validate`] then reports *every* problem it can find in one pass, so a caller can
@@ -29,12 +28,12 @@
 //! Everything that needs DTD processing: attribute *types*, content models, and the two
 //! `xml:lang`/`xml:space` "must be declared" constraints. Those are validity, not well-formedness,
 //! and `DOCTYPE` validation is out of scope for this library; the two rules are marked as such in
-//! the rule coverage list of the development documentation.
+//! the rule coverage list ([`documentation::rule_coverage`](crate::documentation::rule_coverage)).
 //!
 //! # Detached nodes
 //!
-//! A node that is not reachable from the root is *not* an error by itself — requirement (2) makes
-//! detached nodes a normal state. Node-local rules (name resolution against the node's own scope,
+//! A node that is not reachable from the root is *not* an error by itself: a detached node is a
+//! normal state of the data model. Node-local rules (name resolution against the node's own scope,
 //! `xml:lang`/`xml:space` values, `xml:id` syntax) are checked for detached nodes too, so a subtree
 //! can be prepared and validated before it is attached. Document-wide rules (`xml:id` uniqueness)
 //! are checked over the attached tree only: a detached `deep_clone` of a subtree would otherwise be
@@ -338,7 +337,7 @@ impl<'a> IntoIterator for &'a XmlValidationErrors {
 ///
 /// This is the implementation behind [`crate::Document::validate`]; it takes the arena rather than
 /// the document so that it cannot acquire the lock again (see the single-lock invariant in
-/// `docs/design/PLAN.md` §3.1).
+/// the [design notes](crate::documentation::architecture)).
 pub(crate) fn validate_arena(arena: &Arena) -> Vec<XmlValidationError> {
     let mut errors = Vec::new();
     check_structure(arena, &mut errors);

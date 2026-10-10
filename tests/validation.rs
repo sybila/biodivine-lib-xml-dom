@@ -1,8 +1,8 @@
-//! Whole-document validation (requirement (4)(2)).
+//! Whole-document validation.
 //!
 //! The tests are organised by the group of rules they exercise: structure, namespace scope,
 //! namespace declarations, and values. They also pin the *contract* of the editing API: editing
-//! never checks namespace integrity, and the problems show up only here (requirement (3)).
+//! never checks namespace integrity, so the problems show up only here.
 
 mod common;
 
@@ -67,7 +67,7 @@ fn a_consistent_document_has_no_structural_problems() {
     child.append_child(grandchild.clone());
     document.set_root(root.clone());
 
-    // Detached nodes are a normal state, not an error (requirement (2)).
+    // Detached nodes are a normal state, not an error.
     let _detached = element(&document, "detached");
     assert_valid(&document);
 
@@ -684,7 +684,7 @@ fn every_error_kind_names_an_existing_rule_file() {
 
 #[test]
 fn editing_is_silent_and_validation_is_what_reports() {
-    // Requirement (3): "I can remove the namespace declaration attribute, and it will not complain
+    // Removing a declaration that a subtree still relies on does not complain during the edit
     // even if some child nodes rely on that declaration."
     let document =
         Document::parse_string(r#"<ex:root xmlns:ex="http://example.com"><ex:child/></ex:root>"#)

@@ -180,7 +180,7 @@ impl Namespace {
 
     /// Whether this value and `other` share the same `Arc` allocation.
     ///
-    /// Used to verify the per-document interning that requirement (1) asks for: two value-equal
+    /// Used to verify the per-document interning the design relies on: two value-equal
     /// namespaces of one document must be the very same allocation. This is an implementation
     /// detail, so it is crate-internal — nothing in the public API depends on pointer identity.
     #[cfg(test)]

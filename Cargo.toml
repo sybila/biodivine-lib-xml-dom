@@ -4,9 +4,9 @@ version.workspace = true
 edition = "2024"
 rust-version.workspace = true
 
-# The Python bindings live in a separate crate (requirement (6): the core crate contains no PyO3
-# code at all). The core crate stays the workspace *root package*, so `src/` and every existing
-# path and test are untouched by the split.
+# The Python bindings live in a separate crate, so the core crate contains no PyO3 code at all.
+# The core crate stays the workspace *root package*, so `src/` and every existing path and test are
+# untouched by the split.
 [workspace]
 members = ["biodivine-lib-xml-dom-py-sys"]
 
@@ -19,8 +19,8 @@ version = "0.2.0"
 # workflow's `min-rust-version` matches this value.
 rust-version = "1.88"
 
-# Requirement (7): every public item is documented. `missing_docs` makes that a lint instead of a
-# habit, and the docs gate (`RUSTDOCFLAGS="-D warnings" cargo doc`) turns it into a hard failure.
+# Every public item is documented: `missing_docs` makes that a lint instead of a habit, and the
+# docs gate (`RUSTDOCFLAGS="-D warnings" cargo doc`) turns it into a hard failure.
 [workspace.lints.rust]
 missing_docs = "warn"
 

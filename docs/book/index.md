@@ -36,8 +36,9 @@ problem.
 | `biodivine-lib-xml-dom-py-sys` | a thin PyO3 mirror of the Rust API, imported as `biodivine_lib_xml_dom._sys` | the layer below |
 | `biodivine_lib_xml_dom` | the pure-Python package: argument coercion, Pythonic protocols, conveniences | Python programs |
 
-The mapping between the Rust API and the Python one is itemised in `docs/design/BINDINGS.md`, and
-the Rust API itself is documented in its rustdoc.
+The mapping between the Rust API and the Python one is itemised in
+[`docs/design/bindings.md`](../design/bindings.md), and the Rust API itself is documented in its
+rustdoc (which also carries the design notes as its `documentation` module).
 
 ## Running the examples
 
@@ -62,7 +63,6 @@ parsing-and-serializing
 validation
 thread-safety
 python-usage
-migration
 limitations
 design-notes
 ```

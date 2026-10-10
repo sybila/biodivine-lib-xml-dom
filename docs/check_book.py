@@ -38,7 +38,6 @@ CHAPTERS = {
     "validation.md": "Validating a document",
     "thread-safety.md": "Thread safety",
     "python-usage.md": "Using the Python package",
-    "migration.md": "Migrating from 0.1",
     "limitations.md": "Known limitations and gotchas",
     "design-notes.md": "Design notes",
 }

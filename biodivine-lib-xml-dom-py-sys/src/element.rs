@@ -4,7 +4,7 @@
 //! `Deref`, so this class exposes the element-specific API plus [`PyElement::node`] for the tree
 //! API. The pure-Python `Element` (in `python/biodivine_lib_xml_dom/element.py`) inherits from the
 //! pure-Python `Node` and therefore does offer both in one object; see
-//! `docs/design/BINDINGS.md`.
+//! [`documentation::bindings`](biodivine_lib_xml_dom::documentation::bindings).
 
 use biodivine_lib_xml_dom::{Element, Node};
 use pyo3::prelude::*;

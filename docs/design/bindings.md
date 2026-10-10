@@ -1,21 +1,21 @@
-# Python bindings
+# The Rust and Python bindings
 
-Requirement (6) asks for three layers. They are:
+The Python side is three layers, and the import path shows the split:
 
-```
+```text
 biodivine-lib-xml-dom              the Rust library - no PyO3 code at all
 biodivine-lib-xml-dom-py-sys       a thin PyO3 mirror; its native module is `_sys`
 biodivine_lib_xml_dom              the pure-Python package that wraps `_sys` idiomatically
 ```
 
-The import path shows the split: `biodivine_lib_xml_dom._sys` is the native module and everything
-documented lives in `biodivine_lib_xml_dom`.
+`biodivine_lib_xml_dom._sys` is the native module; everything documented lives in
+`biodivine_lib_xml_dom`.
 
 ## 1. What is mirrored, item by item
 
-Requirement (6) says the wrapper should expose each item "as long as it makes sense". This table is
-the audit of that sentence: it names the binding and the Python name for every public Rust item
-group and gives a verdict, so the "does not make sense" set is visible rather than implicit.
+The wrapper exposes each Rust item where it makes sense to do so. This table is the audit of that
+rule: it names the binding and the Python name for every public Rust item group and gives a verdict,
+so the "does not make sense" set is visible rather than implicit.
 
 | Rust item group | `_sys` binding | Python name | verdict |
 | --- | --- | --- | --- |
@@ -28,7 +28,7 @@ group and gives a verdict, so the "does not make sense" set is visible rather th
 | `Element`'s `Deref<Target = Node>` (so `element.children()` works in Rust) | `Element.node()` | `Element` subclasses `Node` | **mirrored differently in each layer, on purpose**: Rust expresses this with `Deref`, which Python cannot do for a native type, so `_sys` keeps `Element` separate and offers `.node()` (the Rust method), while the pure-Python `Element` inherits from the pure-Python `Node` so a user never has to think about it |
 | `Namespace` (`new`, `without_prefix`, `prefixed`, `uri`, `prefix`, `prefix_str`, `is_equal_ns`) | `Namespace` | `Namespace` | **mirrored**, same names |
 | `QualifiedName` (`new`, `without_namespace`, `with_namespace`, `local_name`, `namespace`, `resolve_element`, `resolve_attribute`) | `QualifiedName` | `QualifiedName` | **mirrored**; Python additionally accepts a plain URI string wherever a namespace is expected |
-| `NodeId` (`index`, `Eq`, `Hash`, `Display`) | `NodeId` | `NodeId` | **mirrored**; no public constructor, because ids are opaque in Rust too (they come from `Node.id`) |
+| `NodeId` (`From<u32>`, `index`, `Eq`, `Hash`, `Display`) | `NodeId` (constructible from an `int`) | `NodeId` | **mirrored**; an id can be built from an integer on both sides, and it resolves only through the document that handed it out (`Document::node` / `Document.node`) |
 | `NodeKind` | `NodeKind` | `NodeKind` | **mirrored** |
 | `NodeContent` (enum) | — | — | **not mirrored.** A native enum with five payload variants would force a discriminator dance in Python; `Node.kind()` plus the typed accessors (`as_element`, `text`, `comment`, `cdata`, `processing_instruction`) express exactly the same information and are what Python code wants |
 | `WriteOptions`, `DeclarationStyle`, `EmptyElementStyle` | same | same | **mirrored** (Python adds `options=None` defaults where Rust has `write_*_with`) |
@@ -37,8 +37,8 @@ group and gives a verdict, so the "does not make sense" set is visible rather th
 | `XmlValidationError`, `XmlValidationErrors`, `ValidationErrorKind` | `ValidationError`, `ValidationErrors` | same | **mirrored**; the kind is exposed both as a stable snake_case string (`kind()`) and as the rule file it comes from (`rule()`) |
 | `Document::parse_string`, `Document::parse_bytes`, `Document::parse_file`, `Document::write_string`, `Document::write_string_with`, `Document::write_file`, `Document::write_file_with` | `Document` static/instance methods with the same names | module-level `parse`, `parse_file`, `write`, `write_file` (+ `options=`) | **mirrored**; Python puts the entry points at module level (its idiom) and delegates to the mirrored `Document` methods; `parse` accepts `str` or `bytes` and the file variants accept any `os.PathLike` |
 | `MAX_NODES` | — | — | **not mirrored**: reachable only with more than four billion nodes in one document; Rust documents it where it is checked |
-| `xml_spec::{NCName, Text, Comment, CData, PiTarget, PiData}` | — | — | **not mirrored.** These types *are* the Rust construction mechanism (requirement (4)(1): validity enforced by the type). Python's equivalents are the raising constructors (`Document.create_text`, `QualifiedName(...)`, `Namespace(...)`), so mirroring the wrapper types would create a second, parallel way to validate names with no benefit |
-| `xml_spec::{rules, validation, declaration}` helpers | — | — | **not mirrored**: developer/test-facing (§ `rules::assert_rule_exists` is for the Rust test suite, `NamespaceScope`/`check_*` are the internal shape of validation) |
+| `xml_spec::{NCName, Text, Comment, CData, PiTarget, PiData}` | — | — | **not mirrored.** These types *are* the Rust construction mechanism: validity is enforced by the type. Python's equivalents are the raising constructors (`Document.create_text`, `QualifiedName(...)`, `Namespace(...)`), so mirroring the wrapper types would create a second, parallel way to validate names with no benefit |
+| `xml_spec::{rules, validation, declaration}`, `xml_spec::rule_set`, `documentation` | — | — | **not mirrored**: these are for Rust developers and for the Rust documentation (`rules::assert_rule_exists` anchors the test suite, `NamespaceScope`/`check_*` are the internal shape of validation, `rule_set` reproduces the specification summaries, `documentation` holds the design notes) |
 | `Namespace::shares_data_with`, `Arena`, `Interner`, the whole-document validation traversal | — | — | crate-internal in Rust, so nothing to mirror |
 
 ### Python-only additions
@@ -148,23 +148,23 @@ The crate's `dev-dependencies` enable `pyo3/auto-initialize` for the same reason
 Writing the wrapper tests surfaced a real defect in the core, which is worth recording because it
 is exactly the kind of thing a second layer notices and a single layer does not.
 
-`Arena` interns the qualified names of a document to avoid duplicate allocations. The interner was
-keyed by `QualifiedName`'s own equality, which compares the local name and the namespace *URI* and
-deliberately ignores the prefix — that is the right notion for the attribute maps, but using it as
-the interner key meant that interning *rewrote* the prefix of a name to whatever prefix was stored
-first. A user could ask for `a` in the default namespace and get `ex:a`, or vice versa, and since the
-prefix is what the serializer writes, the document's output (and possibly its validity) changed
-without any operation reporting anything. Found by
-`tests-python/test_public_surface.py::test_argument_coercion_is_part_of_the_surface`, fixed in
-`src/interner.rs` by keying names structurally (local name plus namespace *including* the prefix),
-and pinned by `src/interner.rs::interning_never_rewrites_a_prefix`.
+The interner deduplicates the qualified names of a document to avoid duplicate allocations. It must
+be keyed by the *structural* name (local name plus namespace including the prefix), not by
+`QualifiedName`'s own equality: that equality deliberately ignores the prefix, because for attribute
+maps only the expanded name matters. Keying the interner by it meant that interning *rewrote* the
+prefix of a name to whatever prefix was stored first: a user could ask for `a` in the default
+namespace and get `ex:a`. Since the prefix is what the serializer writes, the document's output (and
+possibly its validity) changed without any operation reporting anything.
+`src/interner.rs::interning_never_rewrites_a_prefix` pins the behaviour, and
+`tests-python/test_public_surface.py::test_argument_coercion_is_part_of_the_surface` covers it from
+Python.
 
 ## 9. Known gaps
 
 * None of the *functional* API is missing: the gaps listed in §1 (`NodeContent`, the `xml_spec`
   newtypes, `MAX_NODES`) are deliberate and each has a reason.
-* The extension is built for the interpreter that maturin finds; `abi3` was not enabled, so a wheel
-  is specific to one CPython version. Enabling `abi3` is a packaging decision for a release, not a
-  correctness one, and is recorded here rather than silently taken (see PLAN §14 R10).
-* Sphinx documentation for the Python API and the tutorial book are goal G6; this layer only
-  provides the docstrings and the `py.typed` marker they are generated from.
+* The extension is built for the interpreter that maturin finds; `abi3` is not enabled, so a wheel is
+  specific to one CPython version. Enabling it is a packaging decision for a release rather than a
+  correctness one, and is recorded here instead of being taken silently.
+* The Python API reference and the book are generated from the docstrings and the `py.typed` marker
+  this package provides; `docs/design/build.md` explains how to build them.

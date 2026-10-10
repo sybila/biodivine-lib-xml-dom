@@ -1,11 +1,10 @@
 //! Parser and serializer behaviour: well-formedness, entities, namespaces, escaping, options and
 //! round-trip fidelity.
 //!
-//! These tests sit at the I/O seam described in `docs/design/PLAN.md` §12. Rules that this crate
-//! deliberately does *not* enforce (DTD validity, non-UTF-8 encodings) are listed in
-//! `docs/design/evidence/rule-inventory.md`; everything asserted here is annotated with the rule
-//! file it implements, and `rules_referenced_by_the_parser_and_serializer_exist` checks that each
-//! named file is still present.
+//! Rules that this crate deliberately does *not* act on (DTD validity, non-UTF-8 encodings) are
+//! listed in the rule coverage document; everything asserted here is annotated with the rule it
+//! implements, and `rules_referenced_by_the_parser_and_serializer_exist` checks that each named
+//! rule still has a summary.
 
 mod common;
 
@@ -654,7 +653,7 @@ fn namespace_declarations_are_never_invented_or_removed() {
     document.set_root(root.clone());
 
     // The name carries the namespace, but nothing declares the prefix: the serializer writes what
-    // is there and does not "fix" the document (requirement (3)).
+    // is there and does not "fix" the document.
     let serialized = document.write_string().unwrap();
     assert_eq!(serialized, "<ex:item/>");
     assert!(Document::parse_string(&serialized).is_err());
@@ -945,10 +944,9 @@ fn a_deeply_nested_document_round_trips() {
 
 #[test]
 fn rules_referenced_by_the_parser_and_serializer_exist() {
-    // Every rule this module claims to implement must still have its summary file. This is the
-    // check that keeps the annotations in `parse.rs`/`write.rs` honest, and it is what makes the
-    // "layer B/D rules are implemented" claim in `docs/design/evidence/rule-enforcement.md`
-    // checkable rather than asserted.
+    // Every rule this module claims to implement must still have a summary file. This is the check
+    // that keeps the annotations in `parse.rs`/`write.rs` honest, and it is what makes the
+    // corresponding rows of the rule coverage document checkable rather than asserted.
     let rules_referenced = [
         "rule.attributes.char-ref-legal-char",
         "rule.attributes.char-refs-expanded",

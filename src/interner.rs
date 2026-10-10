@@ -1,7 +1,7 @@
 //! Per-document deduplication of repetitive data.
 //!
-//! Requirement (1) asks to keep the `Arc`-based scheme for deduplication of namespaces and other
-//! repetitive data. [`Namespace`] and [`QualifiedName`] already share their payload through an
+//! Namespaces and other repetitive data are deduplicated through `Arc`, not copied:
+//! [`Namespace`] and [`QualifiedName`] share their payload through an
 //! `Arc`, so *cloning* them is cheap; the interner additionally makes sure that a document never
 //! holds two distinct `Arc` allocations for the same value.
 //!

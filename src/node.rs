@@ -363,7 +363,8 @@ impl Node {
     ///
     /// If `child` is already attached somewhere, it is *moved*: it is detached from its previous
     /// parent first. No namespace declarations are added, removed or rewritten by this operation
-    /// (requirement (3)): `Document::validate` reports any resulting inconsistency.
+    /// Editing does not repair namespaces: `Document::validate` reports the resulting
+    /// inconsistency.
     ///
     /// # Panics
     ///
@@ -650,7 +651,7 @@ impl fmt::Display for Node {
     /// (`text`, `<!--comment-->`, `<![CDATA[…]]>`, `<?target data?>`).
     ///
     /// Note that serialization writes exactly the namespace declarations that are stored in the
-    /// tree; it never invents them (requirement (3)).
+    /// tree; it never invents them.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.content() {
             NodeContent::Element(element) => write!(f, "{element}"),
@@ -701,7 +702,7 @@ mod tests {
     use crate::qualified_name::QualifiedName;
     use crate::xml_spec::nc_name;
 
-    /// Requirement (1) asks to keep the `Arc`-based dedup scheme. A subtree copied into another
+    /// Names and namespaces keep their shared `Arc` payload when they are copied. A subtree copied into another
     /// document is re-interned there, so the target document ends up with exactly one allocation
     /// per distinct name/namespace.
     ///

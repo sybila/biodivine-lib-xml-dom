@@ -16,7 +16,7 @@
 //!
 //! * **No policy.** A binding does what the Rust method does, with the same name (in
 //!   `snake_case`), the same arguments and the same result. The rare exceptions are listed with a
-//!   reason in `docs/design/BINDINGS.md`.
+//!   reason in [`documentation::bindings`](biodivine_lib_xml_dom::documentation::bindings).
 //! * **No panics cross the boundary.** Rust has an ergonomic variant that panics and a `_checked`
 //!   variant that returns a `Result`. Python has no panics, so this layer exposes the `_checked`
 //!   semantics under the plain name: a failing operation raises. Nothing in this crate panics on

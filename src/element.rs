@@ -3,7 +3,7 @@
 //! [`Element`] is a newtype around [`Node`] whose payload is guaranteed to be an element. The
 //! invariant is established at construction (the only ways to obtain one are
 //! [`Node::as_element`] and [`Document::create_element`]), so none of the element methods has to
-//! deal with "this is actually a text node" — the type system does it (requirement (4)(1) on the
+//! deal with "this is actually a text node" — the type system does it:
 //! API level).
 //!
 //! All tree operations ([`Node::append_child`], [`Node::detach`], …) are available through
@@ -83,7 +83,7 @@ impl Element {
     ///
     /// As everywhere else, no namespace declaration is added or removed: the new name simply
     /// carries whatever namespace it was built with. `Document::validate` reports the situation if
-    /// the namespace is no longer in scope (requirement (3)).
+    /// the namespace is no longer in scope.
     pub fn set_qualified_name(&self, name: QualifiedName) {
         let id = self.0.id;
         self.0
@@ -100,7 +100,7 @@ impl Element {
     /// All attributes of this element, keyed by expanded name.
     ///
     /// Because the attributes live in a map keyed by [`QualifiedName`], two attributes with the
-    /// same expanded name are unrepresentable — requirement (4)(1) and
+    /// same expanded name are unrepresentable — a locally decidable property — and
     /// [`rule.elements-and-tags.unique-attribute-specification`](crate::xml_spec::rule_set::rule_elements_and_tags_unique_attribute_specification) are enforced by the storage type.
     pub fn attributes(&self) -> BTreeMap<QualifiedName, Arc<str>> {
         let id = self.0.id;
@@ -241,7 +241,7 @@ impl Element {
     /// [`Element::declare_namespace_checked`] to get an error instead.
     ///
     /// No other node is touched: declarations are never propagated into or out of the subtree
-    /// (requirement (3)).
+    /// Editing never repairs namespaces.
     pub fn declare_namespace(&self, namespace: Namespace) {
         let id = self.0.id;
         let prefix = namespace.prefix().cloned();
@@ -318,7 +318,8 @@ impl Element {
     /// declaration.
     ///
     /// Removing a declaration never checks whether anything in the subtree still relies on it
-    /// (requirement (3)); `Document::validate` reports the resulting dangling prefixes.
+    /// Editing never repairs namespaces; `Document::validate` reports the resulting dangling
+    /// prefixes.
     pub fn remove_namespace_declaration(
         &self,
         prefix: Option<&NCName>,
@@ -450,7 +451,7 @@ impl std::fmt::Display for Element {
     /// Renders this element (and its subtree) as XML.
     ///
     /// This delegates to the module-level XML serializer, which writes exactly the namespace
-    /// declarations stored in the tree and never invents new ones (requirement (3)).
+    /// declarations stored in the tree and never invents new ones.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&crate::io::write_element_to_string(self))
     }

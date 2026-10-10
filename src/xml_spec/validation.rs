@@ -5,7 +5,7 @@
 //! results is [`crate::Document::validate`], which produces [`crate::ValidationErrorKind`] values.
 //!
 //! Two rules are worth calling out because they are the ones a "no magic" editing API needs
-//! (requirement (3)):
+//! the editing API keeps out of the way):
 //!
 //! * [`rule.namespace-usage.prefix-declaration-scope`](crate::xml_spec::rule_set::rule_namespace_usage_prefix_declaration_scope) — a declaration applies from the start-tag in
 //!   which it appears to the end of the corresponding end-tag, so it applies to the element itself

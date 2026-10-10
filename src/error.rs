@@ -3,13 +3,13 @@
 //! Errors are grouped by *when* they can occur, because that is what a caller needs to branch on:
 //!
 //! - **construction / specification violations** — raised while validating a single value
-//!   (a name, a string, a namespace). Requirement (4)(1): these are the *locally* decidable
+//!   (a name, a string, a namespace). These are the *locally* decidable
 //!   properties, and they are enforced before anything is stored in a document.
 //! - **document well-formedness** — raised while parsing, i.e. properties that are still
 //!   decidable from a single element but only become relevant in document context.
 //! - **API misuse** — raised by document/tree operations (`append_child`, `replace_with`, …).
 //!
-//! Whole-document integrity (requirement (4)(2)) is *not* reported through this type: it is
+//! Whole-document integrity is *not* reported through this type: it is
 //! collected by `Document::validate` so that every issue can be reported at once.
 
 use crate::node_id::NodeId;
@@ -19,7 +19,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum XmlError {
     // ---------------------------------------------------------------------------------------
-    // Locally decidable specification violations (requirement (4)(1)).
+    // Locally decidable specification violations.
     // ---------------------------------------------------------------------------------------
     /// A string is not a legal XML `Name`, `NCName` or `QName`.
     #[error("invalid XML name: {0}")]
@@ -93,7 +93,7 @@ pub enum XmlError {
     // ---------------------------------------------------------------------------------------
     /// The node belongs to a different [`crate::Document`] than the target of the operation.
     ///
-    /// Attaching nodes across documents is not possible by design (requirement (2)); use
+    /// Attaching nodes across documents is not possible by design; use
     /// [`crate::Node::deep_clone_into`] to copy a subtree into another document instead.
     #[error("the node belongs to a different document")]
     ForeignDocument,

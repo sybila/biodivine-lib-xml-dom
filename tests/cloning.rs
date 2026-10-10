@@ -1,6 +1,6 @@
 //! Clone semantics and cross-document copies.
 //!
-//! Requirement (1) distinguishes three different "clone" operations, and requirement (2) adds the
+//! Three different "clone" operations exist, and cross-document attachment adds the
 //! cross-document copy. All four are covered here, together with the consistency guarantee for
 //! copies taken while the source is being mutated concurrently.
 

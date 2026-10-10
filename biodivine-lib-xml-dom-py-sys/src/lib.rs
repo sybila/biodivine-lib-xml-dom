@@ -43,6 +43,7 @@
 //!
 //! The closures passed to [`Python::detach`] capture only owned Rust values (the Rust types are
 //! `Send + Sync`), never a `Bound`/`Py` reference, which is what PyO3 requires.
+#![deny(rustdoc::broken_intra_doc_links, rustdoc::private_intra_doc_links)]
 
 mod document;
 mod element;

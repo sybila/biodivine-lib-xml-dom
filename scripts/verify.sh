@@ -81,6 +81,7 @@ done
 
 # --- documentation ----------------------------------------------------------------------------
 run env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
+run env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace --document-private-items
 run "$PYTHON" scripts/gen_rule_set.py --check
 run "$PYTHON" scripts/gen_rule_coverage.py --check
 run "$PYTHON" docs/check_doc_sections.py --self-test

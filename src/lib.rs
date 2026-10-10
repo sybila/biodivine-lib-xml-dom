@@ -1,63 +1,85 @@
+#![deny(rustdoc::broken_intra_doc_links, rustdoc::private_intra_doc_links)]
 //! # Biodivine XML DOM
 //!
-//! A Rust library for building, parsing, and manipulating XML documents through a familiar
-//! Document Object Model (DOM) API.
+//! Biodivine XML DOM is a Rust library for building, parsing, editing, validating and serializing
+//! XML documents through a familiar Document Object Model (DOM) API, with full namespace awareness
+//! and documents that can be shared between threads.
 //!
-//! The library is designed for **document manipulation** rather than high-performance streaming.
-//! It trades raw throughput for ergonomics: you can freely create, modify, traverse, clone and
-//! serialize XML trees with full namespace awareness, and a single document can be shared between
-//! threads.
+//! It is built for **document manipulation** rather than high-throughput streaming: a document is a
+//! tree in memory that you can take apart and put together again, and the library's job is to make
+//! that pleasant and hard to get wrong. Names are expanded names rather than prefix strings, the
+//! properties that can be decided locally are enforced while a document is built, everything that
+//! needs a whole-document view is reported by [one validation pass](#validation), and unreachable
+//! nodes are reclaimed by a [garbage collector](#garbage-collection-and-node-ids).
+//!
+//! ## A quick tour
+//!
+//! Building a document and writing it out:
+//!
+//! ```rust
+//! use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
+//!
+//! let document = Document::empty();
+//! let html = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
+//!
+//! let root = document.create_element(QualifiedName::with_namespace("html", &html).unwrap());
+//! root.declare_namespace(html.clone());
+//! document.set_root(root.clone());
+//!
+//! let body = document.create_element(QualifiedName::with_namespace("body", &html).unwrap());
+//! body.set_attribute(QualifiedName::without_namespace("class").unwrap(), "main");
+//! body.append_child(document.create_text("Hello, World!").unwrap());
+//! root.append_child(body);
+//!
+//! let xml = document.write_string().unwrap();
+//! assert!(xml.contains(r#"<html:body class="main">Hello, World!</html:body>"#));
+//! assert!(document.is_valid());
+//! ```
+//!
+//! Parsing a document and walking it:
+//!
+//! ```rust
+//! use biodivine_lib_xml_dom::Document;
+//!
+//! let document = Document::parse_string(
+//!     r#"<root xmlns:ex="http://example.com"><ex:item>one</ex:item></root>"#,
+//! )
+//! .unwrap();
+//!
+//! let root = document.root().unwrap();
+//! let item = &root.child_elements()[0];
+//!
+//! assert_eq!(root.local_name(), "root");
+//! assert_eq!(item.qualified_name().to_string(), "ex:item");
+//! assert_eq!(item.namespace().unwrap().uri(), "http://example.com");
+//! assert_eq!(item.children()[0].text().unwrap().as_str(), "one");
+//! ```
 //!
 //! ## The model
 //!
-//! A [`Document`] is an *arena*: every node payload of one document lives in one vector, and the
-//! public handles — [`Node`] (any node) and [`Element`] (an element) — are a counted reference to
-//! one arena slot plus a clone of the [`Document`] handle. Cloning a handle therefore refers to the
-//! same node (and keeps it alive); the operations that actually duplicate data are
-//! [`Node::shallow_clone`] and [`Node::deep_clone`], and [`Node::deep_clone_into`] copies a subtree
-//! into another document. Nodes that nothing refers to are reclaimed by
-//! [`Document::collect_garbage`].
+//! A [`Document`] is a cheap handle onto shared state, and that state owns one *arena*: a vector of
+//! node slots behind a single reader-writer lock. Nodes refer to each other by slot index, so
+//! internal links are free and cannot form a reference cycle. [`Node`] (any node) and [`Element`]
+//! (an element) are a document handle plus a counted reference to one slot; cloning a handle refers
+//! to the same node and keeps it alive, and the operations that duplicate *data* are
+//! [`Node::shallow_clone`], [`Node::deep_clone`] and [`Node::deep_clone_into`] (which copies a
+//! subtree into another document).
 //!
-//! ```text
-//! Document ── Arc ──▶ RwLock<Arena>          one lock per document
-//!                        ├─ nodes: Vec<NodeData>   (all payloads)
-//!                        └─ root:  Option<NodeId>
-//! Node/Element = { Document, NodeId }          cheap, Send + Sync
-//! ```
+#![doc = include_str!("../docs/assets/model.svg")]
 //!
-//! ## Thread safety
+//! ## Garbage collection and node ids
 //!
-//! Each document owns exactly **one** reader-writer lock. Every method acquires it, does its work
-//! and releases it; internal helpers work directly on the arena and cannot lock. Since there is
-//! only a single lock and it is never re-acquired while held, there is no lock ordering that could
-//! deadlock. Debug builds additionally assert the invariant with a re-entrancy guard.
+//! A node lives while something refers to it from outside the document: a [`Node`]/[`Element`]
+//! handle, or the document root itself, which the document keeps alive on its own. Detaching a node,
+//! dropping a subtree or discarding a copy therefore does not leak: a mark-and-sweep collection
+//! reclaims every node that no handle and no root can reach, and its slot is handed out again by a
+//! later allocation. Collection runs automatically when an arena is full and can be requested with
+//! [`Document::collect_garbage`]; the capacity policy is [`GcConfig`].
 //!
-//! Operations that can fail for *logical* reasons (creating a cycle, attaching a node of another
-//! document, …) come in two flavours: a `_checked` variant returning [`XmlResult`], and an
-//! ergonomic variant that panics with a message describing the failure.
-//!
-//! ## Namespaces
-//!
-//! Element and attribute names are *expanded names* ([`QualifiedName`]: a local name plus an
-//! optional [`Namespace`] holding both the prefix and the URI). Editing operations never add,
-//! remove or rewrite namespace declarations; a document that becomes inconsistent this way is
-//! reported by whole-document validation rather than repaired behind your back.
-//!
-//! ## Integrity
-//!
-//! * *Locally* decidable properties are enforced at construction: [`xml_spec::NCName`],
-//!   [`xml_spec::Text`], [`xml_spec::Comment`], [`xml_spec::CData`], [`xml_spec::PiTarget`] and
-//!   [`xml_spec::PiData`] can only be built from valid input, attributes are keyed by expanded
-//!   name (so duplicates cannot be stored), and the parser turns violations into typed errors
-//!   instead of producing a broken document.
-//! * *Document-wide* properties are the subject of a separate validation pass; see
-//!   [Validation](#validation) below.
-//!
-//! ## Scope
-//!
-//! XML 1.0 (fifth edition) and Namespaces in XML 1.0 (third edition), UTF-8 only. `DOCTYPE`
-//! declarations are read but never processed, so no DTD-defined entity, attribute type or content
-//! model is available.
+//! [`NodeId`] is an arena slot number. It is deliberately *not* a usable reference on its own: the
+//! arena never moves a slot, but a reclaimed slot is reused, so an id only means something while the
+//! node it was created for is alive. [`Document::node`] resolves an id to a [`Node`] — returning
+//! `None` when the slot holds nothing — and a handle, unlike an id, keeps its node alive.
 //!
 //! ## Reading and writing documents
 //!
@@ -234,6 +256,19 @@
 //! }
 //! assert_eq!(root.children().len(), 4);
 //! ```
+//!
+//! ## Where to look next
+//!
+//! | resource | what it gives you |
+//! | --- | --- |
+//! | [`Document`] | the entry point for the whole life cycle: create, parse, edit, validate, serialize |
+//! | [`Node`], [`Element`], [`QualifiedName`], [`Namespace`] | the handles and names you work with |
+//! | [`Document::validate`] and [`ValidationErrorKind`] | whole-document validation and its findings |
+//! | [`xml_spec`] | the specification types, the predicates, and [`xml_spec::rule_set`] with one module per XML rule |
+//! | [`documentation`] | the design notes, the build instructions, the Rust/Python mapping and the [rule coverage](documentation::rule_coverage) |
+//! | the documentation book (`docs/book/`) | tutorials with Rust and Python examples side by side |
+//! | the `biodivine_lib_xml_dom` Python package | the same API with Pythonic wrappers; see [the bindings map](documentation::bindings) |
+//! | `examples/` | runnable programs, including the ones the book embeds |
 
 mod arena;
 mod document;

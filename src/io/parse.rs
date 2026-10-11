@@ -298,7 +298,7 @@ impl<'input> Parser<'input> {
             }
             Event::CData(cdata) => {
                 self.flush_text()?;
-                self.require_inside_root("a CDATA section")?;
+                self.require_inside_root()?;
                 let content = decode_bytes(&cdata, "CDATA section")?;
                 let element = self.stack.last().expect("checked above");
                 let node = self.document.create_cdata(content)?;
@@ -449,14 +449,14 @@ impl<'input> Parser<'input> {
         for attribute in start.attributes() {
             let attribute = attribute.map_err(attribute_error)?;
             let key = decode_bytes(attribute.key.into_inner(), "attribute name")?;
-            if key == "xmlns" || key.starts_with("xmlns:") {
-                continue;
-            }
             if attribute.value.contains(&b'<') {
                 // rule: rule.elements-and-tags.no-less-than-in-attribute-values
                 return Err(XmlError::MalformedXml(format!(
                     "the value of attribute `{key}` contains a `<`"
                 )));
+            }
+            if key == "xmlns" || key.starts_with("xmlns:") {
+                continue;
             }
             // rule: rule.attributes.values-must-be-normalized
             // rule: rule.attributes.entity-refs-expanded
@@ -539,7 +539,7 @@ impl<'input> Parser<'input> {
     fn push_character_data(&mut self, content: &str) -> XmlResult<()> {
         if self.stack.is_empty() {
             // rule: rule.well-formedness.document-production
-            if content.chars().all(char::is_whitespace) {
+            if content.chars().all(crate::xml_spec::is_space) {
                 return Ok(());
             }
             return Err(XmlError::ContentOutsideRoot);
@@ -563,10 +563,9 @@ impl<'input> Parser<'input> {
     }
 
     /// Fails unless the parser is currently inside the root element.
-    fn require_inside_root(&self, what: &str) -> XmlResult<()> {
+    fn require_inside_root(&self) -> XmlResult<()> {
         if self.stack.is_empty() {
             // rule: rule.well-formedness.document-production
-            let _ = what;
             return Err(XmlError::ContentOutsideRoot);
         }
         Ok(())

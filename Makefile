@@ -24,7 +24,7 @@ test-python: python-extension
 	.venv/bin/python -m pytest biodivine-lib-xml-dom-py-sys/tests-python
 
 examples:
-	@for example in $$(ls examples/book_*.rs | sed 's|examples/||; s|\.rs||'); do \
+	@for example in $$(ls examples/book_*.rs examples/tour.rs | sed 's|examples/||; s|\.rs||'); do \
 		echo "== $$example"; cargo run --quiet --example $$example >/dev/null || exit 1; \
 	done
 

@@ -9,7 +9,7 @@ from .element import Element
 from .name import QualifiedName
 from .node import Node, NodeKind
 from .node_id import NodeId
-from .validation import ValidationErrors
+from .validation import ValidationError, ValidationErrors
 from .write_options import WriteOptions, XmlDeclaration
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -141,7 +141,7 @@ class Document:
     def validate(self) -> None:
         """Checks the whole document and raises `XmlValidationError` with **every** problem found.
 
-        The exception carries a :class:`ValidationErrors` sequence in its first argument::
+        The exception carries a :class:`ValidationErrors` sequence in its second argument::
 
             try:
                 document.validate()
@@ -157,9 +157,7 @@ class Document:
         """Every problem found by whole-document validation, as a list (empty when valid)."""
         return ValidationErrors(
             [
-                __import__("biodivine_lib_xml_dom.validation", fromlist=["ValidationError"]).ValidationError(
-                    error
-                )
+                ValidationError(error)
                 for error in self._document.validation_errors()
             ]
         )

@@ -3,8 +3,7 @@
 //! [`Element`] is a newtype around [`Node`] whose payload is guaranteed to be an element. The
 //! invariant is established at construction (the only ways to obtain one are
 //! [`Node::as_element`] and [`Document::create_element`]), so none of the element methods has to
-//! deal with "this is actually a text node" — the type system does it:
-//! API level).
+//! deal with "this is actually a text node" — the type system does it.
 //!
 //! All tree operations ([`Node::append_child`], [`Node::detach`], …) are available through
 //! `Deref<Target = Node>`.
@@ -82,7 +81,7 @@ impl Element {
     /// Changes the name of this element.
     ///
     /// As everywhere else, no namespace declaration is added or removed: the new name simply
-    /// carries whatever namespace it was built with. `Document::validate` reports the situation if
+    /// carries whatever namespace it was built with. [`Document::validate`] reports the situation if
     /// the namespace is no longer in scope.
     pub fn set_qualified_name(&self, name: QualifiedName) {
         let id = self.0.id;
@@ -133,9 +132,9 @@ impl Element {
 
     /// Sets an attribute, overwriting any previous value with the same expanded name.
     ///
-    /// Overwriting is the documented default behaviour required by the task description (a map
-    /// keyed by expanded name cannot hold two entries, and requiring an explicit removal first
-    /// would make the common "update this attribute" case unnecessarily verbose).
+    /// Overwriting is the documented default behaviour (a map keyed by expanded name cannot hold
+    /// two entries, and requiring an explicit removal first would make the common "update this
+    /// attribute" case unnecessarily verbose).
     ///
     /// # Panics
     ///
@@ -239,10 +238,10 @@ impl Element {
     /// The prefix is taken from the [`Namespace`] itself; a namespace without a prefix declares
     /// (or replaces) the default namespace.
     ///
-    /// Overwriting is the documented default behaviour required by the task description. Use
+    /// Overwriting is the documented default behaviour. Use
     /// [`Element::declare_namespace_checked`] to get an error instead.
     ///
-    /// No other node is touched: declarations are never propagated into or out of the subtree
+    /// No other node is touched: declarations are never propagated into or out of the subtree.
     /// Editing never repairs namespaces.
     pub fn declare_namespace(&self, namespace: Namespace) {
         let id = self.0.id;
@@ -319,8 +318,8 @@ impl Element {
     /// `Some(None)` denoting an empty declaration), or `None` if this element had no such
     /// declaration.
     ///
-    /// Removing a declaration never checks whether anything in the subtree still relies on it
-    /// Editing never repairs namespaces; `Document::validate` reports the resulting dangling
+    /// Removing a declaration never checks whether anything in the subtree still relies on it.
+    /// Editing never repairs namespaces; [`Document::validate`] reports the resulting dangling
     /// prefixes.
     pub fn remove_namespace_declaration(
         &self,

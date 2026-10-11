@@ -350,6 +350,17 @@ fn top_level_content_policy() {
         parse_error("<a></a><![CDATA[x]]>"),
         XmlError::ContentOutsideRoot
     ));
+
+    // Only XML whitespace (`S`) may surround the root: a non-breaking space or a form feed is
+    // content, not whitespace, so it is an error rather than being discarded.
+    assert!(matches!(
+        parse_error("<a/>\u{00A0}"),
+        XmlError::ContentOutsideRoot
+    ));
+    assert!(matches!(
+        parse_error("\u{000C}<a/>"),
+        XmlError::ContentOutsideRoot
+    ));
 }
 
 #[test]
@@ -544,6 +555,11 @@ fn less_than_is_rejected_in_attribute_values() {
     rules::assert_rule_exists("rule.attributes.no-lt-in-values");
     assert!(matches!(
         parse_error(r#"<a b="x<y"/>"#),
+        XmlError::MalformedXml(_)
+    ));
+    // ... and the rule covers every attribute, namespace declarations included.
+    assert!(matches!(
+        parse_error(r#"<a xmlns:p="x<y"/>"#),
         XmlError::MalformedXml(_)
     ));
     // ... but an escaped one is fine.

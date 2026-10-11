@@ -337,8 +337,8 @@ impl Document {
     ///
     /// # Panics
     ///
-    /// Panics if `root` belongs to a different document, if it is not an element, or if it is
-    /// already attached to a parent. Use [`Document::set_root_checked`] for the fallible variant.
+    /// Panics if `root` belongs to a different document or if it is already attached to a parent.
+    /// Use [`Document::set_root_checked`] for the fallible variant.
     #[track_caller]
     pub fn set_root(&self, root: Element) -> Option<Element> {
         match self.set_root_checked(root) {
@@ -381,6 +381,11 @@ impl Document {
     }
 
     /// Creates a new, detached element with the given name.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the document already holds [`MAX_NODES`](crate::MAX_NODES) nodes and a collection
+    /// cannot free a slot.
     pub fn create_element(&self, name: QualifiedName) -> Element {
         let node = self
             .write_one("Document::create_element", |arena| {
@@ -402,6 +407,11 @@ impl Document {
     /// Returns [`XmlError::InvalidText`] if the content contains characters that are not legal in
     /// XML ([`rule.well-formedness.legal-characters`](crate::xml_spec::rule_set::rule_well_formedness_legal_characters)), which is checked here so that an invalid
     /// text node cannot be created at all, because validity is enforced by the type.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the document already holds [`MAX_NODES`](crate::MAX_NODES) nodes and a collection
+    /// cannot free a slot.
     pub fn create_text(&self, text: impl AsRef<str>) -> XmlResult<Node> {
         let text = Text::try_from(text.as_ref())?;
         let node = self
@@ -418,6 +428,11 @@ impl Document {
     ///
     /// Returns [`XmlError::InvalidComment`] if the content contains `--` or ends with `-`
     /// ([`rule.well-formedness.comment-no-double-hyphen`](crate::xml_spec::rule_set::rule_well_formedness_comment_no_double_hyphen)).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the document already holds [`MAX_NODES`](crate::MAX_NODES) nodes and a collection
+    /// cannot free a slot.
     pub fn create_comment(&self, comment: impl AsRef<str>) -> XmlResult<Node> {
         let comment = Comment::try_from(comment.as_ref())?;
         let node = self
@@ -434,6 +449,11 @@ impl Document {
     ///
     /// Returns [`XmlError::InvalidCData`] if the content contains `]]>`
     /// ([`rule.document-structure.cdata-section-must-not-contain-cdend`](crate::xml_spec::rule_set::rule_document_structure_cdata_section_must_not_contain_cdend)).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the document already holds [`MAX_NODES`](crate::MAX_NODES) nodes and a collection
+    /// cannot free a slot.
     pub fn create_cdata(&self, cdata: impl AsRef<str>) -> XmlResult<Node> {
         let cdata = CData::try_from(cdata.as_ref())?;
         let node = self
@@ -452,6 +472,11 @@ impl Document {
     /// or matches `xml` case-insensitively ([`rule.well-formedness.pi-target-is-name`](crate::xml_spec::rule_set::rule_well_formedness_pi_target_is_name),
     /// [`rule.well-formedness.pi-target-not-xml`](crate::xml_spec::rule_set::rule_well_formedness_pi_target_not_xml)), or if the content contains `?>`
     /// ([`rule.well-formedness.pi-no-contains-close`](crate::xml_spec::rule_set::rule_well_formedness_pi_no_contains_close)).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the document already holds [`MAX_NODES`](crate::MAX_NODES) nodes and a collection
+    /// cannot free a slot.
     pub fn create_processing_instruction(
         &self,
         target: impl AsRef<str>,

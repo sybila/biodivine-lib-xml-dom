@@ -132,8 +132,8 @@ impl Default for GcConfig {
 
 /// The free fraction, computed without an unchecked integer conversion.
 ///
-/// Both arguments are slot counts and therefore bounded by `MAX_NODES` (`u32::MAX`), which `f64`
-/// represents exactly.
+/// Both arguments are slot counts and therefore bounded by [`MAX_NODES`](crate::MAX_NODES)
+/// (`u32::MAX`), which `f64` represents exactly.
 pub(crate) fn free_fraction(free: usize, capacity: usize) -> f64 {
     let free = u32::try_from(free)
         .expect("the free slot count is bounded by the arena capacity");

@@ -4,8 +4,8 @@
 //! itself, so it can live with the rest of the specification logic. The traversal that feeds these
 //! results is [`crate::Document::validate`], which produces [`crate::ValidationErrorKind`] values.
 //!
-//! Two rules are worth calling out because they are the ones a "no magic" editing API needs
-//! the editing API keeps out of the way):
+//! Two rules are worth calling out because they are the ones that a "no magic" editing API needs
+//! validation to catch (which is what keeps the editing API out of the way):
 //!
 //! * [`rule.namespace-usage.prefix-declaration-scope`](crate::xml_spec::rule_set::rule_namespace_usage_prefix_declaration_scope) — a declaration applies from the start-tag in
 //!   which it appears to the end of the corresponding end-tag, so it applies to the element itself
@@ -15,7 +15,7 @@
 //!   extra twist that an *unprefixed element name* takes whatever default namespace is in scope,
 //!   while an unprefixed *attribute* name never does. Moving an element into a
 //!   default-namespace scope therefore changes the meaning of its name, which is exactly the kind of
-//!   inconsistency the task description asks to detect here rather than to repair silently.
+//!   inconsistency this library detects here rather than repairing silently.
 
 use std::collections::BTreeMap;
 

@@ -68,10 +68,6 @@ class ValidationErrors(list):
     def __init__(self, errors: List[ValidationError]) -> None:
         super().__init__(errors)
 
-    @classmethod
-    def _from_sys(cls, errors: "_sys.ValidationErrors") -> "ValidationErrors":
-        return cls([ValidationError(error) for error in errors.errors()])
-
     def kinds(self) -> List[str]:
         """The kinds of all problems, in order."""
         return [problem.kind for problem in self]

@@ -363,8 +363,8 @@ impl Node {
     /// Appends `child` as the last child of this node.
     ///
     /// If `child` is already attached somewhere, it is *moved*: it is detached from its previous
-    /// parent first. No namespace declarations are added, removed or rewritten by this operation
-    /// Editing does not repair namespaces: `Document::validate` reports the resulting
+    /// parent first. No namespace declarations are added, removed or rewritten by this operation.
+    /// Editing does not repair namespaces: [`Document::validate`] reports the resulting
     /// inconsistency.
     ///
     /// # Panics
@@ -655,13 +655,12 @@ impl fmt::Debug for Node {
 }
 
 impl fmt::Display for Node {
-    /// Renders this node as XML.
+    /// Renders this node as an XML fragment.
     ///
-    /// Elements are serialized with the crate XML serializer; other node kinds are rendered directly
-    /// (`text`, `<!--comment-->`, `<![CDATA[…]]>`, `<?target data?>`).
-    ///
-    /// Note that serialization writes exactly the namespace declarations that are stored in the
-    /// tree; it never invents them.
+    /// Elements are serialized with the crate serializer; comments, CDATA sections and processing
+    /// instructions are written with their delimiters. Text is written *verbatim* and is not
+    /// escaped, so a text node containing `&` or `<` does not form well-formed XML — use
+    /// [`Document::write_string`] to serialize a whole document.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.content() {
             NodeContent::Element(element) => write!(f, "{element}"),

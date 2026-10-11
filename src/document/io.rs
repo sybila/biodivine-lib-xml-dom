@@ -20,7 +20,7 @@ impl Document {
     ///
     /// This is the usual way to create a document from existing XML. The input must be a
     /// well-formed XML 1.0 document with exactly one root element; content outside the root element
-    /// is handled as described in the [parsing contract](Document#parsing).
+    /// is handled as described in the [crate documentation](crate#reading-and-writing-documents).
     ///
     /// # Errors
     ///

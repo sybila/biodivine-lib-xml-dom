@@ -188,7 +188,7 @@ validated_string_newtype! {
     /// Fifth Edition specification. Validity is enforced at construction time via
     /// [`TryFrom`] — once constructed, the value is guaranteed valid.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```rust
     /// use biodivine_lib_xml_dom::xml_spec::NCName;
@@ -215,7 +215,7 @@ validated_string_newtype! {
     as_str_docs {
         /// Returns the `NCName` as a string slice.
         ///
-        /// # Example
+        /// # Examples
         ///
         /// ```rust
         /// use biodivine_lib_xml_dom::xml_spec::NCName;
@@ -234,7 +234,7 @@ validated_string_newtype! {
     ///
     /// Validity is enforced at construction time via [`TryFrom`].
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```rust
     /// use biodivine_lib_xml_dom::xml_spec::Text;
@@ -269,6 +269,14 @@ pub(crate) fn is_legal_char(c: char) -> bool {
     matches!(cp, 0x9 | 0xA | 0xD | 0x20..=0xD7FF | 0xE000..=0xFFFD | 0x10000..=0x10FFFF)
 }
 
+/// Check if a char is XML whitespace per the `S` production.
+///
+/// `S ::= (#x20 | #x9 | #xD | #xA)+`. This is deliberately not [`char::is_whitespace`], which also
+/// accepts characters such as `\u{00A0}` and `\u{000C}` that are not XML whitespace.
+pub(crate) fn is_space(c: char) -> bool {
+    matches!(c, ' ' | '\t' | '\r' | '\n')
+}
+
 validated_string_newtype! {
     /// Represents a valid CDATA section content.
     ///
@@ -277,7 +285,7 @@ validated_string_newtype! {
     ///
     /// Validity is enforced at construction time via [`TryFrom`].
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```rust
     /// use biodivine_lib_xml_dom::xml_spec::CData;
@@ -308,7 +316,7 @@ validated_string_newtype! {
     ///
     /// Validity is enforced at construction time via [`TryFrom`].
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```rust
     /// use biodivine_lib_xml_dom::xml_spec::Comment;
@@ -343,7 +351,7 @@ validated_string_newtype! {
     ///
     /// Validity is enforced at construction time via [`TryFrom`].
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```rust
     /// use biodivine_lib_xml_dom::xml_spec::PiTarget;
@@ -375,7 +383,7 @@ validated_string_newtype! {
     ///
     /// Validity is enforced at construction time via [`TryFrom`].
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```rust
     /// use biodivine_lib_xml_dom::xml_spec::PiData;
@@ -411,8 +419,8 @@ fn is_valid_name(s: &str) -> bool {
 /// NCName = Name - (Char* ':' Char*), where Name uses NameStartChar and NameChar
 /// from XML 1.0 Fifth Edition. This implementation uses the full Unicode ranges.
 ///
-/// Note: This function is private in `xml_spec`, because instead of performing manual checks,
-/// we should be using [`NCName`] struct instead.
+/// This is the raw predicate behind the [`NCName`] newtype (it is the `validate` function that
+/// [`NCName`] is built from); prefer [`NCName`] itself wherever a name is constructed.
 fn is_valid_ncname(s: &str) -> bool {
     is_valid_name_with_colon(s, false)
 }
@@ -729,6 +737,19 @@ mod tests {
         assert!(!is_valid_ncname("a:b"));
         assert!(!is_valid_ncname("a b"));
         assert!(!is_valid_ncname("a!b"));
+    }
+
+    #[test]
+    fn test_space_predicate() {
+        // rule: rule.well-formedness.whitespace-definition
+        verify_rule_exists("rule.well-formedness.whitespace-definition");
+        for space in [' ', '\t', '\r', '\n'] {
+            assert!(is_space(space), "{space:?} is XML whitespace");
+        }
+        // Characters that `char::is_whitespace` accepts but the `S` production does not.
+        for other in ['\u{00A0}', '\u{000C}', '\u{000B}', '\u{0085}', 'x'] {
+            assert!(!is_space(other), "{other:?} is not XML whitespace");
+        }
     }
 
     #[test]

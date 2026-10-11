@@ -3,6 +3,26 @@ name = "biodivine-lib-xml-dom"
 version.workspace = true
 edition = "2024"
 rust-version.workspace = true
+description = "An XML DOM library with safe namespace handling and thread-safe documents."
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["xml", "dom", "namespace", "parser", "serialization"]
+categories = ["parser-implementations", "text-processing"]
+# Keep the published crate to the files the build actually needs: the rule summaries and the design
+# documents are `include_str!`-ed, but the bundled W3C specification HTML, the book sources and the
+# verification scripts are not, so they stay out of the crate archive.
+exclude = [
+    "specification/*.html",
+    "docs/book",
+    "docs/*.py",
+    "docs/build_docs.sh",
+    "docs/requirements.txt",
+    "scripts",
+    ".github",
+    "Makefile",
+]
 
 # The Python bindings live in a separate crate, so the core crate contains no PyO3 code at all.
 # The core crate stays the workspace *root package*, so `src/` and every existing path and test are
@@ -18,6 +38,9 @@ version = "0.2.0"
 # Verified, not aspirational: `cargo +1.88.0 test --workspace` is part of `make verify`, and the CI
 # workflow's `min-rust-version` matches this value.
 rust-version = "1.88"
+license = "MIT"
+authors = ["Sybila"]
+repository = "https://github.com/sybila/biodivine-lib-xml-dom"
 
 # Every public item is documented: `missing_docs` makes that a lint instead of a habit, and the
 # docs gate (`RUSTDOCFLAGS="-D warnings" cargo doc`) turns it into a hard failure.

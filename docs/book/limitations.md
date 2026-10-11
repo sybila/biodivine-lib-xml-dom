@@ -40,10 +40,9 @@ attribute types, no content models, no validity checking. Consequences worth kno
   checked — their *value* shapes are (see the `documentation::rule_coverage` page).
 
 **UTF-8 only.** Other encodings are rejected with a typed error rather than silently mis-decoded.
-The `documentation::rule_coverage` page lists every rule file and whether this library acts on it,
-and `rule-enforcement.md` gives the verdict for each rule in the parser, validation and serializer
-layers — 54 enforced, 6 partial (the DTD half), 4 deferred (UTF-16, DTD validity) and 2 not
-applicable.
+The `documentation::rule_coverage` page lists every rule file and gives the verdict for each rule in
+the parser, validation and serializer layers — 54 enforced, 6 partial (the DTD half), 4 deferred
+(UTF-16, DTD validity) and 2 not applicable.
 
 ## Intended behaviours that surprise people
 
@@ -56,9 +55,12 @@ contract, and the reason edits stay fast and predictable.
 a document assembled through the API can be inconsistent, and until you validate it nothing will tell
 you: the document stays as it is and validation reports it.
 
-**Arena slots are never reclaimed.** `NodeId`s stay valid forever, which is why handles never dangle
-and slots are never reused — but it also means `node_count()` only grows, even for detached nodes.
-Long-running edit loops on one document should be avoided or split across documents.
+**Arena slots are reused after collection.** A `NodeId` stays valid only while the node it was
+created for is alive: the collector reclaims unreachable nodes and hands their slots out again, so
+an id held across a collection can resolve to a different node, or to nothing at all. Keep a handle
+(`Node`/`Element`) whenever a node has to stay put. The arena itself never shrinks or compacts, and
+the name interner only ever grows, so a document that repeatedly builds and discards huge subtrees
+should be recycled as a whole.
 
 **Deep nesting is safe but not free.** Parsing, serialization, `Display` and the clone operations are
 all iterative, so no depth can crash the process; a very deep document still costs memory

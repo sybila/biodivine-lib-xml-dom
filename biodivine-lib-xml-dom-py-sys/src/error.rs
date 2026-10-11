@@ -60,7 +60,7 @@ create_exception!(
     _sys,
     XmlValidationError,
     XmlError,
-    "Whole-document validation found problems; the list is in `args[0]`."
+    "Whole-document validation found problems; the list is in `args[1]`."
 );
 
 /// Maps a Rust [`RustXmlError`] onto the Python exception hierarchy.

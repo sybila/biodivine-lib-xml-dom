@@ -133,7 +133,7 @@ as an exception — Python has no panics.
 
 ## Copying
 
-There are three different kinds of "copy", and they are spelled differently on purpose:
+There are four different kinds of "copy", and they are spelled differently on purpose:
 
 | what you want | Rust | Python |
 | --- | --- | --- |

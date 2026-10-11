@@ -4,7 +4,9 @@ version.workspace = true
 edition = "2024"
 rust-version.workspace = true
 description = "Thin PyO3 wrapper around biodivine-lib-xml-dom (the `_sys` layer)."
-license = "MIT"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [lib]
 name = "biodivine_lib_xml_dom_sys"
@@ -21,7 +23,9 @@ extension-module = ["pyo3/extension-module"]
 workspace = true
 
 [dependencies]
-biodivine-lib-xml-dom = { path = ".." }
+# The `version` must match `[workspace.package] version`; `cargo publish` requires a version
+# alongside the path, and drops the path when it packages the crate.
+biodivine-lib-xml-dom = { version = "0.2.0", path = ".." }
 pyo3 = { version = "0.29", features = ["macros"] }
 
 [dev-dependencies]

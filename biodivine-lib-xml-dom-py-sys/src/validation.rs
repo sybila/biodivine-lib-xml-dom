@@ -112,7 +112,7 @@ impl From<XmlValidationError> for PyXmlValidationError {
 
 /// Every problem found by one validation run.
 ///
-/// This is what the `XmlValidationError` exception carries in `args[0]`: it is a sequence of
+/// This is what the `XmlValidationError` exception carries in `args[1]`: it is a sequence of
 /// [`PyXmlValidationError`], so Python can iterate it directly.
 #[pyclass(
     name = "ValidationErrors",

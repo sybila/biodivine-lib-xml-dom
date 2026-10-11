@@ -45,7 +45,6 @@ fn main() {
                 for _ in 0..50 {
                     total += document.root().unwrap().children().len();
                     let _ = document.write_string().unwrap();
-                    // ANCHOR_END: readers
                 }
                 total
             })
@@ -54,6 +53,7 @@ fn main() {
     for reader in readers {
         assert!(reader.join().unwrap() > 0);
     }
+    // ANCHOR_END: readers
 
     assert_eq!(root.children().len(), 4 * 25);
     assert!(document.is_valid());

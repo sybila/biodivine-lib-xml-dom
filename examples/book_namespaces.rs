@@ -44,8 +44,9 @@ fn main() {
             .uri(),
         "http://default"
     );
-    // ANCHOR: attributes
     // ANCHOR_END: resolve
+
+    // ANCHOR: attributes
     // ... and an unprefixed *attribute* never takes the default namespace.
     assert!(
         child
@@ -54,8 +55,9 @@ fn main() {
             .namespace()
             .is_none()
     );
-    // ANCHOR: xml_prefix
     // ANCHOR_END: attributes
+
+    // ANCHOR: xml_prefix
     // The `xml` prefix needs no declaration.
     assert_eq!(
         child

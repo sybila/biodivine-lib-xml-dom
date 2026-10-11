@@ -696,8 +696,9 @@ impl Arena {
     /// Creates an owned copy of the subtree rooted at `id`.
     ///
     /// When `with_children` is `false` the copy contains no children (a shallow clone). The copy is
-    /// detached and is not the document root. Shared `Arc` payloads (`QualifiedName`, `Namespace`,
-    /// `Arc<str>`) are reused as-is, which is what makes cloning cheap.
+    /// detached and is not the document root. Shared `Arc` payloads ([`QualifiedName`],
+    /// [`Namespace`](crate::Namespace), `Arc<str>`) are reused as-is, which is what makes cloning
+    /// cheap.
     ///
     /// The traversal is iterative (see [`Snapshot`]), so a deeply nested document cannot overflow
     /// the stack.

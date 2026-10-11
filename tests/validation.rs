@@ -747,7 +747,7 @@ fn editing_is_silent_and_validation_is_what_reports() {
 
 #[test]
 fn moving_an_element_can_break_its_namespace_and_validation_says_so() {
-    // Moving an element into a different scope is exactly the case the task description calls out.
+    // Moving an element into a different scope is exactly the case the design notes call out.
     let document = Document::empty();
     let root = element(&document, "root");
     document.set_root(root.clone());

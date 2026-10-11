@@ -10,7 +10,8 @@
 //! - **API misuse** — raised by document/tree operations (`append_child`, `replace_with`, …).
 //!
 //! Whole-document integrity is *not* reported through this type: it is
-//! collected by `Document::validate` so that every issue can be reported at once.
+//! collected by [`Document::validate`](crate::Document::validate) so that every issue can be
+//! reported at once.
 
 use crate::node_id::NodeId;
 use thiserror::Error;

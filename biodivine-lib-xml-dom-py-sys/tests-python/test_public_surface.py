@@ -3,7 +3,7 @@
 The point of this module is to make the package's *interface* a checked property rather than an
 accident: a name that stops resolving, a native ``_sys`` type that starts leaking into the
 documented surface, or a class that can no longer be produced by the documented factories all make
-this file fail. It is the Python counterpart of the `rule-enforcement` and `BINDINGS` audits on the
+this file fail. It is the Python counterpart of the `rule-coverage` and `bindings` audits on the
 Rust side.
 """
 
@@ -18,16 +18,16 @@ import biodivine_lib_xml_dom as xml
 from biodivine_lib_xml_dom import _sys
 
 
-#: Native objects that are deliberately re-exported instead of wrapped, with the reason. They are
-#: value types (an enum and two plain data holders) whose native form is already idiomatic in
-#: Python, and the exception hierarchy, which PyO3 has to define as native types. Everything else in
-#: `__all__` must be a Python class or function defined by this package.
 #: Python classes that exist only to *name* native enum members, rather than to wrap an object:
 #: `NodeKind` is an ordinary Python class whose attributes are the native `_sys.NodeKind` members,
 #: so `node.kind is NodeKind.Element` holds while `NodeKind` itself is defined by this package. This
 #: is a decision, so it is listed here and asserted below rather than passing by accident.
 COMPANION_NAMESPACES = {"NodeKind"}
 
+#: Native objects that are deliberately re-exported instead of wrapped, with the reason. They are
+#: value types (an enum and two plain data holders) whose native form is already idiomatic in
+#: Python, and the exception hierarchy, which PyO3 has to define as native types. Everything else in
+#: `__all__` must be a Python class or function defined by this package.
 NATIVE_RE_EXPORTS = {
     "WriteOptions",
     "DeclarationStyle",
@@ -62,7 +62,6 @@ def test_the_version_is_the_same_in_every_layer() -> None:
     """
     assert xml.__version__ == "0.2.0"
     assert _sys.__version__ == xml.__version__
-    assert xml.__version__ in xml.__doc__ or True  # the docstring need not mention it
 
 
 def test_every_exported_name_resolves() -> None:

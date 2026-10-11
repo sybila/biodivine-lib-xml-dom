@@ -69,9 +69,10 @@ Rust behaviour:
 ::::
 
 The extras are conveniences, not a second API: `node.attributes` is a `dict` instead of a list of
-pairs, `Element.get(name)` reads an attribute by local name, `validation_errors()` returns a `list`
-so `if document.validation_errors():` works, and `Document.create_element_tree(name, *children)`
-builds a parent and its children in one call.
+pairs, `Element.get(name, default=None)` reads an attribute with the same name spellings as
+`Element.attribute`, `validation_errors()` returns a `list` so `if document.validation_errors():`
+works, and `Document.create_element_tree(name, *children)` builds a parent and its children in one
+call.
 
 ## Indexing and iteration
 

@@ -10,6 +10,20 @@ dynamic = ["version"]
 description = "An XML DOM library with safe namespace handling and thread-safe documents."
 requires-python = ">=3.9"
 readme = "../README.md"
+license = "MIT"
+authors = [{ name = "Sybila" }]
+keywords = ["xml", "dom", "namespace"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Text Processing :: Markup :: XML",
+]
+
+[project.urls]
+Homepage = "https://github.com/sybila/biodivine-lib-xml-dom"
+Repository = "https://github.com/sybila/biodivine-lib-xml-dom"
+Documentation = "https://docs.rs/biodivine-lib-xml-dom"
 
 [tool.maturin]
 # The native module is a *private* submodule of the pure-Python package, which is what makes the

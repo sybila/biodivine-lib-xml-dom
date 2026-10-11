@@ -347,7 +347,6 @@ def test_validation_error_carries_every_problem() -> None:
     # ... and the Python wrapper exposes the same list without catching an exception.
     errors = document.validation_errors()
     assert isinstance(errors, xml.ValidationErrors)
-    assert errors.kinds() == sorted(errors.kinds()) or True
     assert sorted(errors.kinds()) == [
         "invalid_xml_lang",
         "invalid_xml_space",

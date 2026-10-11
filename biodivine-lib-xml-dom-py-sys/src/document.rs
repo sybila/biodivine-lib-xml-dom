@@ -157,7 +157,7 @@ impl PyDocument {
 
     /// Checks the whole document and reports **every** problem it can find.
     ///
-    /// Raises `XmlValidationError` whose `args[0]` is a `ValidationErrors` sequence; the message is
+    /// Raises `XmlValidationError` whose `args[1]` is a `ValidationErrors` sequence; the message is
     /// the same multi-line summary Rust produces. Use [`PyDocument::validation_errors`] to get the
     /// list without catching an exception.
     ///

@@ -198,7 +198,11 @@ is organized by feature so that the file tree tells you where something lives:
 | `src/document.rs`, `src/document/io.rs` | `Document` — identity, lock, GC and capacity API; parsing and serialization entry points |
 | `src/arena.rs`, `src/arena/{slot,snapshot,gc,config}.rs` | the arena, its slots, the collector and the capacity policy |
 | `src/ref_count.rs` | the counted external reference |
+| `src/node_id.rs` | the arena slot id (`NodeId`) and the node-count bound (`MAX_NODES`) |
 | `src/node.rs`, `src/element.rs` | the two public handles |
+| `src/namespace.rs`, `src/qualified_name.rs` | the two name types: a namespace with its prefix, and an expanded name |
+| `src/interner.rs` | the per-document name interner |
+| `src/error.rs` | the error type (`XmlError`) and the `XmlResult` alias |
 | `src/io.rs`, `src/io/{parse,write}.rs` | the parser and the serializer implementations |
 | `src/validation.rs` | whole-document validation |
 | `src/xml_spec.rs`, `src/xml_spec/*` | specification types, predicates, validation rules and the rule set |

@@ -295,6 +295,21 @@ impl Document {
         })
     }
 
+    /// Like [`Document::write_one`], but for an edit that can fail (for example because it was
+    /// cancelled), so that the failure is propagated instead of being turned into `None`.
+    #[track_caller]
+    pub(crate) fn write_one_result(
+        &self,
+        operation: &'static str,
+        edit: impl FnOnce(&mut Arena) -> XmlResult<NodeId>,
+    ) -> XmlResult<Node> {
+        self.write_arena(operation, |arena| {
+            let id = edit(arena)?;
+            let reference = arena.external_ref(id).ok_or(XmlError::NodeNotFound(id))?;
+            Ok(Node::from_ref(self.clone(), id, reference))
+        })
+    }
+
     /// Whether two handles refer to the same document.
     pub fn ptr_eq(&self, other: &Document) -> bool {
         Arc::ptr_eq(&self.inner, &other.inner)
@@ -527,15 +542,18 @@ impl Document {
     ///
     /// # Errors
     ///
-    /// Returns [`crate::XmlValidationErrors`] containing one [`crate::XmlValidationError`] per
-    /// problem. Each carries a [`crate::ValidationErrorKind`], the offending [`NodeId`] (or `None`
-    /// for a problem about the document as a whole, such as a missing root element) and a
-    /// human-readable message. The list is deterministic.
+    /// Returns [`XmlError::Validation`] carrying one [`crate::XmlValidationError`] per problem. Each
+    /// carries a [`crate::ValidationErrorKind`], the offending [`NodeId`] (or `None` for a problem
+    /// about the document as a whole, such as a missing root element) and a human-readable message.
+    /// The list is deterministic.
+    ///
+    /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
+    /// while the document is being walked.
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
+    /// use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName, XmlError};
     ///
     /// let document = Document::empty();
     /// let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
@@ -543,26 +561,51 @@ impl Document {
     /// document.set_root(root.clone());
     ///
     /// // The name carries a namespace, but nothing declares the prefix.
-    /// let errors = document.validate().unwrap_err();
-    /// assert_eq!(errors.len(), 1);
+    /// let error = document.validate().unwrap_err();
+    /// assert!(matches!(&error, XmlError::Validation(errors) if errors.len() == 1));
     ///
     /// root.declare_namespace(ex);
     /// assert!(document.validate().is_ok());
     /// ```
-    pub fn validate(&self) -> Result<(), crate::XmlValidationErrors> {
+    pub fn validate(&self) -> XmlResult<()> {
         let errors = self.read_arena("Document::validate", |arena| {
             crate::validation::validate_arena(arena)
-        });
+        })?;
         if errors.is_empty() {
             Ok(())
         } else {
-            Err(errors.into())
+            Err(XmlError::Validation(errors.into()))
         }
     }
 
     /// Whether the document passes [`Document::validate`].
-    pub fn is_valid(&self) -> bool {
-        self.validate().is_ok()
+    ///
+    /// # Errors
+    ///
+    /// Returns [`XmlError::Cancelled`] if a cancellation trigger fires during the walk; a document
+    /// with validation problems is reported as `Ok(false)`.
+    pub fn is_valid(&self) -> XmlResult<bool> {
+        match self.validate() {
+            Ok(()) => Ok(true),
+            Err(XmlError::Validation(_)) => Ok(false),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Every problem found by [`Document::validate`], as a list (empty when the document is valid).
+    ///
+    /// This is the non-raising counterpart of [`Document::validate`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
+    /// while the document is being walked.
+    pub fn validation_errors(&self) -> XmlResult<crate::XmlValidationErrors> {
+        match self.validate() {
+            Ok(()) => Ok(crate::XmlValidationErrors::default()),
+            Err(XmlError::Validation(errors)) => Ok(errors),
+            Err(error) => Err(error),
+        }
     }
 
     /// The number of nodes this document currently holds.
@@ -619,6 +662,12 @@ impl Document {
     /// (a node is never reclaimed while a handle to it exists), it only makes collection slightly
     /// conservative.
     ///
+    /// # Errors
+    ///
+    /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
+    /// during the collection. A collection that is cancelled part-way leaves the document
+    /// consistent; the remaining unreachable nodes are reclaimed by the next collection.
+    ///
     /// # Examples
     ///
     /// ```rust
@@ -628,16 +677,18 @@ impl Document {
     /// let discarded = document.create_text("temporary").unwrap();
     ///
     /// // A handle keeps the node ...
-    /// assert_eq!(document.collect_garbage().collected, 0);
+    /// assert_eq!(document.collect_garbage().unwrap().collected, 0);
     /// assert_eq!(document.node_count(), 1);
     ///
     /// // ... and dropping it makes the node collectable.
     /// drop(discarded);
-    /// assert_eq!(document.collect_garbage().collected, 1);
+    /// assert_eq!(document.collect_garbage().unwrap().collected, 1);
     /// assert_eq!(document.node_count(), 0);
     /// ```
-    pub fn collect_garbage(&self) -> GcStats {
-        self.write_arena("Document::collect_garbage", |arena| arena.collect())
+    pub fn collect_garbage(&self) -> XmlResult<GcStats> {
+        self.write_arena("Document::collect_garbage", |arena| {
+            arena.collect_cancellable()
+        })
     }
 
     /// The number of nodes this document may hold before it considers its arena full.

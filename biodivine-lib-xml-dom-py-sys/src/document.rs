@@ -13,7 +13,6 @@ use crate::gc::PyGcStats;
 use crate::node::PyNode;
 use crate::node_id::PyNodeId;
 use crate::qualified_name::PyQualifiedName;
-use crate::validation::validation_failure;
 use crate::write_options::{PyWriteOptions, PyXmlDeclaration};
 
 /// An XML document.
@@ -167,33 +166,40 @@ impl PyDocument {
     ///     and `args[1]` the `ValidationErrors` sequence.
     pub fn validate(&self, py: Python<'_>) -> PyResult<()> {
         let document = self.inner.clone();
-        py.detach(|| document.validate())
-            .map_err(validation_failure)
+        py.detach(|| cancel_this::on_python(|| document.validate()))
+            .map_err(to_py_err)
     }
 
     /// Every problem found by whole-document validation, as a list (empty when the document is
     /// valid).
     ///
     /// This is the non-raising counterpart of [`PyDocument::validate`].
+    ///
+    /// Raises:
+    ///     KeyboardInterrupt: if a Python interrupt is delivered during the walk.
     pub fn validation_errors(
         &self,
         py: Python<'_>,
-    ) -> Vec<crate::validation::PyXmlValidationError> {
+    ) -> PyResult<Vec<crate::validation::PyXmlValidationError>> {
         let document = self.inner.clone();
-        match py.detach(|| document.validate()) {
-            Ok(()) => Vec::new(),
-            Err(errors) => errors
-                .into_errors()
-                .into_iter()
-                .map(crate::validation::PyXmlValidationError::from)
-                .collect(),
-        }
+        let errors = py
+            .detach(|| cancel_this::on_python(|| document.validation_errors()))
+            .map_err(to_py_err)?;
+        Ok(errors
+            .into_errors()
+            .into_iter()
+            .map(crate::validation::PyXmlValidationError::from)
+            .collect())
     }
 
     /// Whether the document passes [`PyDocument::validate`].
-    pub fn is_valid(&self, py: Python<'_>) -> bool {
+    ///
+    /// Raises:
+    ///     KeyboardInterrupt: if a Python interrupt is delivered during the walk.
+    pub fn is_valid(&self, py: Python<'_>) -> PyResult<bool> {
         let document = self.inner.clone();
-        py.detach(|| document.is_valid())
+        py.detach(|| cancel_this::on_python(|| document.is_valid()))
+            .map_err(to_py_err)
     }
 
     /// The number of nodes this document currently holds.
@@ -221,9 +227,14 @@ impl PyDocument {
     ///
     /// The collector runs automatically when the arena is full, so calling this is only needed to
     /// bound memory earlier, or to observe what is still alive.
-    pub fn collect_garbage(&self, py: Python<'_>) -> PyGcStats {
+    ///
+    /// Raises:
+    ///     KeyboardInterrupt: if a Python interrupt is delivered during the collection.
+    pub fn collect_garbage(&self, py: Python<'_>) -> PyResult<PyGcStats> {
         let document = self.inner.clone();
-        py.detach(|| document.collect_garbage()).into()
+        py.detach(|| cancel_this::on_python(|| document.collect_garbage()))
+            .map(PyGcStats::from)
+            .map_err(to_py_err)
     }
 
     /// The number of nodes this document may hold before it considers its arena full.

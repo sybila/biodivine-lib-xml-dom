@@ -549,7 +549,7 @@ proptest! {
                 "the round trip introduced a validation problem:\n{errors}\nin:\n{serialized}"
             );
         }
-        prop_assert!(document.is_valid());
+        prop_assert!(document.is_valid().unwrap());
     }
 }
 

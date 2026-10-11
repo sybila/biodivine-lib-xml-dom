@@ -9,11 +9,13 @@
 //!   decidable from a single element but only become relevant in document context.
 //! - **API misuse** — raised by document/tree operations (`append_child`, `replace_with`, …).
 //!
-//! Whole-document integrity is *not* reported through this type: it is
-//! collected by [`Document::validate`](crate::Document::validate) so that every issue can be
-//! reported at once.
+//! Whole-document integrity is reported through [`XmlError::Validation`]: [`Document`](crate::Document)
+//! collects every problem in one pass, so a caller sees all of them at once instead of one failed
+//! operation at a time. Long-running operations can also be interrupted and fail with
+//! [`XmlError::Cancelled`].
 
 use crate::node_id::NodeId;
+use crate::validation::XmlValidationErrors;
 use thiserror::Error;
 
 /// The error type returned by fallible operations of this crate.
@@ -129,6 +131,28 @@ pub enum XmlError {
     /// The document root cannot become a child of another node.
     #[error("the document root cannot be attached as a child")]
     CannotAttachRoot,
+
+    // ---------------------------------------------------------------------------------------
+    // Cancellation and whole-document validation.
+    // ---------------------------------------------------------------------------------------
+    /// The operation was cancelled by a [`cancel_this`] cancellation trigger.
+    ///
+    /// The long-running operations of this crate — parsing, serialization, validation,
+    /// cross-document copies and explicit garbage collection — periodically check the cancellation
+    /// triggers registered on the current thread and return this error instead of running to
+    /// completion. Register a trigger around a call with [`cancel_this::on_trigger`] (or one of its
+    /// helpers, such as [`cancel_this::on_timeout`], [`cancel_this::on_atomic`] or, for the Python
+    /// interpreter, [`cancel_this::on_python`]); with no trigger registered the checks are nearly
+    /// free and never fire.
+    #[error(transparent)]
+    Cancelled(#[from] cancel_this::Cancelled),
+
+    /// Whole-document validation found one or more problems.
+    ///
+    /// This is what [`crate::Document::validate`] returns; the individual findings are in the
+    /// [`XmlValidationErrors`].
+    #[error(transparent)]
+    Validation(#[from] XmlValidationErrors),
 
     // ---------------------------------------------------------------------------------------
     // I/O.

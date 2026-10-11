@@ -529,7 +529,7 @@ fn a_detached_subtree_stays_editable_clonable_and_reattachable() {
     assert_eq!(child.child_elements(), vec![extra.clone()]);
 
     // Still deeply clonable while detached.
-    let clone = parent.deep_clone();
+    let clone = parent.deep_clone().unwrap();
     assert_eq!(clone.child_elements().len(), 1);
     assert_eq!(clone.child_elements()[0].child_elements().len(), 1);
     assert!(!clone.is_attached());

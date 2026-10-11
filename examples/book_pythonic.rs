@@ -48,7 +48,7 @@ fn main() {
 
     // ANCHOR: validation
     // Validation is a whole-document call in both languages.
-    assert!(document.is_valid());
+    assert!(document.is_valid().unwrap());
     println!("{} children", children.len());
     // ANCHOR_END: validation
 }

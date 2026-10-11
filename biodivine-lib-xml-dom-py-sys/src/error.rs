@@ -11,6 +11,7 @@
 //! | namespace problems | `XmlNamespaceError` |
 //! | API misuse (foreign document, cycle, bad index, …) | `XmlDocumentError` |
 //! | `Document::validate` failures | `XmlValidationError` |
+//! | cancellation (`cancel_this`) | `KeyboardInterrupt` / `InterruptedError` |
 //! | anything else | `XmlError` |
 //!
 //! `XmlSyntaxError` covers every variant that is a property of the input document — the name,
@@ -68,6 +69,15 @@ pub(crate) fn to_py_err(error: RustXmlError) -> PyErr {
     let message = error.to_string();
     match error {
         RustXmlError::Io(_) => XmlIoError::new_err(message),
+
+        // `cancel_this` turns its own error into `KeyboardInterrupt` (for an interpreter signal) or
+        // `InterruptedError` (for any other trigger), so a Python `KeyboardInterrupt` during a
+        // long-running call is re-raised as itself.
+        RustXmlError::Cancelled(cancelled) => cancelled.into(),
+
+        RustXmlError::Validation(errors) => {
+            crate::validation::validation_failure(errors)
+        }
 
         RustXmlError::InvalidNamespace(_)
         | RustXmlError::ReservedPrefix(_)

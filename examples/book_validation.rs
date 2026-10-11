@@ -28,7 +28,7 @@ fn main() {
     // ANCHOR: problems
     // Every problem is reported in one call, with the node it belongs to and the
     // rule it comes from, so a whole class of issues can be fixed in one sweep.
-    let errors = document.validate().unwrap_err();
+    let errors = document.validation_errors().unwrap();
     assert_eq!(errors.len(), 3);
     for error in &errors {
         println!(
@@ -38,7 +38,7 @@ fn main() {
             error.kind().rule()
         );
     }
-    assert!(!document.is_valid());
+    assert!(!document.is_valid().unwrap());
     // ANCHOR_END: problems
 
     // ANCHOR: fix
@@ -50,7 +50,7 @@ fn main() {
         "preserve",
     );
     root.remove_attribute(&QualifiedName::with_namespace("id", &xml).unwrap());
-    assert!(document.is_valid());
+    assert!(document.is_valid().unwrap());
     // ANCHOR_END: fix
 
     // A parsed document that satisfies the specification is valid too.
@@ -58,6 +58,7 @@ fn main() {
         Document::parse_string(r#"<a xmlns:ex="http://e"><ex:b/></a>"#)
             .unwrap()
             .is_valid()
+            .unwrap()
     );
     println!("ok");
 }

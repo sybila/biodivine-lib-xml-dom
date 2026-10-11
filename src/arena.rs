@@ -210,7 +210,7 @@ impl Arena {
                 return id;
             }
             // The arena is full: reclaim what is unreachable, and grow if that was not enough.
-            self.collect_internal();
+            let _ = self.collect();
             let grow = self.free.is_empty()
                 || self.capacity_free_fraction() < self.config.minimum_free_fraction();
             if grow && !self.grow() {
@@ -238,7 +238,7 @@ impl Arena {
     /// slots (in other words, if `count` exceeds what is left of the limit).
     fn reserve_slots(&mut self, count: usize) {
         while self.free_slots() < count {
-            self.collect_internal();
+            let _ = self.collect();
             if self.free_slots() >= count {
                 return;
             }
@@ -701,14 +701,21 @@ impl Arena {
     /// cheap.
     ///
     /// The traversal is iterative (see [`Snapshot`]), so a deeply nested document cannot overflow
-    /// the stack.
-    pub(crate) fn snapshot(&self, id: NodeId, with_children: bool) -> Snapshot {
+    /// the stack, and it honours cancellation: a trigger registered on this thread aborts the copy
+    /// with [`crate::XmlError::Cancelled`] instead of walking the whole subtree.
+    pub(crate) fn snapshot(
+        &self,
+        id: NodeId,
+        with_children: bool,
+    ) -> XmlResult<Snapshot> {
+        cancel_this::is_cancelled!()?;
         let mut snapshot = Snapshot::default();
         snapshot.nodes.push(self.snapshot_payload(id));
         snapshot.children.push(Vec::new());
         let mut work: Vec<(NodeId, usize)> = vec![(id, 0)];
         if with_children {
             while let Some((source, index)) = work.pop() {
+                cancel_this::is_cancelled!()?;
                 for &child in self.children(source) {
                     let child_index = snapshot.nodes.len();
                     snapshot.nodes.push(self.snapshot_payload(child));
@@ -718,7 +725,7 @@ impl Arena {
                 }
             }
         }
-        snapshot
+        Ok(snapshot)
     }
 
     /// Copies the payload of one node (without children).
@@ -812,9 +819,13 @@ impl Arena {
     }
 
     /// Creates a copy of the subtree rooted at `id` inside this same arena.
-    pub(crate) fn copy_within(&mut self, id: NodeId, with_children: bool) -> NodeId {
-        let snapshot = self.snapshot(id, with_children);
-        self.insert_snapshot(snapshot)
+    pub(crate) fn copy_within(
+        &mut self,
+        id: NodeId,
+        with_children: bool,
+    ) -> XmlResult<NodeId> {
+        let snapshot = self.snapshot(id, with_children)?;
+        Ok(self.insert_snapshot(snapshot))
     }
 
     /// The XML declaration stored for this document, if any.
@@ -1129,11 +1140,11 @@ mod tests {
             Arc::from("v"),
         );
 
-        let shallow = arena.copy_within(parent, false);
+        let shallow = arena.copy_within(parent, false).unwrap();
         assert_eq!(arena.children(shallow).len(), 0);
         assert_eq!(arena.parent(shallow), None);
 
-        let deep = arena.copy_within(parent, true);
+        let deep = arena.copy_within(parent, true).unwrap();
         assert_eq!(arena.children(deep).len(), 1);
         let copied_child = arena.children(deep)[0];
         assert_ne!(copied_child, child);

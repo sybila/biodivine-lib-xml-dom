@@ -55,6 +55,14 @@ contract, and the reason edits stay fast and predictable.
 a document assembled through the API can be inconsistent, and until you validate it nothing will tell
 you: the document stays as it is and validation reports it.
 
+**Cancellation is cooperative and only where it pays off.** The document-wide operations (parsing,
+serializing, validating, cross-document copies, and the explicit `collect_garbage`) check a
+`cancel-this` trigger at each step, so a long one can be stopped; per-node edits do not. A cancelled
+operation changes nothing — a cancelled copy builds nothing in the target and a cancelled collection
+simply leaves the rest for the next one — and reports `XmlError::Cancelled` (a `KeyboardInterrupt` in
+Python). The collector that the allocator triggers on its own is deliberately *not* cancellable,
+because an allocation has to either succeed or fail, not stop half-way.
+
 **Arena slots are reused after collection.** A `NodeId` stays valid only while the node it was
 created for is alive: the collector reclaims unreachable nodes and hands their slots out again, so
 an id held across a collection can resolve to a different node, or to nothing at all. Keep a handle

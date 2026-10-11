@@ -14,14 +14,14 @@ fn main() {
 
     // ANCHOR: collected
     // A handle keeps its node alive; the document root keeps the tree it points at.
-    assert_eq!(document.collect_garbage().collected, 0);
+    assert_eq!(document.collect_garbage().unwrap().collected, 0);
     assert_eq!(document.node_count(), 2);
 
     // Dropping the last handle of a detached node makes it collectable, and the
     // slot is reused.
     let id = scratch.id();
     drop(scratch);
-    let stats = document.collect_garbage();
+    let stats = document.collect_garbage().unwrap();
     assert_eq!(stats.collected, 1);
     assert_eq!(document.node_count(), 1);
 
@@ -32,5 +32,5 @@ fn main() {
 
     // The root is still there, with its subtree, and the document is still valid.
     assert!(document.root().is_some());
-    assert!(document.is_valid());
+    assert!(document.is_valid().unwrap());
 }

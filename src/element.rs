@@ -393,30 +393,50 @@ impl Element {
     ///
     /// Shadowing [`Node::shallow_clone`] so that the result is an [`Element`] again: the copy of
     /// an element is always an element.
-    pub fn shallow_clone(&self) -> Element {
-        Element::new_unchecked(self.0.shallow_clone())
+    ///
+    /// # Errors
+    ///
+    /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
+    /// while the copy is being made.
+    pub fn shallow_clone(&self) -> XmlResult<Element> {
+        Ok(Element::new_unchecked(self.0.shallow_clone()?))
     }
 
     /// Creates a detached, deep copy of this element in the same document.
     ///
     /// See [`Node::deep_clone`] for the details.
-    pub fn deep_clone(&self) -> Element {
-        Element::new_unchecked(self.0.deep_clone())
+    ///
+    /// # Errors
+    ///
+    /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
+    /// while the subtree is being copied.
+    pub fn deep_clone(&self) -> XmlResult<Element> {
+        Ok(Element::new_unchecked(self.0.deep_clone()?))
     }
 
     /// Creates a detached, shallow copy of this element in `target`.
     ///
     /// See [`Node::shallow_clone_into`].
-    pub fn shallow_clone_into(&self, target: &Document) -> Element {
-        Element::new_unchecked(self.0.shallow_clone_into(target))
+    ///
+    /// # Errors
+    ///
+    /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
+    /// while the copy is being made.
+    pub fn shallow_clone_into(&self, target: &Document) -> XmlResult<Element> {
+        Ok(Element::new_unchecked(self.0.shallow_clone_into(target)?))
     }
 
     /// Creates a detached, deep copy of this element in `target`.
     ///
     /// This is the sanctioned way to copy a subtree into another document; see
     /// [`Node::deep_clone_into`].
-    pub fn deep_clone_into(&self, target: &Document) -> Element {
-        Element::new_unchecked(self.0.deep_clone_into(target))
+    ///
+    /// # Errors
+    ///
+    /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
+    /// while the subtree is being copied.
+    pub fn deep_clone_into(&self, target: &Document) -> XmlResult<Element> {
+        Ok(Element::new_unchecked(self.0.deep_clone_into(target)?))
     }
 
     /// Detaches this element from its parent and returns it.

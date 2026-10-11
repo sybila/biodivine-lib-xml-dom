@@ -64,6 +64,14 @@ the interpreter lock while they work, so a long operation in one thread does not
 A document handle is safe to pass to another thread; nodes and elements refer to their document, so
 they stay valid for as long as the document is alive.
 
+## Cancellation
+
+The operations that walk the whole document — parsing, writing, validating, cross-document copies
+and `Document.collect_garbage()` — can be interrupted. A `Ctrl+C` (`KeyboardInterrupt`) delivered
+while one of them runs cancels it and is re-raised as a `KeyboardInterrupt`, instead of being
+ignored until the call returns. The underlying Rust API can likewise be cancelled by any
+[cancel-this](https://crates.io/crates/cancel-this) trigger registered on the calling thread.
+
 ## Garbage collection and node ids
 
 A node lives while something refers to it: a `Node`/`Element` handle, or the document root, which the

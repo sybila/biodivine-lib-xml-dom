@@ -41,7 +41,9 @@ impl Document {
     ///   [`XmlError::InvalidProcessingInstruction`] for illegal nodes;
     /// - [`XmlError::UndeclaredEntityReference`] / [`XmlError::InvalidCharacterReference`] for
     ///   references that cannot be expanded;
-    /// - [`XmlError::DuplicateAttribute`] when one element specifies the same attribute twice.
+    /// - [`XmlError::DuplicateAttribute`] when one element specifies the same attribute twice;
+    /// - [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires while
+    ///   the document is being parsed.
     ///
     /// The function never panics.
     ///
@@ -121,7 +123,8 @@ impl Document {
     ///
     /// Returns [`XmlError::InvalidUtf8`] if the serialized output is not valid UTF-8. This cannot
     /// happen for a document built through this API (every payload is valid UTF-8 by construction),
-    /// so the variant is reported rather than panicking.
+    /// so the variant is reported rather than panicking. Returns [`XmlError::Cancelled`] if a
+    /// cancellation trigger registered on this thread fires while the document is being written.
     ///
     /// # Examples
     ///

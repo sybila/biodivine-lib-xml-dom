@@ -93,7 +93,7 @@ fn main() {
     root.remove_namespace_declaration(Some(&biodivine_lib_xml_dom::xml_spec::nc_name(
         "ex",
     )));
-    assert_eq!(document.validate().unwrap_err().len(), 2);
+    assert_eq!(document.validation_errors().unwrap().len(), 2);
     assert_eq!(
         document.write_string().unwrap(),
         "<ex:root><ex:child/></ex:root>"

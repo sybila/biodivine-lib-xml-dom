@@ -40,7 +40,9 @@ Thread safety
 A document owns exactly one lock, every method acquires and releases it, and no operation ever
 holds two document locks - so a document can be shared freely between threads, and no operation can
 deadlock. Parsing, serializing, validating and cross-document copies release the GIL while they
-work, so a long operation in one thread does not freeze the others.
+work, so a long operation in one thread does not freeze the others. Those same operations can be
+interrupted: a ``KeyboardInterrupt`` (Ctrl+C) delivered while one runs cancels it and is re-raised,
+rather than being ignored until the call returns.
 """
 
 from . import _sys as _sys

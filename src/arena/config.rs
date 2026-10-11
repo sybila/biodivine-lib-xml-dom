@@ -157,7 +157,7 @@ pub(crate) fn free_fraction(free: usize, capacity: usize) -> f64 {
 /// use biodivine_lib_xml_dom::Document;
 ///
 /// let document = Document::empty();
-/// let stats = document.collect_garbage();
+/// let stats = document.collect_garbage().unwrap();
 /// assert_eq!(stats.collected, 0);
 /// assert_eq!(stats.live, 0);
 /// assert_eq!(stats.free, stats.capacity);

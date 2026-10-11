@@ -109,7 +109,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // --- 4: edit an existing document -------------------------------------------------------
     println!("\n4. Editing: move, clone and detach");
     let first_book = root.child_elements()[0].clone();
-    let copy = first_book.deep_clone();
+    let copy = first_book.deep_clone().unwrap();
     println!("deep clone is detached: {}", !copy.is_attached());
     copy.set_attribute(QualifiedName::without_namespace("category")?, "copy");
     root.append_child(copy);
@@ -126,7 +126,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // --- 5: copy a subtree into another document --------------------------------------------
     println!("\n5. Copying between documents");
     let other = Document::empty();
-    let imported = root.deep_clone_into(&other);
+    let imported = root.deep_clone_into(&other).unwrap();
     let _ = other.set_root(imported.clone());
     println!(
         "imported subtree has {} children in the target document",

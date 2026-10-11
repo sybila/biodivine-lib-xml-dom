@@ -56,6 +56,6 @@ fn main() {
     // ANCHOR_END: readers
 
     assert_eq!(root.children().len(), 4 * 25);
-    assert!(document.is_valid());
+    assert!(document.is_valid().unwrap());
     println!("{} children, document valid", root.children().len());
 }

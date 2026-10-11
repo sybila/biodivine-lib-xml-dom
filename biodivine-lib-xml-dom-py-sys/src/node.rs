@@ -232,18 +232,39 @@ impl PyNode {
     }
 
     /// Creates a detached, shallow copy of this node in the same document (no children).
-    pub fn shallow_clone(&self) -> PyNode {
-        PyNode::from(self.inner.shallow_clone())
+    ///
+    /// # Errors
+    ///
+    /// Returns a cancellation error if a `cancel_this` trigger registered on the current thread
+    /// fires while the copy is being made.
+    pub fn shallow_clone(&self) -> PyResult<PyNode> {
+        self.inner
+            .shallow_clone()
+            .map(PyNode::from)
+            .map_err(to_py_err)
     }
 
     /// Creates a detached, deep copy of this subtree in the same document.
-    pub fn deep_clone(&self) -> PyNode {
-        PyNode::from(self.inner.deep_clone())
+    ///
+    /// # Errors
+    ///
+    /// Returns a cancellation error if a `cancel_this` trigger registered on the current thread
+    /// fires while the subtree is being copied.
+    pub fn deep_clone(&self) -> PyResult<PyNode> {
+        self.inner.deep_clone().map(PyNode::from).map_err(to_py_err)
     }
 
     /// Creates a detached, shallow copy of this node in `target`.
-    pub fn shallow_clone_into(&self, target: &PyDocument) -> PyNode {
-        PyNode::from(self.inner.shallow_clone_into(&target.inner))
+    ///
+    /// # Errors
+    ///
+    /// Returns a cancellation error if a `cancel_this` trigger registered on the current thread
+    /// fires while the copy is being made.
+    pub fn shallow_clone_into(&self, target: &PyDocument) -> PyResult<PyNode> {
+        self.inner
+            .shallow_clone_into(&target.inner)
+            .map(PyNode::from)
+            .map_err(to_py_err)
     }
 
     /// Creates a detached, deep copy of this subtree in `target`.
@@ -251,10 +272,19 @@ impl PyNode {
     /// This is the sanctioned way to move a tree between documents. The copy is a point-in-time
     /// snapshot: the source lock is taken for the snapshot only and released before the target is
     /// modified, so the two documents are never locked at the same time. The GIL is released here.
-    pub fn deep_clone_into(&self, py: Python<'_>, target: &PyDocument) -> PyNode {
+    ///
+    /// Raises:
+    ///     KeyboardInterrupt: if a Python interrupt is delivered while the subtree is being copied.
+    pub fn deep_clone_into(
+        &self,
+        py: Python<'_>,
+        target: &PyDocument,
+    ) -> PyResult<PyNode> {
         let node = self.inner.clone();
         let target = target.inner.clone();
-        PyNode::from(py.detach(move || node.deep_clone_into(&target)))
+        py.detach(move || cancel_this::on_python(move || node.deep_clone_into(&target)))
+            .map(PyNode::from)
+            .map_err(to_py_err)
     }
 
     /// Whether two handles refer to the same node of the same document.

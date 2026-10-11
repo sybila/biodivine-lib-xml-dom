@@ -245,6 +245,9 @@ impl<'input> Parser<'input> {
     /// Parses the input.
     fn run(mut self) -> XmlResult<Document> {
         loop {
+            // A long document can take a while to parse, so honour any cancellation trigger that
+            // the caller registered on this thread.
+            cancel_this::is_cancelled!()?;
             let event = self.reader.read_event().map_err(reader_error)?;
             let is_eof = matches!(event, Event::Eof);
             self.handle(event)?;

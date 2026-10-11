@@ -86,6 +86,7 @@ These exist in the Python layer only, and each one is a convenience rather than 
 | invalid/reserved/undeclared namespace prefixes, illegal namespace declarations | `XmlNamespaceError` |
 | foreign document, cycle, not an element, no parent, not a child, index out of bounds, root has a parent, cannot attach root | `XmlDocumentError` |
 | `Document::validate` failures | `XmlValidationError` (with `args[1]` a `ValidationErrors` sequence) |
+| a `cancel_this` cancellation | `KeyboardInterrupt` (interpreter signal) or `InterruptedError` (any other trigger) |
 | anything else | `XmlError` |
 
 All of them derive from `XmlError`, so `except XmlError:` catches everything this library raises and
@@ -108,6 +109,12 @@ document release the GIL, so a long operation in one Python thread does not free
 The closures passed to `Python::detach` capture only owned Rust values (every handle type is
 `Send + Sync`), never a `Bound`/`Py` reference, which is what PyO3 requires. The corresponding
 objects are cloned *before* detaching.
+
+Each of these operations is also wrapped in `cancel_this::on_python`, which registers the
+interpreter's signal check as a cancellation trigger for the duration of the call. A `Ctrl+C` (a
+`KeyboardInterrupt`) delivered while the GIL is released therefore cancels the operation and is
+re-raised in Python, rather than being ignored until the call returns. Because the trigger is only
+registered around these whole-document operations, the cheap per-node edits are unaffected.
 
 ## 4. Deadlock freedom carries over
 

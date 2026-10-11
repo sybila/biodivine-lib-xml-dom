@@ -20,6 +20,10 @@ The parts that are usually awkward are the parts this library gets right:
 * **No namespace magic.** Editing never adds, removes or rewrites a namespace declaration; edits are
   silent and fast, and `validate()` is where you ask. The [documentation book](docs/book) states the
   full contract.
+* **Cancellable long operations.** Parsing, serialization, validation, cross-document copies and
+  explicit garbage collection honour [cancel-this](https://crates.io/crates/cancel-this) triggers
+  registered on the current thread, so a long operation can be aborted; the Python bindings also
+  react to the interpreter's own signals (Ctrl+C).
 
 ## Three layers
 
@@ -50,7 +54,7 @@ let child = document.create_element(QualifiedName::with_namespace("child", &ex).
 child.append_child(document.create_text("Hello, World!").unwrap());
 root.append_child(child);
 
-assert!(document.is_valid());
+assert!(document.is_valid().unwrap());
 assert_eq!(
     document.write_string().unwrap(),
     r#"<ex:root xmlns:ex="http://example.com"><ex:child>Hello, World!</ex:child></ex:root>"#

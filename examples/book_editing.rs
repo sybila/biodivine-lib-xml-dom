@@ -78,10 +78,10 @@ fn main() {
 
     // ANCHOR: clones
     // Clones: `deep_clone` copies the subtree, `shallow_clone` only the node.
-    let deep = root.deep_clone();
+    let deep = root.deep_clone().unwrap();
     assert_eq!(deep.children().len(), root.children().len());
     assert!(!deep.is_attached());
-    let shallow = root.shallow_clone();
+    let shallow = root.shallow_clone().unwrap();
     assert!(shallow.children().is_empty());
     // ANCHOR_END: clones
 
@@ -89,13 +89,13 @@ fn main() {
     // Copying into another document is the sanctioned way to move a tree between
     // documents.
     let target = Document::empty();
-    let imported = root.deep_clone_into(&target);
+    let imported = root.deep_clone_into(&target).unwrap();
     assert!(imported.belongs_to(&target));
     let new_root =
         target.create_element(QualifiedName::without_namespace("wrapper").unwrap());
     target.set_root(new_root.clone());
     new_root.append_child(imported);
-    assert!(target.is_valid());
+    assert!(target.is_valid().unwrap());
 
     println!("{}", document.write_string().unwrap());
     // ANCHOR_END: import

@@ -8,8 +8,8 @@ mod common;
 
 use biodivine_lib_xml_dom::xml_spec::{NCName, nc_name, rules};
 use biodivine_lib_xml_dom::{
-    Document, Element, Namespace, QualifiedName, ValidationErrorKind,
-    XmlValidationError,
+    Document, Element, Namespace, QualifiedName, ValidationErrorKind, XmlError,
+    XmlValidationError, XmlValidationErrors,
 };
 
 use common::element;
@@ -23,11 +23,20 @@ fn xml_name(local: &str) -> QualifiedName {
         .unwrap()
 }
 
+/// The validation problems of a document that is expected to be invalid.
+///
+/// Panics if the document is valid or if validation was cancelled.
+fn validation_errors(document: &Document) -> XmlValidationErrors {
+    match document.validate() {
+        Err(XmlError::Validation(errors)) => errors,
+        Ok(()) => panic!("the document was expected to be invalid"),
+        Err(error) => panic!("unexpected validation failure: {error}"),
+    }
+}
+
 /// Collects the kinds of the issues found, in order.
 fn kinds(document: &Document) -> Vec<ValidationErrorKind> {
-    document
-        .validate()
-        .expect_err("the document was expected to be invalid")
+    validation_errors(document)
         .into_errors()
         .into_iter()
         .map(|error| error.kind().clone())
@@ -36,8 +45,9 @@ fn kinds(document: &Document) -> Vec<ValidationErrorKind> {
 
 /// Asserts that the document is valid.
 fn assert_valid(document: &Document) {
-    if let Err(errors) = document.validate() {
-        panic!("the document was expected to be valid, but:\n{errors}");
+    match document.validate() {
+        Ok(()) => {}
+        Err(error) => panic!("the document was expected to be valid, but:\n{error}"),
     }
 }
 
@@ -50,8 +60,8 @@ fn an_empty_document_has_no_root() {
     // rule: rule.well-formedness.document-production
     rules::assert_rule_exists("rule.well-formedness.document-production");
     let document = Document::empty();
-    assert!(!document.is_valid());
-    let errors = document.validate().unwrap_err();
+    assert!(!document.is_valid().unwrap());
+    let errors = validation_errors(&document);
     assert_eq!(errors.len(), 1);
     let error = &errors.as_slice()[0];
     assert_eq!(error.kind(), &ValidationErrorKind::MissingRoot);
@@ -366,7 +376,7 @@ fn a_detached_copy_does_not_conflict_with_its_original() {
     // A detached clone carries the same `xml:id`. Uniqueness is a property of the *document*, i.e.
     // of the tree reachable from the root, so a detached copy is not a duplicate - which is what
     // makes "clone a subtree, edit it, attach it later" work.
-    let clone = root.deep_clone();
+    let clone = root.deep_clone().unwrap();
     assert_valid(&document);
 
     // Attaching it does create a duplicate, and that is reported.
@@ -391,14 +401,14 @@ fn the_xml_id_policy_is_pinned_in_both_directions() {
 
     // (a) A detached `deep_clone` repeats its original's `xml:id` and must NOT be reported:
     //     uniqueness is a property of the document, i.e. of the tree reachable from the root.
-    let clone = root.deep_clone();
+    let clone = root.deep_clone().unwrap();
     assert_valid(&document);
     assert_eq!(clone.attribute(&xml_name("id")).unwrap().as_ref(), "one");
 
     // (b) Once *both* are attached, the duplicate IS reported - on the later node, once, with the
     //     first node named as the previous user. This is the state a user can actually reach.
     root.append_child(clone.clone());
-    let errors = document.validate().unwrap_err();
+    let errors = validation_errors(&document);
     assert_eq!(errors.len(), 1, "{errors}");
     let error = &errors.as_slice()[0];
     assert_eq!(
@@ -412,7 +422,7 @@ fn the_xml_id_policy_is_pinned_in_both_directions() {
     let third = element(&document, "third");
     third.set_attribute(xml_name("id"), "one");
     root.append_child(third.clone());
-    let errors = document.validate().unwrap_err();
+    let errors = validation_errors(&document);
     assert_eq!(errors.len(), 2, "{errors}");
     assert_eq!(
         errors.iter().map(|error| error.node()).collect::<Vec<_>>(),
@@ -425,7 +435,7 @@ fn the_xml_id_policy_is_pinned_in_both_directions() {
     detached.set_attribute(xml_name("id"), "not a name");
     detached.set_attribute(xml_name("lang"), "de_DE");
     detached.set_attribute(xml_name("space"), "preserved");
-    let errors = document.validate().unwrap_err();
+    let errors = validation_errors(&document);
     let detached_errors: Vec<&XmlValidationError> = errors
         .iter()
         .filter(|error| error.node() == Some(detached.id()))
@@ -446,9 +456,7 @@ fn the_xml_id_policy_is_pinned_in_both_directions() {
     detached.set_attribute(xml_name("id"), "unique");
     detached.set_attribute(xml_name("lang"), "en");
     detached.set_attribute(xml_name("space"), "default");
-    let remaining: Vec<XmlValidationError> = document
-        .validate()
-        .unwrap_err()
+    let remaining: Vec<XmlValidationError> = validation_errors(&document)
         .into_errors()
         .into_iter()
         .filter(|error| error.node() == Some(detached.id()))
@@ -463,26 +471,24 @@ fn consistent_documents_produce_no_structural_issues() {
     // perfectly consistent documents must produce no structural issue at all, or the checks would
     // be "silently starting to produce false positives".
     fn structural(document: &Document) -> Vec<ValidationErrorKind> {
-        document
-            .validate()
-            .err()
-            .map(|errors| {
-                errors
-                    .into_errors()
-                    .into_iter()
-                    .map(|error| error.kind().clone())
-                    .filter(|kind| {
-                        matches!(
-                            kind,
-                            ValidationErrorKind::ParentChildMismatch
-                                | ValidationErrorKind::CyclicStructure
-                                | ValidationErrorKind::RootHasParent
-                                | ValidationErrorKind::RootIsNotAnElement
-                        )
-                    })
-                    .collect()
-            })
-            .unwrap_or_default()
+        match document.validate() {
+            Ok(()) => Vec::new(),
+            Err(XmlError::Validation(errors)) => errors
+                .into_errors()
+                .into_iter()
+                .map(|error| error.kind().clone())
+                .filter(|kind| {
+                    matches!(
+                        kind,
+                        ValidationErrorKind::ParentChildMismatch
+                            | ValidationErrorKind::CyclicStructure
+                            | ValidationErrorKind::RootHasParent
+                            | ValidationErrorKind::RootIsNotAnElement
+                    )
+                })
+                .collect(),
+            Err(error) => panic!("unexpected validation failure: {error}"),
+        }
     }
 
     // No root, no nodes at all: only the missing-root issue, and no structural noise.
@@ -494,7 +500,7 @@ fn consistent_documents_produce_no_structural_issues() {
         "a missing root is the one reachable structural diagnostic"
     );
     assert_eq!(
-        empty.validate().unwrap_err().as_slice()[0].kind(),
+        validation_errors(&empty).as_slice()[0].kind(),
         &ValidationErrorKind::MissingRoot
     );
 
@@ -621,7 +627,7 @@ fn all_problems_are_reported_in_one_call() {
         "v",
     );
 
-    let errors = document.validate().unwrap_err();
+    let errors = validation_errors(&document);
     assert_eq!(errors.len(), 4, "{errors}");
     assert_eq!(
         errors
@@ -658,13 +664,13 @@ fn validation_is_deterministic() {
     root.append_child(element(&document, "a"));
     root.append_child(element(&document, "b"));
 
-    let first = document.validate().unwrap_err();
-    let second = document.validate().unwrap_err();
+    let first = validation_errors(&document);
+    let second = validation_errors(&document);
     assert_eq!(first, second);
     // Two siblings that are both unprefixed inside a default-namespace scope would both be
     // reported, in arena order.
     root.declare_namespace(Namespace::without_prefix("http://d").unwrap());
-    let third = document.validate().unwrap_err();
+    let third = validation_errors(&document);
     assert_eq!(third.len(), 4, "{third}");
 }
 
@@ -687,7 +693,7 @@ fn every_error_kind_names_an_existing_rule_file() {
     root.append_child(child.clone());
     child.set_attribute(xml_name("id"), "not a name");
 
-    let errors = document.validate().unwrap_err();
+    let errors = validation_errors(&document);
     assert!(!errors.is_empty());
     for error in &errors {
         rules::assert_rule_exists(error.kind().rule());
@@ -702,7 +708,7 @@ fn every_error_kind_names_an_existing_rule_file() {
     ));
 
     // Missing-root is the only kind that can be reported without a node.
-    let empty = Document::empty().validate().unwrap_err();
+    let empty = validation_errors(&Document::empty());
     assert_eq!(
         empty.as_slice()[0].kind(),
         &ValidationErrorKind::MissingRoot
@@ -733,7 +739,7 @@ fn editing_is_silent_and_validation_is_what_reports() {
 
     // The breakage is reported by validation, once per affected name: the root and the child both
     // use the `ex` prefix.
-    let errors = document.validate().unwrap_err();
+    let errors = validation_errors(&document);
     assert_eq!(errors.len(), 2, "{errors}");
     assert!(errors.iter().all(|error| matches!(
         error.kind(),
@@ -751,7 +757,7 @@ fn moving_an_element_can_break_its_namespace_and_validation_says_so() {
     let document = Document::empty();
     let root = element(&document, "root");
     document.set_root(root.clone());
-    let plain = root.shallow_clone();
+    let plain = root.shallow_clone().unwrap();
     plain.set_qualified_name(QualifiedName::without_namespace("plain").unwrap());
 
     let elsewhere = document.create_element(
@@ -788,7 +794,7 @@ fn validation_does_not_change_the_document() {
     .unwrap();
     let before = document.write_string().unwrap();
     let _ = document.validate();
-    let _ = document.is_valid();
+    let _ = document.is_valid().unwrap();
     assert_eq!(document.write_string().unwrap(), before);
 }
 
@@ -819,7 +825,7 @@ fn the_error_type_is_a_std_error() {
         Box::new(error)
     }
     let document = Document::empty();
-    let errors = document.validate().unwrap_err();
+    let errors = validation_errors(&document);
     let first = errors.into_errors().into_iter().next().unwrap();
     let boxed = as_error(first);
     assert!(boxed.to_string().contains("no root element"));

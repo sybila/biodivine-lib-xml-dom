@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 use crate::arena::config::free_fraction;
 use crate::arena::{Arena, GcStats, NodeData, Slot};
+use crate::error::XmlResult;
 use crate::node_id::NodeId;
 
 impl Arena {
@@ -30,7 +31,27 @@ impl Arena {
     /// simply not observed, so the node they referred to may survive this collection and be
     /// reclaimed by the next one.
     pub(crate) fn collect(&mut self) -> GcStats {
-        let collected = self.collect_internal();
+        // The allocator calls this path, and allocation is infallible, so cancellation is
+        // deliberately not consulted here: a collection that is skipped or interrupted only leaves
+        // unreachable nodes for the next collection, it never affects correctness.
+        // `collect_internal(false)` therefore cannot return an error.
+        let collected = self
+            .collect_internal(false)
+            .expect("a collection with cancellation disabled cannot be cancelled");
+        self.stats(collected)
+    }
+
+    /// Runs a collection that honours cancellation triggers registered on this thread.
+    ///
+    /// Returns [`crate::XmlError::Cancelled`] if such a trigger fires while the arena is being
+    /// marked or swept. A cancelled collection leaves the arena consistent; the nodes it did not get
+    /// to are reclaimed by the next collection.
+    pub(crate) fn collect_cancellable(&mut self) -> XmlResult<GcStats> {
+        let collected = self.collect_internal(true)?;
+        Ok(self.stats(collected))
+    }
+
+    fn stats(&self, collected: usize) -> GcStats {
         GcStats {
             capacity: self.capacity(),
             live: self.live(),
@@ -40,20 +61,23 @@ impl Arena {
     }
 
     /// The collector proper: mark, sweep, and check the invariants in debug builds.
-    pub(crate) fn collect_internal(&mut self) -> usize {
-        let marked = self.mark();
-        let collected = self.sweep(&marked);
+    fn collect_internal(&mut self, cancellable: bool) -> XmlResult<usize> {
+        let marked = self.mark(cancellable)?;
+        let collected = self.sweep(&marked, cancellable)?;
         #[cfg(debug_assertions)]
         self.debug_check_reference_counts();
-        collected
+        Ok(collected)
     }
 
     /// Marks every node reachable from an external reference or from the document root.
-    fn mark(&self) -> Vec<bool> {
+    fn mark(&self, cancellable: bool) -> XmlResult<Vec<bool>> {
         let mut marked = vec![false; self.slots.len()];
         let mut stack: Vec<NodeId> = Vec::new();
 
         for (index, slot) in self.slots.iter().enumerate() {
+            if cancellable {
+                cancel_this::is_cancelled!()?;
+            }
             if let Some(node) = slot.occupied()
                 && node.external.get() > 0
             {
@@ -66,6 +90,9 @@ impl Arena {
         }
 
         while let Some(id) = stack.pop() {
+            if cancellable {
+                cancel_this::is_cancelled!()?;
+            }
             let Some(slot) = self.occupied(id) else {
                 continue;
             };
@@ -78,7 +105,7 @@ impl Arena {
                 }
             }
         }
-        marked
+        Ok(marked)
     }
 
     /// Marks `id` and schedules it for traversal unless it already is marked.
@@ -97,9 +124,12 @@ impl Arena {
     }
 
     /// Frees every unmarked slot and returns how many there were.
-    fn sweep(&mut self, marked: &[bool]) -> usize {
+    fn sweep(&mut self, marked: &[bool], cancellable: bool) -> XmlResult<usize> {
         let mut collected = 0;
         for index in 0..self.slots.len() {
+            if cancellable {
+                cancel_this::is_cancelled!()?;
+            }
             if marked.get(index).copied().unwrap_or(false) {
                 continue;
             }
@@ -120,7 +150,7 @@ impl Arena {
         }
         #[cfg(debug_assertions)]
         self.debug_check_invariants();
-        collected
+        Ok(collected)
     }
 
     /// Checks every structural invariant of the arena.
@@ -375,7 +405,7 @@ mod tests {
 
         // The snapshot is taken from the rooted tree, inserted into an arena that is far too small,
         // and the copy must be complete afterwards.
-        let snapshot = arena.snapshot(root, true);
+        let snapshot = arena.snapshot(root, true).unwrap();
         let expected = snapshot.nodes.len();
         let copy = arena.insert_snapshot(snapshot);
         assert_eq!(arena.children(copy).len(), 6);

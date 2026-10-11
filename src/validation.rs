@@ -44,6 +44,7 @@
 use std::fmt;
 
 use crate::arena::{Arena, NodeData};
+use crate::error::XmlResult;
 use crate::node_id::NodeId;
 use crate::qualified_name::QualifiedName;
 use crate::xml_spec::validation::{
@@ -276,7 +277,7 @@ impl std::error::Error for XmlValidationError {}
 ///
 /// The list is deterministic (nodes in arena order, and within one node the checks run in a fixed
 /// order), so comparing two validation runs is meaningful.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct XmlValidationErrors {
     errors: Vec<XmlValidationError>,
 }
@@ -343,12 +344,15 @@ impl<'a> IntoIterator for &'a XmlValidationErrors {
 /// This is the implementation behind [`crate::Document::validate`]; it takes the arena rather than
 /// the document so that it cannot acquire the lock again (see the single-lock invariant in
 /// the [design notes](crate::documentation::architecture)).
-pub(crate) fn validate_arena(arena: &Arena) -> Vec<XmlValidationError> {
+///
+/// The walk honours cancellation: a trigger registered on this thread aborts it with
+/// [`crate::XmlError::Cancelled`] instead of scanning the whole document.
+pub(crate) fn validate_arena(arena: &Arena) -> XmlResult<Vec<XmlValidationError>> {
     let mut errors = Vec::new();
-    check_structure(arena, &mut errors);
-    check_nodes(arena, &mut errors);
-    check_xml_id_uniqueness(arena, &mut errors);
-    errors
+    check_structure(arena, &mut errors)?;
+    check_nodes(arena, &mut errors)?;
+    check_xml_id_uniqueness(arena, &mut errors)?;
+    Ok(errors)
 }
 
 /// The structural self-checks.
@@ -358,7 +362,10 @@ pub(crate) fn validate_arena(arena: &Arena) -> Vec<XmlValidationError> {
 /// [`ValidationErrorKind`]'s structural variants). They are cheap, they are what the corresponding
 /// specification rules are about, and they mean a future refactor cannot break the tree model
 /// silently.
-fn check_structure(arena: &Arena, errors: &mut Vec<XmlValidationError>) {
+fn check_structure(
+    arena: &Arena,
+    errors: &mut Vec<XmlValidationError>,
+) -> XmlResult<()> {
     match arena.root() {
         None => errors.push(XmlValidationError::document(
             ValidationErrorKind::MissingRoot,
@@ -383,6 +390,7 @@ fn check_structure(arena: &Arena, errors: &mut Vec<XmlValidationError>) {
     }
 
     for id in arena.occupied_ids() {
+        cancel_this::is_cancelled!()?;
         let Some(parent) = arena.parent(id) else {
             continue;
         };
@@ -425,11 +433,13 @@ fn check_structure(arena: &Arena, errors: &mut Vec<XmlValidationError>) {
             current = arena.parent(node);
         }
     }
+    Ok(())
 }
 
 /// The per-node checks: names against their scope, and attribute values.
-fn check_nodes(arena: &Arena, errors: &mut Vec<XmlValidationError>) {
+fn check_nodes(arena: &Arena, errors: &mut Vec<XmlValidationError>) -> XmlResult<()> {
     for id in arena.occupied_ids() {
+        cancel_this::is_cancelled!()?;
         let NodeData::Element(element) = arena.data(id) else {
             continue;
         };
@@ -462,6 +472,7 @@ fn check_nodes(arena: &Arena, errors: &mut Vec<XmlValidationError>) {
 
         check_xml_attribute_values(id, element, errors);
     }
+    Ok(())
 }
 
 /// The `xml:id`, `xml:lang` and `xml:space` value checks for one element.
@@ -521,9 +532,12 @@ fn check_xml_attribute_values(
 /// the same `xml:id` values as its original, and only the act of attaching it creates the
 /// duplicate that the rule is about. Each node beyond the first one carrying a value gets exactly
 /// one issue, so a value shared by three attached elements produces two issues.
-fn check_xml_id_uniqueness(arena: &Arena, errors: &mut Vec<XmlValidationError>) {
+fn check_xml_id_uniqueness(
+    arena: &Arena,
+    errors: &mut Vec<XmlValidationError>,
+) -> XmlResult<()> {
     let Some(root) = arena.root() else {
-        return;
+        return Ok(());
     };
     // Breadth-first over the attached tree, so detached nodes are not compared: a detached
     // `deep_clone` of a subtree legitimately carries the same `xml:id` values as its original.
@@ -533,10 +547,11 @@ fn check_xml_id_uniqueness(arena: &Arena, errors: &mut Vec<XmlValidationError>) 
     queue.push_back(root);
     let mut visited = 0usize;
     while let Some(id) = queue.pop_front() {
+        cancel_this::is_cancelled!()?;
         visited += 1;
         if visited > arena.live() {
             // Structure problems are reported by `check_structure`; do not loop here as well.
-            return;
+            return Ok(());
         }
         if let NodeData::Element(element) = arena.data(id)
             && let Some(value) = xml_id_attribute(element)
@@ -557,6 +572,7 @@ fn check_xml_id_uniqueness(arena: &Arena, errors: &mut Vec<XmlValidationError>) 
             queue.push_back(child);
         }
     }
+    Ok(())
 }
 
 /// The namespace scope of one node: its own declarations first, then those of its ancestors.

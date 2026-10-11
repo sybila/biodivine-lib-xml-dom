@@ -60,8 +60,8 @@ fn a_document_round_trips_through_the_bindings() {
         root.set_attribute(&PyQualifiedName::without_namespace("a").unwrap(), "v")
             .unwrap();
 
-        assert!(document.is_valid(py));
-        assert!(document.validation_errors(py).is_empty());
+        assert!(document.is_valid(py).unwrap());
+        assert!(document.validation_errors(py).unwrap().is_empty());
         assert_eq!(document.node_count(), 2);
         assert_eq!(
             document.write_string(py, None).unwrap(),
@@ -85,7 +85,7 @@ fn a_parsed_document_is_the_same_tree_as_the_serialized_one() {
         let source =
             r#"<ex:root xmlns:ex="http://example.com"><ex:b a="1">t</ex:b></ex:root>"#;
         let document = PyDocument::parse_string(py, source).unwrap();
-        assert!(document.is_valid(py));
+        assert!(document.is_valid(py).unwrap());
         assert_eq!(document.write_string(py, None).unwrap(), source);
 
         let root = document.root().unwrap();
@@ -119,7 +119,7 @@ fn a_validation_failure_carries_every_problem() {
         )
         .unwrap();
 
-        let problems = document.validation_errors(py);
+        let problems = document.validation_errors(py).unwrap();
         assert_eq!(problems.len(), 2);
         assert_eq!(
             problems
@@ -130,7 +130,7 @@ fn a_validation_failure_carries_every_problem() {
         );
         assert_eq!(problems[0].rule(), "rule.namespace-usage.prefix-declared");
         assert!(document.validate(py).is_err());
-        assert!(!document.is_valid(py));
+        assert!(!document.is_valid(py).unwrap());
     });
 }
 

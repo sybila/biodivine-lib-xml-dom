@@ -33,7 +33,7 @@
 //!
 //! let xml = document.write_string().unwrap();
 //! assert!(xml.contains(r#"<html:body class="main">Hello, World!</html:body>"#));
-//! assert!(document.is_valid());
+//! assert!(document.is_valid().unwrap());
 //! ```
 //!
 //! Parsing a document and walking it:
@@ -157,6 +157,32 @@
 //! See [`ValidationErrorKind`] for the individual findings and [`XmlValidationErrors`] for the
 //! collection a failed validation returns.
 //!
+//! # Cancellation
+//!
+//! The operations that can take time proportional to the document — parsing, serialization,
+//! validation, cross-document copies and explicit garbage collection — cooperate with the
+//! [`cancel_this`] crate. A trigger registered on the current thread with
+//! [`cancel_this::on_trigger`] (or one of its helpers, such as [`cancel_this::on_timeout`] or
+//! [`cancel_this::on_atomic`]) is checked periodically, and a cancelled operation returns
+//! [`XmlError::Cancelled`] instead of running to completion. With no trigger registered the checks
+//! are nearly free and never fire.
+//!
+//! ```rust
+//! use biodivine_lib_xml_dom::{cancel_this, Document, XmlError};
+//!
+//! let document = Document::parse_string("<root><a/></root>").unwrap();
+//!
+//! // A trigger that is already cancelled aborts the walk immediately.
+//! let trigger = cancel_this::CancelAtomic::new();
+//! trigger.cancel();
+//! let result = cancel_this::on_atomic(trigger, || document.validate());
+//! assert!(matches!(result, Err(XmlError::Cancelled(_))));
+//! ```
+//!
+//! The Python bindings additionally register the interpreter's own signal check
+//! ([`cancel_this::on_python`]), so a `KeyboardInterrupt` (Ctrl+C) cancels a running operation and
+//! is re-raised in Python as a `KeyboardInterrupt`.
+//!
 //! # Examples
 //!
 //! ## Building and serializing a document
@@ -225,7 +251,7 @@
 //! assert!(foreign_parent.append_child_checked(child.clone()).is_err());
 //!
 //! // ... but a subtree can be copied.
-//! let copy = root.deep_clone_into(&second);
+//! let copy = root.deep_clone_into(&second).unwrap();
 //! assert!(copy.belongs_to(&second));
 //! assert_eq!(copy.children().len(), 1);
 //! ```
@@ -309,6 +335,11 @@ pub use crate::qualified_name::QualifiedName;
 pub use crate::validation::{
     ValidationErrorKind, XmlValidationError, XmlValidationErrors,
 };
+
+// Re-exported because the trigger types are part of this crate's public API: [`XmlError::Cancelled`]
+// carries a [`cancel_this::Cancelled`], and a caller registers the triggers with
+// [`cancel_this::on_trigger`] and friends.
+pub use cancel_this;
 
 #[cfg(test)]
 mod tests {

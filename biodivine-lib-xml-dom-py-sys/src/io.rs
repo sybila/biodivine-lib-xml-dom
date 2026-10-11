@@ -17,9 +17,11 @@ use crate::write_options::PyWriteOptions;
 /// Parses an XML document from a string; see [`PyDocument::parse_string`].
 pub(crate) fn parse_string(py: Python<'_>, source: &str) -> PyResult<PyDocument> {
     let owned = source.to_owned();
-    py.detach(move || xml::Document::parse_string(&owned))
-        .map(PyDocument::from)
-        .map_err(to_py_err)
+    py.detach(move || {
+        cancel_this::on_python(move || xml::Document::parse_string(&owned))
+    })
+    .map(PyDocument::from)
+    .map_err(to_py_err)
 }
 
 /// Parses an XML document from bytes; see [`PyDocument::parse_bytes`].
@@ -28,14 +30,16 @@ pub(crate) fn parse_bytes(
     data: &Bound<'_, PyBytes>,
 ) -> PyResult<PyDocument> {
     let owned = data.as_bytes().to_vec();
-    py.detach(move || xml::Document::parse_bytes(&owned))
-        .map(PyDocument::from)
-        .map_err(to_py_err)
+    py.detach(move || {
+        cancel_this::on_python(move || xml::Document::parse_bytes(&owned))
+    })
+    .map(PyDocument::from)
+    .map_err(to_py_err)
 }
 
 /// Parses an XML document from a file; see [`PyDocument::parse_file`].
 pub(crate) fn parse_file(py: Python<'_>, path: PathBuf) -> PyResult<PyDocument> {
-    py.detach(move || xml::Document::parse_file(&path))
+    py.detach(move || cancel_this::on_python(move || xml::Document::parse_file(&path)))
         .map(PyDocument::from)
         .map_err(to_py_err)
 }
@@ -48,8 +52,10 @@ pub(crate) fn write_string(
 ) -> PyResult<String> {
     let document = document.inner.clone();
     let options = options.map(xml::WriteOptions::from).unwrap_or_default();
-    py.detach(move || document.write_string_with(&options))
-        .map_err(to_py_err)
+    py.detach(move || {
+        cancel_this::on_python(move || document.write_string_with(&options))
+    })
+    .map_err(to_py_err)
 }
 
 /// Writes a document to a file; see [`PyDocument::write_file`].
@@ -61,6 +67,8 @@ pub(crate) fn write_file(
 ) -> PyResult<()> {
     let document = document.inner.clone();
     let options = options.map(xml::WriteOptions::from).unwrap_or_default();
-    py.detach(move || document.write_file_with(&path, &options))
-        .map_err(to_py_err)
+    py.detach(move || {
+        cancel_this::on_python(move || document.write_file_with(&path, &options))
+    })
+    .map_err(to_py_err)
 }

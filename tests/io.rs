@@ -966,7 +966,13 @@ fn a_deeply_nested_document_round_trips() {
     assert_eq!(reparsed.root().unwrap().to_string(), serialized);
     // Cloning is iterative as well.
     assert_eq!(
-        reparsed.root().unwrap().deep_clone().descendants().len(),
+        reparsed
+            .root()
+            .unwrap()
+            .deep_clone()
+            .unwrap()
+            .descendants()
+            .len(),
         DEPTH
     );
 }

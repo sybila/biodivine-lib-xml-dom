@@ -573,12 +573,22 @@ impl Node {
     ///
     /// The copy has the same name/attributes/namespace declarations (elements) or the same
     /// content (other kinds), but no children. `Arc`-shared payloads are reused, so this is cheap.
-    pub fn shallow_clone(&self) -> Node {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
+    /// while the copy is being made.
+    pub fn shallow_clone(&self) -> XmlResult<Node> {
         self.copy_within(false)
     }
 
     /// Creates a detached, deep copy of this subtree in the same document.
-    pub fn deep_clone(&self) -> Node {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
+    /// while the subtree is being copied.
+    pub fn deep_clone(&self) -> XmlResult<Node> {
         self.copy_within(true)
     }
 
@@ -586,7 +596,12 @@ impl Node {
     ///
     /// Target and source may be the same document, in which case this behaves exactly like
     /// [`Node::shallow_clone`]. No namespace declarations are added or removed.
-    pub fn shallow_clone_into(&self, target: &Document) -> Node {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
+    /// while the copy is being made.
+    pub fn shallow_clone_into(&self, target: &Document) -> XmlResult<Node> {
         self.copy_into(target, false)
     }
 
@@ -609,21 +624,25 @@ impl Node {
     ///
     /// Names and namespaces of the copy are interned into `target`, so the copy shares no
     /// arena-internal structure with the source.
-    pub fn deep_clone_into(&self, target: &Document) -> Node {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
+    /// while the subtree is being copied.
+    pub fn deep_clone_into(&self, target: &Document) -> XmlResult<Node> {
         self.copy_into(target, true)
     }
 
     /// Shared implementation of the same-document clones.
-    fn copy_within(&self, with_children: bool) -> Node {
+    fn copy_within(&self, with_children: bool) -> XmlResult<Node> {
         self.document
-            .write_one("Node::copy_within", |arena| {
-                Some(arena.copy_within(self.id, with_children))
+            .write_one_result("Node::copy_within", |arena| {
+                arena.copy_within(self.id, with_children)
             })
-            .expect("the copy was just created")
     }
 
     /// Shared implementation of the cross-document clones.
-    fn copy_into(&self, target: &Document, with_children: bool) -> Node {
+    fn copy_into(&self, target: &Document, with_children: bool) -> XmlResult<Node> {
         if target.ptr_eq(&self.document) {
             return self.copy_within(with_children);
         }
@@ -632,13 +651,14 @@ impl Node {
             .document
             .read_arena("Node::copy_into (snapshot)", |arena| {
                 arena.snapshot(self.id, with_children)
-            });
+            })?;
         // ... release it, and only then take the target lock.
-        target
+        let node = target
             .write_one("Node::copy_into (insert)", |arena| {
                 Some(arena.insert_snapshot(snapshot))
             })
-            .expect("the copy was just created")
+            .expect("the copy was just created");
+        Ok(node)
     }
 }
 
@@ -731,7 +751,7 @@ mod tests {
 
             let root = source.create_element(name.clone());
             root.declare_namespace(ex.clone());
-            let copy = root.deep_clone_into(&target);
+            let copy = root.deep_clone_into(&target).unwrap();
             (copy, name, ex)
         };
 

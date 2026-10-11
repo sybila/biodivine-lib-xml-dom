@@ -56,7 +56,7 @@ fn shallow_clone_copies_the_payload_but_not_the_children() {
     child.detach();
     let before = document.node_count();
 
-    let clone = child.shallow_clone();
+    let clone = child.shallow_clone().unwrap();
     assert!(!clone.is_attached());
     assert!(!clone.ptr_eq(&child));
     assert_eq!(clone.qualified_name(), child.qualified_name());
@@ -75,7 +75,7 @@ fn shallow_clone_copies_the_payload_but_not_the_children() {
 fn shallow_clone_of_a_text_node_copies_the_content() {
     let document = Document::empty();
     let text = document.create_text("hello").unwrap();
-    let clone = text.shallow_clone();
+    let clone = text.shallow_clone().unwrap();
     assert!(!clone.ptr_eq(&text));
     assert_eq!(clone.text().unwrap().as_str(), "hello");
 }
@@ -86,7 +86,7 @@ fn deep_clone_copies_the_whole_subtree() {
     let (root, _) = namespaced_tree(&document);
     document.set_root(root.clone());
 
-    let clone = root.deep_clone();
+    let clone = root.deep_clone().unwrap();
     assert!(!clone.is_attached());
     assert!(!clone.ptr_eq(&root));
     assert_eq!(clone.qualified_name(), root.qualified_name());
@@ -123,7 +123,7 @@ fn deep_clone_into_another_document_rebuilds_the_tree_there() {
     source.set_root(root.clone());
     let source_nodes = source.node_count();
 
-    let copy = root.deep_clone_into(&target);
+    let copy = root.deep_clone_into(&target).unwrap();
     assert!(copy.belongs_to(&target));
     assert!(!copy.belongs_to(&source));
     assert!(!copy.is_attached());
@@ -166,8 +166,8 @@ fn deep_clone_into_the_same_document_behaves_like_deep_clone() {
     let document = Document::empty();
     let (root, _) = namespaced_tree(&document);
 
-    let via_clone = root.deep_clone();
-    let via_into = root.deep_clone_into(&document);
+    let via_clone = root.deep_clone().unwrap();
+    let via_into = root.deep_clone_into(&document).unwrap();
     assert!(!via_into.is_attached());
     assert_eq!(via_into.children().len(), via_clone.children().len());
     assert_eq!(via_into.qualified_name(), via_clone.qualified_name());
@@ -180,7 +180,7 @@ fn shallow_clone_into_another_document_keeps_only_the_node() {
     let target = Document::empty();
     let (root, _) = namespaced_tree(&source);
 
-    let copy = root.shallow_clone_into(&target);
+    let copy = root.shallow_clone_into(&target).unwrap();
     assert!(copy.belongs_to(&target));
     assert!(copy.children().is_empty());
     assert_eq!(copy.qualified_name(), root.qualified_name());
@@ -195,7 +195,7 @@ fn a_copied_subtree_can_be_attached_in_the_target_document() {
 
     let target_root = element(&target, "wrapper");
     target.set_root(target_root.clone());
-    let copy = root.deep_clone_into(&target);
+    let copy = root.deep_clone_into(&target).unwrap();
     target_root.append_child(copy.clone());
 
     assert!(copy.is_attached());
@@ -223,7 +223,7 @@ fn non_element_nodes_can_be_copied_between_documents() {
         .unwrap();
 
     for node in [&text, &comment, &cdata, &pi] {
-        let copy = node.deep_clone_into(&target);
+        let copy = node.deep_clone_into(&target).unwrap();
         assert!(copy.belongs_to(&target));
         assert_eq!(copy.kind(), node.kind());
         assert_eq!(copy.content(), node.content());
@@ -236,7 +236,7 @@ fn a_deep_copy_can_be_edited_independently_of_its_source() {
     let (root, child) = namespaced_tree(&document);
     document.set_root(root.clone());
 
-    let copy = root.deep_clone();
+    let copy = root.deep_clone().unwrap();
     copy.child_elements()[0]
         .set_attribute(QualifiedName::without_namespace("attr").unwrap(), "changed");
 
@@ -263,7 +263,7 @@ fn a_deep_clone_is_cheap_because_names_are_shared() {
     // crate-internal `re_interns_names_in_the_target_document` test).
     let document = Document::empty();
     let (root, _) = namespaced_tree(&document);
-    let clone = root.deep_clone();
+    let clone = root.deep_clone().unwrap();
 
     assert_eq!(clone.qualified_name(), root.qualified_name());
     assert!(
@@ -379,7 +379,7 @@ fn copying_while_the_source_is_mutated_produces_consistent_copies() {
 
     let mut copies = 0usize;
     for _ in 0..200 {
-        let copy = root.deep_clone_into(&target);
+        let copy = root.deep_clone_into(&target).unwrap();
         assert!(copy.belongs_to(&target));
         assert!(!copy.is_attached());
         assert_subtree_consistent(&copy.as_element().unwrap());

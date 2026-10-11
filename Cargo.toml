@@ -76,6 +76,7 @@ iter_over_hash_type = "warn"
 proptest = "1"
 
 [dependencies]
+cancel-this = { version = "0.6", default-features = false }
 parking_lot = "0.12"
 quick-xml = "0.41"
 thiserror = "2.0"

@@ -296,32 +296,63 @@ impl PyElement {
     }
 
     /// Creates a detached, shallow copy of this element in the same document.
-    pub fn shallow_clone(&self) -> PyElement {
-        PyElement::from(self.inner.shallow_clone())
+    ///
+    /// # Errors
+    ///
+    /// Returns a cancellation error if a `cancel_this` trigger registered on the current thread
+    /// fires while the copy is being made.
+    pub fn shallow_clone(&self) -> PyResult<PyElement> {
+        self.inner
+            .shallow_clone()
+            .map(PyElement::from)
+            .map_err(to_py_err)
     }
 
     /// Creates a detached, deep copy of this subtree in the same document.
-    pub fn deep_clone(&self) -> PyElement {
-        PyElement::from(self.inner.deep_clone())
+    ///
+    /// # Errors
+    ///
+    /// Returns a cancellation error if a `cancel_this` trigger registered on the current thread
+    /// fires while the subtree is being copied.
+    pub fn deep_clone(&self) -> PyResult<PyElement> {
+        self.inner
+            .deep_clone()
+            .map(PyElement::from)
+            .map_err(to_py_err)
     }
 
     /// Creates a detached, deep copy of this subtree in `target`. The GIL is released here.
+    ///
+    /// Raises:
+    ///     KeyboardInterrupt: if a Python interrupt is delivered while the subtree is being copied.
     pub fn deep_clone_into(
         &self,
         py: Python<'_>,
         target: &crate::document::PyDocument,
-    ) -> PyElement {
+    ) -> PyResult<PyElement> {
         let element = self.inner.clone();
         let target = target.inner.clone();
-        PyElement::from(py.detach(move || element.deep_clone_into(&target)))
+        py.detach(move || {
+            cancel_this::on_python(move || element.deep_clone_into(&target))
+        })
+        .map(PyElement::from)
+        .map_err(to_py_err)
     }
 
     /// Creates a detached, shallow copy of this element in `target`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a cancellation error if a `cancel_this` trigger registered on the current thread
+    /// fires while the copy is being made.
     pub fn shallow_clone_into(
         &self,
         target: &crate::document::PyDocument,
-    ) -> PyElement {
-        PyElement::from(self.inner.shallow_clone_into(&target.inner))
+    ) -> PyResult<PyElement> {
+        self.inner
+            .shallow_clone_into(&target.inner)
+            .map(PyElement::from)
+            .map_err(to_py_err)
     }
 
     /// Whether this element and `other` refer to the same node.

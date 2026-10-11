@@ -123,7 +123,7 @@ fn readers_and_writers_do_not_deadlock() {
                     let child = element(&document, &format!("w{worker}i{iteration}"));
                     child.append_child(document.create_text("payload").unwrap());
                     root.append_child(child.clone());
-                    let copy = child.deep_clone();
+                    let copy = child.deep_clone().unwrap();
                     copy.detach();
                     child.detach();
                 } else {

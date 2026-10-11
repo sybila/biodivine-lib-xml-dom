@@ -243,6 +243,8 @@ fn write_subtree<W: Write>(
     let mut buffer = String::new();
 
     while let Some(task) = tasks.pop() {
+        // Serializing a large document walks the whole tree, so honour cancellation.
+        cancel_this::is_cancelled!()?;
         match task {
             Task::Exit(name) => {
                 writer.write_event(Event::End(BytesEnd::new(name)))?;

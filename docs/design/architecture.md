@@ -149,6 +149,23 @@ Handles are `Send + Sync`, and so is `Document`; the counted reference is atomic
 bindings release the interpreter lock around whole-document work (parsing, serializing, validating,
 copying), so a long operation in one thread does not freeze others.
 
+### 4.1 Cancellation
+
+The operations that can take time proportional to the document — parsing, serialization,
+validation, cross-document copies and explicit garbage collection — are *cooperatively
+cancellable* through the [`cancel_this`](https://crates.io/crates/cancel-this) crate. A trigger is
+registered on the current thread (`cancel_this::on_trigger` and friends), the operation checks it at
+every step of its walk, and a cancelled operation returns `XmlError::Cancelled` rather than running
+to completion. There is no cancellation token in any signature: the trigger lives in a thread-local
+scope, so the check is nearly free when nothing is registered.
+
+Cancellation is designed to leave the document consistent. A cancelled collection simply leaves the
+unreachable nodes it had not reached for the next collection; a cancelled copy builds nothing in the
+target. The collector invoked *implicitly* by the allocator is deliberately not cancellable, because
+allocation is infallible; only the explicit `collect_garbage` honours triggers. The Python bindings
+register the interpreter's own signal check (`cancel_this::on_python`) around every operation that
+releases the GIL, so a `KeyboardInterrupt` aborts it and surfaces as a `KeyboardInterrupt`.
+
 ## 5. Errors
 
 Two error styles coexist on purpose:

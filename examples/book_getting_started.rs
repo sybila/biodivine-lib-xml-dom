@@ -32,7 +32,7 @@ fn main() {
             r#"<ex:child id="first">Hello, World!</ex:child></ex:root>"#
         )
     );
-    assert!(document.is_valid());
+    assert!(document.is_valid().unwrap());
     // ANCHOR_END: serialize
 
     // ANCHOR: names

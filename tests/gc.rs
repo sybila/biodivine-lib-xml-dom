@@ -67,13 +67,13 @@ fn a_collected_slot_is_reused_by_the_next_allocation() {
     let first_id = first.id();
 
     // While the handle exists, nothing is collected.
-    assert_eq!(document.collect_garbage().collected, 0);
+    assert_eq!(document.collect_garbage().unwrap().collected, 0);
     assert_eq!(document.node_count(), 1);
 
     // Dropping the handle makes the node unreachable: the collection reclaims it and the id stops
     // resolving until something else reuses the slot.
     drop(first);
-    let stats = document.collect_garbage();
+    let stats = document.collect_garbage().unwrap();
     assert_eq!(stats.collected, 1);
     assert_eq!(stats.live, 0);
     assert!(document.node(first_id).is_none());
@@ -89,7 +89,7 @@ fn the_document_root_keeps_its_tree_alive_without_any_handle() {
     let expected = document.write_string().unwrap();
 
     // No handle to any node of the tree exists here: the document itself is the only owner.
-    let stats = document.collect_garbage();
+    let stats = document.collect_garbage().unwrap();
     assert_eq!(stats.collected, 0);
     assert_eq!(stats.live, 17);
     assert_eq!(document.write_string().unwrap(), expected);
@@ -105,7 +105,7 @@ fn a_handle_keeps_a_detached_subtree_alive() {
 
     // Only `kept` stays referenced by a handle.
     drop(discarded);
-    let stats = document.collect_garbage();
+    let stats = document.collect_garbage().unwrap();
     assert_eq!(
         stats.collected, 1,
         "only the unreferenced node is reclaimed"
@@ -132,7 +132,7 @@ fn a_handle_keeps_its_ancestors_reachable() {
     let root_id = root.id();
     document.clear_root();
     drop(root);
-    let stats = document.collect_garbage();
+    let stats = document.collect_garbage().unwrap();
     assert_eq!(
         stats.collected, 0,
         "the detached chain is reachable through the handle"
@@ -162,7 +162,7 @@ fn an_unreachable_detached_forest_is_reclaimed() {
     }
     assert_eq!(document.node_count(), rooted + 40);
 
-    let stats = document.collect_garbage();
+    let stats = document.collect_garbage().unwrap();
     assert_eq!(stats.collected, 40);
     assert_eq!(document.node_count(), rooted);
     assert!(document.validate().is_ok());
@@ -201,7 +201,7 @@ fn a_manual_collection_does_not_grow_the_capacity() {
     let handles: Vec<_> = (0..4)
         .map(|index| document.create_text(format!("{index}")).unwrap())
         .collect();
-    let stats = document.collect_garbage();
+    let stats = document.collect_garbage().unwrap();
     assert_eq!(stats.collected, 0);
     assert_eq!(stats.capacity, capacity);
     assert_eq!(stats.free, 0);
@@ -211,7 +211,7 @@ fn a_manual_collection_does_not_grow_the_capacity() {
 #[test]
 fn stats_describe_the_capacity_policy() {
     let document = tree(5);
-    let stats = document.collect_garbage();
+    let stats = document.collect_garbage().unwrap();
     assert_eq!(stats.capacity, document.capacity());
     assert_eq!(stats.live, document.node_count());
     assert_eq!(stats.capacity, stats.live + stats.free);
@@ -233,7 +233,7 @@ fn a_collection_during_a_cross_document_copy_keeps_the_copy_intact() {
         garbage.append_child(target.create_text("payload").unwrap());
     }
 
-    let copy = source.root().unwrap().deep_clone_into(&target);
+    let copy = source.root().unwrap().deep_clone_into(&target).unwrap();
     assert!(
         !copy.is_attached(),
         "a copy is detached until it is attached"
@@ -268,7 +268,7 @@ fn a_collection_during_a_same_document_copy_keeps_the_copy_intact() {
     // arena is tiny; what matters is that garbage exists when the copy starts.
     assert!(document.node_count() > tree_nodes);
 
-    let copy = root.deep_clone();
+    let copy = root.deep_clone().unwrap();
 
     // The copy is complete and the garbage is gone, which proves that the copy itself collected:
     // had it not, the twenty unreachable nodes would still be here.
@@ -277,7 +277,7 @@ fn a_collection_during_a_same_document_copy_keeps_the_copy_intact() {
     assert!(!copy.is_attached());
     assert_eq!(document.node_count(), 2 * tree_nodes);
     assert_eq!(
-        document.collect_garbage().collected,
+        document.collect_garbage().unwrap().collected,
         0,
         "the collection inside the copy should already have reclaimed the garbage"
     );
@@ -291,7 +291,7 @@ fn clearing_and_replacing_the_root_leaves_the_returned_subtree_alive() {
     let previous = document.clear_root().expect("the tree has a root");
     assert!(document.root().is_none());
 
-    let stats = document.collect_garbage();
+    let stats = document.collect_garbage().unwrap();
     assert_eq!(stats.collected, 0, "the returned handle keeps the old tree");
     assert_eq!(previous.children().len(), 4);
 
@@ -310,7 +310,7 @@ fn nodes_enumerates_only_the_live_set() {
     drop(with_detached);
 
     drop(detached);
-    assert_eq!(document.collect_garbage().collected, 1);
+    assert_eq!(document.collect_garbage().unwrap().collected, 1);
     let live = document.nodes();
     assert_eq!(live.len(), total - 1);
     for node in &live {
@@ -344,7 +344,7 @@ fn handles_released_by_another_thread_are_safe_while_collecting() {
         thread::spawn(move || {
             let mut total = 0;
             for _ in 0..200 {
-                total += document.collect_garbage().collected;
+                total += document.collect_garbage().unwrap().collected;
             }
             total
         })
@@ -364,9 +364,9 @@ fn handles_released_by_another_thread_are_safe_while_collecting() {
     // reclaims whatever survived a cycle it raced with, and a second one has nothing left to do.
     // (A node released while a collection was reading the reference count survives that collection
     // and is reclaimed by a later one, which is why the running collector may not have seen it.)
-    let leftovers = document.collect_garbage().collected;
+    let leftovers = document.collect_garbage().unwrap().collected;
     assert_eq!(document.node_count(), 21, "only the rooted tree is left");
-    assert_eq!(document.collect_garbage().collected, 0);
+    assert_eq!(document.collect_garbage().unwrap().collected, 0);
     assert_eq!(document.root().unwrap().children().len(), 10);
     assert!(
         collected_during_the_run + leftovers > 0,
@@ -381,7 +381,7 @@ fn a_collection_does_not_disturb_document_identity_or_handles() {
     let child = root.children()[0].clone();
 
     let clone = document.clone();
-    assert_eq!(document.collect_garbage().collected, 0);
+    assert_eq!(document.collect_garbage().unwrap().collected, 0);
     assert!(clone.ptr_eq(&document));
     assert!(root.belongs_to(&clone));
     assert!(child.parent().unwrap().ptr_eq(&root));

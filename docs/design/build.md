@@ -144,10 +144,12 @@ cargo +nightly miri test --test gc -- --skip handles_released_by_another_thread
 ```
 
 `scripts/verify.sh` runs both when the component is available and reports the run as *skipped* when
-it is not, so a missing component is never mistaken for a pass. The two-thread garbage-collection
-test is excluded from the second command: `parking_lot` aborts inside Miri's futex shim, so lock
-contention cannot be checked there. `-Zmiri-disable-isolation` is only needed because a test helper
-reads the rule summaries from the working tree.
+it is not — and it counts the skip as a failure, so a missing component can never be mistaken for a
+pass. In other words, **a fully green `make verify` needs a nightly toolchain with Miri installed**;
+without it every other gate still runs, and the summary names the missing one. The two-thread
+garbage-collection test is excluded from the second command: `parking_lot` aborts inside Miri's
+futex shim, so lock contention cannot be checked there. `-Zmiri-disable-isolation` is only needed
+because a test helper reads the rule summaries from the working tree.
 
 ## 8. Make targets
 

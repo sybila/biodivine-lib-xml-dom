@@ -1,0 +1,40 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "biodivine-lib-xml-dom"
+# Taken from `Cargo.toml` (which inherits it from `[workspace.package]`), so the version has one
+# source of truth rather than one per layer.
+dynamic = ["version"]
+description = "An XML DOM library with safe namespace handling and thread-safe documents."
+requires-python = ">=3.9"
+readme = "../README.md"
+license = "MIT"
+authors = [{ name = "Sybila" }]
+keywords = ["xml", "dom", "namespace"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Text Processing :: Markup :: XML",
+]
+
+[project.urls]
+Homepage = "https://github.com/sybila/biodivine-lib-xml-dom"
+Repository = "https://github.com/sybila/biodivine-lib-xml-dom"
+
+[tool.maturin]
+# The native module is a *private* submodule of the pure-Python package, which is what makes the
+# three-layer architecture visible in the import path.
+module-name = "biodivine_lib_xml_dom._sys"
+python-source = "python"
+features = ["extension-module"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+# Pyflakes (unused and undefined names) plus syntax errors.
+select = ["F", "E9"]

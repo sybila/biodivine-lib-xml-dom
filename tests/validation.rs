@@ -1,0 +1,720 @@
+//! Whole-document validation.
+//!
+//! The tests are organised by the group of rules they exercise: structure, namespace scope,
+//! namespace declarations, and values. They also pin the *contract* of the editing API: editing
+//! never checks namespace integrity, so the problems show up only here.
+
+mod common;
+
+use biodivine_lib_xml_dom::xml_spec::{RESERVED_XML_URI as XML_NS, nc_name};
+use biodivine_lib_xml_dom::{
+    Document, Namespace, QualifiedName, ValidationError, ValidationErrorKind,
+    ValidationErrors, XmlError,
+};
+
+use common::{element, rules};
+
+/// An `xml:*` qualified name.
+fn xml_name(local: &str) -> QualifiedName {
+    QualifiedName::with_namespace(local, &Namespace::prefixed(XML_NS, "xml").unwrap())
+        .unwrap()
+}
+
+/// The validation problems of a document that is expected to be invalid.
+///
+/// Panics if the document is valid or if validation was cancelled.
+fn validation_errors(document: &Document) -> ValidationErrors {
+    match document.validate() {
+        Err(XmlError::Validation(errors)) => errors,
+        Ok(()) => panic!("the document was expected to be invalid"),
+        Err(error) => panic!("unexpected validation failure: {error}"),
+    }
+}
+
+/// Collects the kinds of the issues found, in order.
+fn kinds(document: &Document) -> Vec<ValidationErrorKind> {
+    validation_errors(document)
+        .into_vec()
+        .into_iter()
+        .map(|error| error.kind().clone())
+        .collect()
+}
+
+/// Asserts that the document is valid.
+fn assert_valid(document: &Document) {
+    match document.validate() {
+        Ok(()) => {}
+        Err(error) => panic!("the document was expected to be valid, but:\n{error}"),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Structure
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn an_empty_document_has_no_root() {
+    // rule: rule.well-formedness.document-production
+    rules::assert_rule_exists("rule.well-formedness.document-production");
+    let document = Document::new();
+    assert!(!document.is_valid().unwrap());
+    let errors = validation_errors(&document);
+    assert_eq!(errors.len(), 1);
+    let error = &errors.as_slice()[0];
+    assert_eq!(error.kind(), &ValidationErrorKind::MissingRoot);
+    assert_eq!(error.node(), None, "a missing root has no node to point at");
+    assert!(error.to_string().contains("no root element"));
+}
+
+#[test]
+fn a_consistent_document_has_no_structural_problems() {
+    let document = Document::new();
+    let root = element(&document, "root");
+    let child = element(&document, "child");
+    let grandchild = element(&document, "grandchild");
+    root.append_child(child.clone());
+    child.append_child(grandchild.clone());
+    document.set_root(root.clone());
+
+    // Detached nodes are a normal state, not an error.
+    let _detached = element(&document, "detached");
+    assert_valid(&document);
+
+    // Re-attaching the subtree keeps it valid.
+    child.detach();
+    assert_valid(&document);
+    root.append_child(child);
+    assert_valid(&document);
+}
+
+#[test]
+fn every_parsed_fixture_is_valid() {
+    let fixtures = [
+        r#"<a/>"#,
+        r#"<?xml version="1.0" encoding="UTF-8"?><a/>"#,
+        r#"<h:root xmlns:h="http://h" xmlns="http://d"><child h:attr="v"/></h:root>"#,
+        r#"<root xmlns="http://d"><inner xmlns=""><leaf/></inner></root>"#,
+        r#"<a xml:lang="en-GB" xml:space="preserve"><b xml:lang="fr"/></a>"#,
+        r#"<a xml:id="one"><b xml:id="two"/></a>"#,
+        r#"<a xmlns:ex="http://e"><ex:b>text</ex:b><!-- c --><![CDATA[raw]]><?pi data?></a>"#,
+    ];
+    for fixture in fixtures {
+        let document = Document::parse_string(fixture).unwrap();
+        assert_valid(&document);
+        // ... and the round trip stays valid.
+        assert_valid(
+            &Document::parse_string(&document.write_string().unwrap()).unwrap(),
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Namespace scope
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn an_element_in_a_namespace_needs_it_declared() {
+    // rule: rule.namespace-usage.prefix-declared
+    rules::assert_rule_exists("rule.namespace-usage.prefix-declared");
+
+    let document = Document::new();
+    let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
+    let root =
+        document.create_element(QualifiedName::with_namespace("item", &ex).unwrap());
+    document.set_root(root.clone());
+
+    assert_eq!(
+        kinds(&document),
+        vec![ValidationErrorKind::UndeclaredPrefix {
+            prefix: nc_name("ex")
+        }]
+    );
+
+    // Declaring it fixes the document.
+    root.declare_namespace(ex);
+    assert_valid(&document);
+}
+
+#[test]
+fn a_prefix_bound_to_a_different_uri_is_reported() {
+    // rule: rule.namespace-usage.prefix-declaration-scope
+    rules::assert_rule_exists("rule.namespace-usage.prefix-declaration-scope");
+
+    let document = Document::new();
+    let root = element(&document, "root");
+    document.set_root(root.clone());
+    // The declaration binds `ex` to one URI ...
+    root.declare_namespace(Namespace::prefixed("http://one", "ex").unwrap());
+    // ... while the child's name claims another.
+    let child = document.create_element(
+        QualifiedName::with_namespace(
+            "child",
+            &Namespace::prefixed("http://two", "ex").unwrap(),
+        )
+        .unwrap(),
+    );
+    root.append_child(child);
+
+    assert_eq!(
+        kinds(&document),
+        vec![ValidationErrorKind::PrefixBoundToDifferentUri {
+            prefix: nc_name("ex"),
+            expected: "http://two".to_string(),
+            actual: "http://one".to_string(),
+        }]
+    );
+}
+
+#[test]
+fn default_namespace_scope_must_match_the_name() {
+    // rule: rule.namespace-usage.default-namespace-scope
+    rules::assert_rule_exists("rule.namespace-usage.default-namespace-scope");
+
+    // (a) A name in the default namespace with no declaration in scope.
+    let document = Document::new();
+    let root = document.create_element(
+        QualifiedName::with_namespace(
+            "a",
+            &Namespace::without_prefix("http://d").unwrap(),
+        )
+        .unwrap(),
+    );
+    document.set_root(root.clone());
+    assert_eq!(
+        kinds(&document),
+        vec![ValidationErrorKind::MissingDefaultNamespace {
+            expected: "http://d".to_string()
+        }]
+    );
+    root.declare_namespace(Namespace::without_prefix("http://d").unwrap());
+    assert_valid(&document);
+
+    // (b) A name in a different default namespace than the one in scope. Note that the declaration
+    //     applies to the element that carries it, so the root's own name has to match as well.
+    let document = Document::new();
+    let root = document.create_element(
+        QualifiedName::with_namespace(
+            "a",
+            &Namespace::without_prefix("http://d").unwrap(),
+        )
+        .unwrap(),
+    );
+    document.set_root(root.clone());
+    root.declare_namespace(Namespace::without_prefix("http://d").unwrap());
+    let child = document.create_element(
+        QualifiedName::with_namespace(
+            "b",
+            &Namespace::without_prefix("http://other").unwrap(),
+        )
+        .unwrap(),
+    );
+    root.append_child(child);
+    assert_eq!(
+        kinds(&document),
+        vec![ValidationErrorKind::DefaultNamespaceMismatch {
+            expected: "http://other".to_string(),
+            actual: "http://d".to_string(),
+        }]
+    );
+
+    // (c) A name with *no* namespace inside a default-namespace scope: writing it out would put it
+    //     in `http://d`, which is exactly the "moving an element breaks its declarations" case.
+    let document = Document::new();
+    let root = document.create_element(
+        QualifiedName::with_namespace(
+            "a",
+            &Namespace::without_prefix("http://d").unwrap(),
+        )
+        .unwrap(),
+    );
+    document.set_root(root.clone());
+    root.declare_namespace(Namespace::without_prefix("http://d").unwrap());
+    root.append_child(element(&document, "b"));
+    assert_eq!(
+        kinds(&document),
+        vec![ValidationErrorKind::UnprefixedNameTakesDefaultNamespace {
+            default_uri: "http://d".to_string()
+        }]
+    );
+    // Removing the default declaration fixes the child (which now really has no namespace) but
+    // breaks the root, whose name *is* in that namespace. Validation reports the remaining problem
+    // instead of silently "repairing" either of them.
+    root.remove_namespace_declaration(None);
+    assert_eq!(
+        kinds(&document),
+        vec![ValidationErrorKind::MissingDefaultNamespace {
+            expected: "http://d".to_string()
+        }]
+    );
+}
+
+#[test]
+fn attributes_are_not_affected_by_the_default_namespace() {
+    // rule: rule.namespace-usage.default-namespace-not-attributes
+    rules::assert_rule_exists("rule.namespace-usage.default-namespace-not-attributes");
+
+    // An unprefixed attribute inside a default-namespace scope is perfectly fine.
+    let document = Document::new();
+    let root = document.create_element(
+        QualifiedName::with_namespace(
+            "a",
+            &Namespace::without_prefix("http://d").unwrap(),
+        )
+        .unwrap(),
+    );
+    document.set_root(root.clone());
+    root.declare_namespace(Namespace::without_prefix("http://d").unwrap());
+    root.set_attribute(QualifiedName::without_namespace("plain").unwrap(), "v");
+    assert_valid(&document);
+
+    // An attribute that carries a namespace but no prefix cannot be written at all.
+    root.set_attribute(
+        QualifiedName::new(
+            nc_name("odd"),
+            Some(Namespace::without_prefix("http://d").unwrap()),
+        ),
+        "v",
+    );
+    assert_eq!(
+        kinds(&document),
+        vec![ValidationErrorKind::AttributeNamespaceWithoutPrefix {
+            uri: "http://d".to_string()
+        }]
+    );
+}
+
+#[test]
+fn the_xml_prefix_is_always_available() {
+    // rule: rule.namespace-basics.xml-prefix-fixed-binding
+    rules::assert_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding");
+
+    let document = Document::new();
+    let root = element(&document, "root");
+    document.set_root(root.clone());
+    root.set_attribute(xml_name("lang"), "en");
+    root.set_attribute(xml_name("space"), "preserve");
+    root.set_attribute(xml_name("id"), "one");
+    // No declaration is needed, and none is stored.
+    assert!(root.namespace_declarations().is_empty());
+    assert_valid(&document);
+}
+
+#[test]
+fn detached_subtrees_are_validated_against_their_own_scope() {
+    let document = Document::new();
+    let root = element(&document, "root");
+    document.set_root(root);
+    let detached = document.create_element(
+        QualifiedName::with_namespace(
+            "item",
+            &Namespace::prefixed("http://example.com", "ex").unwrap(),
+        )
+        .unwrap(),
+    );
+    // Not attached, and the prefix is not declared: still reported, so a subtree can be prepared
+    // and validated before it is used.
+    assert_eq!(
+        kinds(&document),
+        vec![ValidationErrorKind::UndeclaredPrefix {
+            prefix: nc_name("ex")
+        }]
+    );
+    detached
+        .declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
+    assert_valid(&document);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Values
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn xml_id_values_must_be_names_and_unique() {
+    // rule: rule.attributes.id-must-be-name
+    // rule: rule.attributes.id-must-be-unique
+    rules::assert_rule_exists("rule.attributes.id-must-be-name");
+    rules::assert_rule_exists("rule.attributes.id-must-be-unique");
+
+    let document = Document::new();
+    let root = element(&document, "root");
+    document.set_root(root.clone());
+    root.set_attribute(xml_name("id"), "first");
+    let child = element(&document, "child");
+    root.append_child(child.clone());
+    child.set_attribute(xml_name("id"), "second");
+    assert_valid(&document);
+
+    // A duplicate is reported once, on the second element that uses the value.
+    child.set_attribute(xml_name("id"), "first");
+    assert_eq!(
+        kinds(&document),
+        vec![ValidationErrorKind::DuplicateXmlId {
+            id: nc_name("first")
+        }]
+    );
+
+    // A value that is not an NCName is reported as such.
+    child.set_attribute(xml_name("id"), "not a name");
+    assert_eq!(
+        kinds(&document),
+        vec![ValidationErrorKind::XmlIdIsNotAName {
+            value: "not a name".to_string()
+        }]
+    );
+}
+
+#[test]
+fn a_detached_copy_does_not_conflict_with_its_original() {
+    let document = Document::new();
+    let root = element(&document, "root");
+    document.set_root(root.clone());
+    root.set_attribute(xml_name("id"), "one");
+
+    // A detached clone carries the same `xml:id`. Uniqueness is a property of the *document*, i.e.
+    // of the tree reachable from the root, so a detached copy is not a duplicate - which is what
+    // makes "clone a subtree, edit it, attach it later" work.
+    let clone = root.deep_clone().unwrap();
+    assert_valid(&document);
+
+    // Attaching it does create a duplicate, and that is reported.
+    root.append_child(clone);
+    assert_eq!(
+        kinds(&document),
+        vec![ValidationErrorKind::DuplicateXmlId { id: nc_name("one") }]
+    );
+}
+
+#[test]
+fn the_xml_id_policy_is_pinned_in_both_directions() {
+    // rule: rule.attributes.id-must-be-unique
+    // rule: rule.attributes.id-must-be-name
+    rules::assert_rule_exists("rule.attributes.id-must-be-unique");
+    rules::assert_rule_exists("rule.attributes.id-must-be-name");
+
+    let document = Document::new();
+    let root = element(&document, "root");
+    document.set_root(root.clone());
+    root.set_attribute(xml_name("id"), "one");
+
+    // (a) A detached `deep_clone` repeats its original's `xml:id` and must NOT be reported:
+    //     uniqueness is a property of the document, i.e. of the tree reachable from the root.
+    let clone = root.deep_clone().unwrap();
+    assert_valid(&document);
+    assert_eq!(clone.attribute(&xml_name("id")).unwrap().as_ref(), "one");
+
+    // (b) Once *both* are attached, the duplicate IS reported - on the later node, once, with the
+    //     first node named as the previous user. This is the state a user can actually reach.
+    root.append_child(clone.clone());
+    let errors = validation_errors(&document);
+    assert_eq!(errors.len(), 1, "{errors}");
+    let error = &errors.as_slice()[0];
+    assert_eq!(
+        error.kind(),
+        &ValidationErrorKind::DuplicateXmlId { id: nc_name("one") }
+    );
+    assert_eq!(error.node(), Some(clone.id()));
+    assert!(error.message().contains("already used by node"));
+
+    // A third node with the same value adds exactly one more issue (one per offending node).
+    let third = element(&document, "third");
+    third.set_attribute(xml_name("id"), "one");
+    root.append_child(third.clone());
+    let errors = validation_errors(&document);
+    assert_eq!(errors.len(), 2, "{errors}");
+    assert_eq!(
+        errors.iter().map(|error| error.node()).collect::<Vec<_>>(),
+        vec![Some(clone.id()), Some(third.id())]
+    );
+
+    // (c) Node-local rules ARE reported for detached nodes, so a subtree can be checked before it
+    //     is attached.
+    let detached = element(&document, "detached");
+    detached.set_attribute(xml_name("id"), "not a name");
+    detached.set_attribute(xml_name("lang"), "de_DE");
+    detached.set_attribute(xml_name("space"), "preserved");
+    let errors = validation_errors(&document);
+    let detached_errors: Vec<&ValidationError> = errors
+        .iter()
+        .filter(|error| error.node() == Some(detached.id()))
+        .collect();
+    assert_eq!(detached_errors.len(), 3, "{errors}");
+    assert_eq!(
+        detached_errors
+            .iter()
+            .map(|error| error.kind().rule())
+            .collect::<Vec<_>>(),
+        vec![
+            "rule.attributes.id-must-be-name",
+            "rule.document-structure.xml-lang-must-be-bcp47-or-empty",
+            "rule.document-structure.xml-space-must-be-enumerated-default-preserve",
+        ]
+    );
+    // Fixing the detached node removes its issues without attaching it.
+    detached.set_attribute(xml_name("id"), "unique");
+    detached.set_attribute(xml_name("lang"), "en");
+    detached.set_attribute(xml_name("space"), "default");
+    let remaining: Vec<ValidationError> = validation_errors(&document)
+        .into_vec()
+        .into_iter()
+        .filter(|error| error.node() == Some(detached.id()))
+        .collect();
+    assert!(remaining.is_empty());
+}
+
+#[test]
+fn xml_lang_and_xml_space_values_are_checked() {
+    // rule: rule.document-structure.xml-lang-must-be-bcp47-or-empty
+    // rule: rule.document-structure.xml-space-must-be-enumerated-default-preserve
+    rules::assert_rule_exists(
+        "rule.document-structure.xml-lang-must-be-bcp47-or-empty",
+    );
+    rules::assert_rule_exists(
+        "rule.document-structure.xml-space-must-be-enumerated-default-preserve",
+    );
+
+    let document = Document::new();
+    let root = element(&document, "root");
+    document.set_root(root.clone());
+    root.set_attribute(xml_name("lang"), "en-GB");
+    root.set_attribute(xml_name("space"), "preserve");
+    assert_valid(&document);
+
+    // The empty string is a legal `xml:lang`.
+    root.set_attribute(xml_name("lang"), "");
+    assert_valid(&document);
+
+    root.set_attribute(xml_name("lang"), "en_US_very_long_invalid");
+    root.set_attribute(xml_name("space"), "preserved");
+    assert_eq!(
+        kinds(&document),
+        vec![
+            ValidationErrorKind::InvalidXmlLang {
+                value: "en_US_very_long_invalid".to_string()
+            },
+            ValidationErrorKind::InvalidXmlSpace {
+                value: "preserved".to_string()
+            },
+        ]
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Aggregation, ordering and presentation
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn all_problems_are_reported_in_one_call() {
+    // rule: rule.attributes.id-must-be-unique
+    let document = Document::new();
+    // Problem 1: no root element (yet).
+    assert_eq!(kinds(&document).len(), 1);
+
+    let root = element(&document, "root");
+    document.set_root(root.clone());
+    assert_valid(&document);
+
+    // Now introduce four independent problems at once.
+    // 2: an undeclared prefix on the root's name.
+    root.set_qualified_name(
+        QualifiedName::with_namespace(
+            "root",
+            &Namespace::prefixed("http://x", "missing").unwrap(),
+        )
+        .unwrap(),
+    );
+    // 3: an invalid `xml:space` value.
+    root.set_attribute(xml_name("space"), "nope");
+    // 4: an invalid `xml:lang` value.
+    root.set_attribute(xml_name("lang"), "de_DE");
+    // 5: an attribute that carries a namespace without a prefix.
+    root.set_attribute(
+        QualifiedName::new(
+            nc_name("bad"),
+            Some(Namespace::without_prefix("http://d").unwrap()),
+        ),
+        "v",
+    );
+
+    let errors = validation_errors(&document);
+    assert_eq!(errors.len(), 4, "{errors}");
+    assert_eq!(
+        errors
+            .as_slice()
+            .iter()
+            .map(|error| error.kind().rule())
+            .collect::<Vec<_>>(),
+        vec![
+            "rule.namespace-usage.prefix-declared",
+            "rule.namespace-usage.default-namespace-not-attributes",
+            "rule.document-structure.xml-lang-must-be-bcp47-or-empty",
+            "rule.document-structure.xml-space-must-be-enumerated-default-preserve",
+        ]
+    );
+    // Every issue points at the node it belongs to.
+    assert!(
+        errors
+            .as_slice()
+            .iter()
+            .all(|error| error.node() == Some(root.id()))
+    );
+    // The display form lists them all.
+    let rendered = errors.to_string();
+    assert!(rendered.starts_with("4 validation problems"), "{rendered}");
+    assert_eq!(rendered.lines().count(), 5);
+}
+
+#[test]
+fn validation_is_deterministic() {
+    let document = Document::new();
+    let root = element(&document, "root");
+    document.set_root(root.clone());
+    root.set_attribute(xml_name("space"), "nope");
+    root.append_child(element(&document, "a"));
+    root.append_child(element(&document, "b"));
+
+    let first = validation_errors(&document);
+    let second = validation_errors(&document);
+    assert_eq!(first, second);
+    // Two siblings that are both unprefixed inside a default-namespace scope would both be
+    // reported, in arena order.
+    root.declare_namespace(Namespace::without_prefix("http://d").unwrap());
+    let third = validation_errors(&document);
+    assert_eq!(third.len(), 4, "{third}");
+}
+
+#[test]
+fn every_error_kind_names_an_existing_rule_file() {
+    // The rule ids used in messages must point at real files, so that a reader can always find the
+    // rule an issue came from.
+    let document = Document::new();
+    let root = element(&document, "root");
+    document.set_root(root.clone());
+    root.set_qualified_name(
+        QualifiedName::with_namespace(
+            "root",
+            &Namespace::prefixed("http://x", "missing").unwrap(),
+        )
+        .unwrap(),
+    );
+    root.set_attribute(xml_name("space"), "nope");
+    let child = element(&document, "child");
+    root.append_child(child.clone());
+    child.set_attribute(xml_name("id"), "not a name");
+
+    let errors = validation_errors(&document);
+    assert!(!errors.is_empty());
+    for error in &errors {
+        rules::assert_rule_exists(error.kind().rule());
+    }
+    // And the set of rules referenced covers the layer-C rules this goal implements.
+    let referenced: Vec<&str> =
+        errors.iter().map(|error| error.kind().rule()).collect();
+    assert!(referenced.contains(&"rule.namespace-usage.prefix-declared"));
+    assert!(referenced.contains(&"rule.attributes.id-must-be-name"));
+    assert!(referenced.contains(
+        &"rule.document-structure.xml-space-must-be-enumerated-default-preserve"
+    ));
+
+    // Missing-root is the only kind that can be reported without a node.
+    let empty = validation_errors(&Document::new());
+    assert_eq!(
+        empty.as_slice()[0].kind(),
+        &ValidationErrorKind::MissingRoot
+    );
+    rules::assert_rule_exists(empty.as_slice()[0].kind().rule());
+}
+
+// ---------------------------------------------------------------------------------------------
+// The editing API does not check namespace integrity
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn editing_is_silent_and_validation_is_what_reports() {
+    // Removing a declaration that a subtree still relies on does not complain during the edit
+    // even if some child nodes rely on that declaration."
+    let document = Document::parse_string(
+        r#"<ex:root xmlns:ex="http://example.com"><ex:child/></ex:root>"#,
+    )
+    .unwrap();
+    let root = document.root().unwrap();
+    assert_valid(&document);
+
+    let child = root.child_elements()[0].clone();
+    // Removing the declaration succeeds silently, and nothing else changes.
+    root.remove_namespace_declaration(Some(&nc_name("ex")));
+    assert_eq!(child.qualified_name().to_string(), "ex:child");
+    assert_eq!(child.namespace().unwrap().uri(), "http://example.com");
+
+    // The breakage is reported by validation, once per affected name: the root and the child both
+    // use the `ex` prefix.
+    let errors = validation_errors(&document);
+    assert_eq!(errors.len(), 2, "{errors}");
+    assert!(errors.iter().all(|error| matches!(
+        error.kind(),
+        ValidationErrorKind::UndeclaredPrefix { .. }
+    )));
+
+    // Restoring the declaration makes the document valid again.
+    root.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
+    assert_valid(&document);
+}
+
+#[test]
+fn moving_an_element_can_break_its_namespace_and_validation_says_so() {
+    // Moving an element into a different scope is exactly the case the design notes call out.
+    let document = Document::new();
+    let root = element(&document, "root");
+    document.set_root(root.clone());
+    let plain = root.shallow_clone();
+    plain.set_qualified_name(QualifiedName::without_namespace("plain").unwrap());
+
+    let elsewhere = document.create_element(
+        QualifiedName::with_namespace(
+            "elsewhere",
+            &Namespace::without_prefix("http://d").unwrap(),
+        )
+        .unwrap(),
+    );
+    elsewhere.declare_namespace(Namespace::without_prefix("http://d").unwrap());
+    root.append_child(elsewhere.clone());
+
+    // `elsewhere` declares a default namespace, so `plain` inside it would change meaning.
+    assert_valid(&document);
+    elsewhere.append_child(plain.clone());
+    assert_eq!(
+        kinds(&document),
+        vec![ValidationErrorKind::UnprefixedNameTakesDefaultNamespace {
+            default_uri: "http://d".to_string()
+        }]
+    );
+
+    // Moving it back fixes it - and the element itself was never modified by the move.
+    plain.detach();
+    assert_valid(&document);
+    assert_eq!(plain.qualified_name().to_string(), "plain");
+}
+
+#[test]
+fn validation_does_not_change_the_document() {
+    let document = Document::parse_string(
+        r#"<ex:root xmlns:ex="http://example.com"><ex:b/></ex:root>"#,
+    )
+    .unwrap();
+    let before = document.write_string().unwrap();
+    let _ = document.validate();
+    let _ = document.is_valid().unwrap();
+    assert_eq!(document.write_string().unwrap(), before);
+}
+
+/// Confirms that the error type is usable as a boxed error.
+#[test]
+fn the_error_type_is_a_std_error() {
+    fn as_error(error: ValidationError) -> Box<dyn std::error::Error + Send + Sync> {
+        Box::new(error)
+    }
+    let document = Document::new();
+    let errors = validation_errors(&document);
+    let first = errors.into_vec().into_iter().next().unwrap();
+    let boxed = as_error(first);
+    assert!(boxed.to_string().contains("no root element"));
+}

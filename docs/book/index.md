@@ -1,0 +1,73 @@
+# Biodivine XML DOM
+
+Biodivine XML DOM is an XML DOM library with full namespace support, whole-document validation and
+thread-safe documents, in Rust with an idiomatic Python package on top.
+
+The library is designed for **document manipulation**: you build, edit, traverse, validate and
+serialize XML trees. In code it is spelled `biodivine-lib-xml-dom` (Rust) and
+`biodivine_lib_xml_dom` (Python). It is not a streaming parser, but it gets the awkward parts right —
+expanded names instead of prefix juggling, one lock per document so a tree can be shared between
+threads, and a validation pass that reports everything at once instead of failing on the first
+problem.
+
+## What it looks like
+
+::::{tab-set}
+:::{tab-item} Rust
+:sync: rust
+```{literalinclude} ../../examples/book_getting_started.rs
+:language: rust
+:start-after: ANCHOR: document
+:end-before: ANCHOR_END: document
+:dedent:
+```
+:::
+:::{tab-item} Python
+:sync: python
+```{literalinclude} examples/python/getting_started.py
+:language: python
+:start-after: ANCHOR: document
+:end-before: ANCHOR_END: document
+:dedent:
+```
+:::
+::::
+
+## The three layers
+
+| layer | what it is | who uses it |
+| --- | --- | --- |
+| `biodivine-lib-xml-dom` | the Rust library; no PyO3 anywhere | Rust programs |
+| `biodivine-lib-xml-dom-py-sys` | a thin PyO3 mirror of the Rust API, imported as `biodivine_lib_xml_dom._sys` | the layer below |
+| `biodivine_lib_xml_dom` | the pure-Python package: argument coercion, Pythonic protocols, conveniences | Python programs |
+
+The mapping between the Rust API and the Python one is itemised on the `documentation::bindings`
+page of the crate documentation, and the design notes ship with the rustdoc as well.
+
+## Running the examples
+
+Every example in this book is a real file: the Rust ones are `examples/book_*.rs` targets of the
+crate, and the Python ones are scripts under `docs/book/examples/python/`. `cargo test` compiles the
+Rust examples and `make examples` runs them; the Python test suite runs the Python ones, so nothing
+here can quietly rot.
+
+```sh
+cargo run --example book_getting_started        # Rust
+.venv/bin/python docs/book/examples/python/getting_started.py   # Python
+```
+
+## Chapters
+
+```{toctree}
+:maxdepth: 1
+getting-started
+building-documents
+traversing-and-editing
+namespaces
+parsing-and-serializing
+validation
+thread-safety
+python-usage
+limitations
+design-notes
+```

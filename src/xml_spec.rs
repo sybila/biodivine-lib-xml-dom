@@ -1,213 +1,262 @@
 use crate::error::XmlError;
-use std::fmt;
-use std::ops::Deref;
+use std::borrow::Cow;
+use std::sync::Arc;
 
-/// Helper to implement `TryFrom<&str>` and `TryFrom<String>` for wrapper types.
+mod declaration;
+pub mod rule_set;
+#[cfg(test)]
+pub(crate) mod rules;
+pub(crate) mod validation;
+
+pub use declaration::{
+    UTF8_ENCODING_NAME, XML_VERSION, XmlDeclaration, encoding_is_utf8,
+};
+
+/// Validates `s` and returns it as an `Arc<str>`, or a validation error naming the expected
+/// content type.
 ///
-/// Takes a validation closure, a display name for error messages, and the raw string.
-/// Returns `Ok(wrapper)` if valid, or `Err(XmlError::InvalidXml(...))` otherwise.
-fn try_from_str<F, W>(s: &str, display_name: &str, validate: F) -> Result<W, XmlError>
+/// This is the single place where the "not a valid X" error message is produced, so every
+/// validated string newtype reports failures consistently.
+///
+/// # Errors
+///
+/// Returns `error(...)` if `validate` rejects `s`. The constructor is chosen by the caller so
+/// that each wrapper type reports its own typed [`XmlError`] variant.
+fn validated_string<F>(
+    s: &str,
+    display_name: &str,
+    validate: F,
+    error: fn(String) -> XmlError,
+) -> Result<Arc<str>, XmlError>
 where
     F: FnOnce(&str) -> bool,
-    W: From<String>,
 {
     if validate(s) {
-        Ok(W::from(s.to_string()))
+        Ok(Arc::from(s))
     } else {
-        Err(XmlError::InvalidXml(format!(
-            "'{s}' is not a valid {display_name}"
-        )))
+        // `{s:?}` rather than `{s}`: a rejected value often contains exactly the characters that
+        // made it invalid (control characters, for instance), which would be invisible otherwise.
+        Err(error(format!("{s:?} is not a valid {display_name}")))
     }
+}
+
+/// Normalises the line ends of `input` exactly as an XML processor must before parsing
+/// ([`rule.document-structure.processor-must-normalize-line-breaks`](crate::xml_spec::rule_set::rule_document_structure_processor_must_normalize_line_breaks)): `\r\n` and a lone `\r`
+/// become `\n`.
+///
+/// This is applied at construction time to the node kinds whose content cannot be escaped on
+/// output — comments, CDATA sections and processing-instruction data — so that the stored value is
+/// exactly the value a re-parse would produce. Text nodes and attribute values are *not* normalised
+/// here, because the serializer can escape a literal `\r` as `&#xD;` and therefore preserve the
+/// caller's bytes; the parser reads the input as a whole on purpose.
+pub(crate) fn normalize_line_ends(input: &str) -> Cow<'_, str> {
+    if !input.contains('\r') {
+        return Cow::Borrowed(input);
+    }
+    let mut normalized = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    while let Some(character) = chars.next() {
+        if character == '\r' {
+            if chars.peek() == Some(&'\n') {
+                chars.next();
+            }
+            normalized.push('\n');
+        } else {
+            normalized.push(character);
+        }
+    }
+    Cow::Owned(normalized)
+}
+
+/// Declares a validated, immutable, `Arc`-backed string newtype.
+///
+/// The generated type stores its content in an `Arc<str>`, so cloning it (and cloning anything
+/// that stores one, such as an attribute value or a text node) is a pointer bump rather than a
+/// copy. Equality, ordering and hashing are value-based because `Arc<T>` forwards them to `T`;
+/// nothing in the public API exposes the pointer identity. This is also what deduplicates
+/// repetitive content such as an attribute value or a fully qualified name.
+///
+/// `validate` is called with the raw string; a failing argument produces `error(...)` with the
+/// message `"<value>" is not a valid <display_name>`, with the value in `Debug` form.
+///
+/// The type is deliberately only constructible through [`TryFrom`], so a value of this type is
+/// always valid: low-level integrity is enforced by construction.
+macro_rules! validated_string_newtype {
+    (
+        $(#[$meta:meta])*
+        $name:ident,
+        display_name = $display_name:literal,
+        validate = $validate:expr,
+        error = $error:expr,
+        normalize_line_ends = $normalize:literal,
+        as_str_docs { $(#[$as_str_meta:meta])* }
+    ) => {
+        $(#[$meta])*
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        pub struct $name(Arc<str>);
+
+        impl $name {
+            $(#[$as_str_meta])*
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl ::core::ops::Deref for $name {
+            type Target = str;
+
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
+        impl AsRef<str> for $name {
+            fn as_ref(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl ::core::fmt::Display for $name {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+
+        impl PartialEq<str> for $name {
+            fn eq(&self, other: &str) -> bool {
+                self.as_str() == other
+            }
+        }
+
+        impl PartialEq<&str> for $name {
+            fn eq(&self, other: &&str) -> bool {
+                self.as_str() == *other
+            }
+        }
+
+        impl PartialEq<String> for $name {
+            fn eq(&self, other: &String) -> bool {
+                self.as_str() == *other
+            }
+        }
+
+        impl<'a> From<&'a $name> for ::std::borrow::Cow<'a, str> {
+            fn from(value: &'a $name) -> Self {
+                ::std::borrow::Cow::Borrowed(value.as_str())
+            }
+        }
+
+        impl TryFrom<&str> for $name {
+            type Error = XmlError;
+
+            fn try_from(s: &str) -> Result<Self, Self::Error> {
+                let normalized;
+                let s: &str = if $normalize {
+                    normalized = normalize_line_ends(s);
+                    normalized.as_ref()
+                } else {
+                    s
+                };
+                validated_string(s, $display_name, $validate, $error).map($name)
+            }
+        }
+
+        impl TryFrom<String> for $name {
+            type Error = XmlError;
+
+            fn try_from(s: String) -> Result<Self, Self::Error> {
+                Self::try_from(s.as_str())
+            }
+        }
+    };
 }
 
 /// The `xml` prefix is by definition bound to this namespace.
 /// It may, but need not, be declared, and must not be undeclared or bound to any other namespace.
 /// Other prefixes must not be bound to this namespace, and it must not be declared as the default namespace.
-pub(crate) const RESERVED_XML_URI: &str = "http://www.w3.org/XML/1998/namespace";
+pub const RESERVED_XML_URI: &str = "http://www.w3.org/XML/1998/namespace";
 
 /// The `xmlns` prefix is used only to declare namespace bindings and is by definition bound
 /// to this namespace. It must not be declared or undeclared. Other prefixes must not be bound
 /// to this namespace, and it must not be declared as the default namespace.
-pub(crate) const RESERVED_XMLNS_URI: &str = "http://www.w3.org/2000/xmlns/";
+pub const RESERVED_XMLNS_URI: &str = "http://www.w3.org/2000/xmlns/";
 
-/// Represents a valid XML NCName (Name without colons).
-///
-/// An NCName is an XML Name that does not contain a colon (`:`). It is used for both
-/// namespace prefixes and the local part of a qualified name (QName).
-///
-/// This type guarantees that the contained string is a valid NCName per the XML 1.0
-/// Fifth Edition specification. Validity is enforced at construction time via
-/// [`TryFrom`] — once constructed, the value is guaranteed valid.
-///
-/// # Example
-///
-/// ```rust
-/// use biodivine_lib_xml_dom::xml_spec::NCName;
-/// use std::convert::TryInto;
-///
-/// let name: NCName = "myElement".try_into().unwrap();
-/// assert_eq!(name.as_str(), "myElement");
-/// assert_eq!(name.as_ref(), "myElement");
-/// assert_eq!(name.to_string(), "myElement");
-///
-/// // Invalid NCNames are rejected
-/// let invalid1: Result<NCName, _> = "<tag>".try_into();
-/// assert!(invalid1.is_err());
-/// let invalid2: Result<NCName, _> = "123".try_into();
-/// assert!(invalid2.is_err());
-/// let invalid3: Result<NCName, _> = "a:b".try_into();
-/// assert!(invalid3.is_err());
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct NCName(String);
-
-impl NCName {
-    /// Returns the NCName as a string slice.
+validated_string_newtype! {
+    /// Represents a valid XML NCName (Name without colons).
     ///
-    /// # Example
+    /// An NCName is an XML Name that does not contain a colon (`:`). It is used for both
+    /// namespace prefixes and the local part of a qualified name (QName).
+    ///
+    /// This type guarantees that the contained string is a valid NCName per the XML 1.0
+    /// Fifth Edition specification. Validity is enforced at construction time via
+    /// [`TryFrom`] — once constructed, the value is guaranteed valid.
+    ///
+    /// # Examples
     ///
     /// ```rust
     /// use biodivine_lib_xml_dom::xml_spec::NCName;
-    /// let name: NCName = "foo".try_into().unwrap();
-    /// assert_eq!(name.as_str(), "foo");
+    /// use std::convert::TryInto;
+    ///
+    /// let name: NCName = "myElement".try_into().unwrap();
+    /// assert_eq!(name.as_str(), "myElement");
+    /// assert_eq!(name.as_ref(), "myElement");
+    /// assert_eq!(name.to_string(), "myElement");
+    ///
+    /// // Invalid NCNames are rejected
+    /// let invalid1: Result<NCName, _> = "<tag>".try_into();
+    /// assert!(invalid1.is_err());
+    /// let invalid2: Result<NCName, _> = "123".try_into();
+    /// assert!(invalid2.is_err());
+    /// let invalid3: Result<NCName, _> = "a:b".try_into();
+    /// assert!(invalid3.is_err());
     /// ```
-    pub fn as_str(&self) -> &str {
-        &self.0
+    NCName,
+    display_name = "NCName",
+    validate = is_valid_ncname,
+    error = XmlError::InvalidName,
+    normalize_line_ends = false,
+    as_str_docs {
+        /// Returns the `NCName` as a string slice.
+        ///
+        /// # Examples
+        ///
+        /// ```rust
+        /// use biodivine_lib_xml_dom::xml_spec::NCName;
+        /// let name: NCName = "foo".try_into().unwrap();
+        /// assert_eq!(name.as_str(), "foo");
+        /// ```
     }
 }
 
-impl Deref for NCName {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl AsRef<str> for NCName {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for NCName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl PartialEq<str> for NCName {
-    fn eq(&self, other: &str) -> bool {
-        self.0 == other
-    }
-}
-
-impl PartialEq<&str> for NCName {
-    fn eq(&self, other: &&str) -> bool {
-        self.0 == *other
-    }
-}
-
-impl PartialEq<String> for NCName {
-    fn eq(&self, other: &String) -> bool {
-        self.0 == *other
-    }
-}
-
-impl<'a> From<&'a NCName> for std::borrow::Cow<'a, str> {
-    fn from(ncname: &'a NCName) -> Self {
-        std::borrow::Cow::Borrowed(&ncname.0)
-    }
-}
-
-impl TryFrom<&str> for NCName {
-    type Error = XmlError;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        if is_valid_ncname(s) {
-            Ok(NCName(s.to_string()))
-        } else {
-            Err(XmlError::InvalidXml(format!("'{s}' is not a valid NCName")))
-        }
-    }
-}
-
-impl TryFrom<String> for NCName {
-    type Error = XmlError;
-
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        if is_valid_ncname(&s) {
-            Ok(NCName(s))
-        } else {
-            Err(XmlError::InvalidXml(format!("'{s}' is not a valid NCName")))
-        }
-    }
-}
-
-/// Represents a valid XML character data string.
-///
-/// A `Text` contains only characters legal in XML documents per the `Char` production:
-/// `#x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]`.
-/// This excludes control characters (except tab, LF, CR) and surrogate code points.
-///
-/// Validity is enforced at construction time via [`TryFrom`].
-///
-/// # Example
-///
-/// ```rust
-/// use biodivine_lib_xml_dom::xml_spec::Text;
-/// use std::convert::TryInto;
-///
-/// let text: Text = "Hello, World!".try_into().unwrap();
-/// assert_eq!(text.as_str(), "Hello, World!");
-///
-/// // Control characters are rejected
-/// let invalid: Result<Text, _> = "control \u{01}".try_into();
-/// assert!(invalid.is_err());
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Text(String);
-
-impl Text {
-    /// Returns the text as a string slice.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl Deref for Text {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl AsRef<str> for Text {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for Text {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl TryFrom<&str> for Text {
-    type Error = XmlError;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        try_from_str(s, "XML text", is_valid_text).map(Text)
-    }
-}
-
-impl TryFrom<String> for Text {
-    type Error = XmlError;
-
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        try_from_str(&s, "XML text", is_valid_text).map(Text)
+validated_string_newtype! {
+    /// Represents a valid XML character data string.
+    ///
+    /// A `Text` contains only characters legal in XML documents per the `Char` production:
+    /// `#x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]`.
+    /// This excludes control characters (except tab, LF, CR) and surrogate code points.
+    ///
+    /// Validity is enforced at construction time via [`TryFrom`].
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use biodivine_lib_xml_dom::xml_spec::Text;
+    /// use std::convert::TryInto;
+    ///
+    /// let text: Text = "Hello, World!".try_into().unwrap();
+    /// assert_eq!(text.as_str(), "Hello, World!");
+    ///
+    /// // Control characters are rejected
+    /// let invalid: Result<Text, _> = "control \u{01}".try_into();
+    /// assert!(invalid.is_err());
+    /// ```
+    Text,
+    display_name = "XML text",
+    validate = is_valid_text,
+    error = XmlError::InvalidText,
+    normalize_line_ends = false,
+    as_str_docs {
+        /// Returns the text as a string slice.
     }
 }
 
@@ -218,286 +267,145 @@ fn is_valid_text(s: &str) -> bool {
 
 /// Check if a char is a legal XML character per the Char production.
 /// Char ::= #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
-fn is_legal_char(c: char) -> bool {
-    let cp = c as u32;
+pub(crate) fn is_legal_char(c: char) -> bool {
+    let cp = u32::from(c);
     matches!(cp, 0x9 | 0xA | 0xD | 0x20..=0xD7FF | 0xE000..=0xFFFD | 0x10000..=0x10FFFF)
 }
 
-/// Represents a valid CDATA section content.
+/// Check if a char is XML whitespace per the `S` production.
 ///
-/// CDATA section content must not contain the string `]]>`, which terminates the section.
-/// No other restrictions apply — all legal XML characters are permitted.
-///
-/// Validity is enforced at construction time via [`TryFrom`].
-///
-/// # Example
-///
-/// ```rust
-/// use biodivine_lib_xml_dom::xml_spec::CData;
-/// use std::convert::TryInto;
-///
-/// let cdata: CData = "This is safe content".try_into().unwrap();
-/// assert_eq!(cdata.as_str(), "This is safe content");
-///
-/// // Content containing ]]> is rejected
-/// let invalid: Result<CData, _> = "contains ]]> end".try_into();
-/// assert!(invalid.is_err());
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct CData(String);
+/// `S ::= (#x20 | #x9 | #xD | #xA)+`. This is deliberately not [`char::is_whitespace`], which also
+/// accepts characters such as `\u{00A0}` and `\u{000C}` that are not XML whitespace.
+pub(crate) fn is_space(c: char) -> bool {
+    matches!(c, ' ' | '\t' | '\r' | '\n')
+}
 
-impl CData {
-    /// Returns the CDATA content as a string slice.
-    pub fn as_str(&self) -> &str {
-        &self.0
+validated_string_newtype! {
+    /// Represents a valid CDATA section content.
+    ///
+    /// CDATA section content must not contain the string `]]>`, which terminates the section.
+    /// No other restrictions apply — all legal XML characters are permitted.
+    ///
+    /// Validity is enforced at construction time via [`TryFrom`].
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use biodivine_lib_xml_dom::xml_spec::CData;
+    /// use std::convert::TryInto;
+    ///
+    /// let cdata: CData = "This is safe content".try_into().unwrap();
+    /// assert_eq!(cdata.as_str(), "This is safe content");
+    ///
+    /// // Content containing ]]> is rejected
+    /// let invalid: Result<CData, _> = "contains ]]> end".try_into();
+    /// assert!(invalid.is_err());
+    /// ```
+    CData,
+    display_name = "CDATA content",
+    validate = |s| !s.contains("]]>"),
+    error = XmlError::InvalidCData,
+    normalize_line_ends = true,
+    as_str_docs {
+        /// Returns the CDATA content as a string slice.
     }
 }
 
-impl Deref for CData {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
+validated_string_newtype! {
+    /// Represents a valid XML comment content.
+    ///
+    /// Per XML 1.0 §2.5, comment content must not contain the string `--` (double-hyphen),
+    /// and must not end with a single hyphen `-` (since the comment closes with `-->`).
+    ///
+    /// Validity is enforced at construction time via [`TryFrom`].
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use biodivine_lib_xml_dom::xml_spec::Comment;
+    /// use std::convert::TryInto;
+    ///
+    /// let comment: Comment = " This is valid ".try_into().unwrap();
+    /// assert_eq!(comment.as_str(), " This is valid ");
+    ///
+    /// // Double hyphen is rejected
+    /// let invalid: Result<Comment, _> = "has -- double hyphen".try_into();
+    /// assert!(invalid.is_err());
+    ///
+    /// // Trailing hyphen is rejected
+    /// let invalid2: Result<Comment, _> = "ends with -".try_into();
+    /// assert!(invalid2.is_err());
+    /// ```
+    Comment,
+    display_name = "XML comment",
+    validate = |s| !s.contains("--") && !s.ends_with('-'),
+    error = XmlError::InvalidComment,
+    normalize_line_ends = true,
+    as_str_docs {
+        /// Returns the comment content as a string slice.
     }
 }
 
-impl AsRef<str> for CData {
-    fn as_ref(&self) -> &str {
-        &self.0
+validated_string_newtype! {
+    /// Represents a valid processing instruction target.
+    ///
+    /// A PI target must be a valid XML `Name` (not an NCName — colons are allowed)
+    /// and must not match `xml` case-insensitively.
+    ///
+    /// Validity is enforced at construction time via [`TryFrom`].
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use biodivine_lib_xml_dom::xml_spec::PiTarget;
+    /// use std::convert::TryInto;
+    ///
+    /// let target: PiTarget = "xml-stylesheet".try_into().unwrap();
+    /// assert_eq!(target.as_str(), "xml-stylesheet");
+    ///
+    /// // Case-insensitive xml is rejected
+    /// let invalid: Result<PiTarget, _> = "xml".try_into();
+    /// assert!(invalid.is_err());
+    /// let invalid2: Result<PiTarget, _> = "XML".try_into();
+    /// assert!(invalid2.is_err());
+    /// ```
+    PiTarget,
+    display_name = "PI target",
+    validate = |s| is_valid_name(s) && !s.eq_ignore_ascii_case("xml"),
+    error = XmlError::InvalidProcessingInstruction,
+    normalize_line_ends = false,
+    as_str_docs {
+        /// Returns the PI target as a string slice.
     }
 }
 
-impl fmt::Display for CData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl TryFrom<&str> for CData {
-    type Error = XmlError;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        try_from_str(s, "CDATA content", |s| !s.contains("]]>")).map(CData)
-    }
-}
-
-impl TryFrom<String> for CData {
-    type Error = XmlError;
-
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        try_from_str(&s, "CDATA content", |s| !s.contains("]]>")).map(CData)
-    }
-}
-
-/// Represents a valid XML comment content.
-///
-/// Per XML 1.0 §2.5, comment content must not contain the string `--` (double-hyphen),
-/// and must not end with a single hyphen `-` (since the comment closes with `-->`).
-///
-/// Validity is enforced at construction time via [`TryFrom`].
-///
-/// # Example
-///
-/// ```rust
-/// use biodivine_lib_xml_dom::xml_spec::Comment;
-/// use std::convert::TryInto;
-///
-/// let comment: Comment = " This is valid ".try_into().unwrap();
-/// assert_eq!(comment.as_str(), " This is valid ");
-///
-/// // Double hyphen is rejected
-/// let invalid: Result<Comment, _> = "has -- double hyphen".try_into();
-/// assert!(invalid.is_err());
-///
-/// // Trailing hyphen is rejected
-/// let invalid2: Result<Comment, _> = "ends with -".try_into();
-/// assert!(invalid2.is_err());
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Comment(String);
-
-impl Comment {
-    /// Returns the comment content as a string slice.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl Deref for Comment {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl AsRef<str> for Comment {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for Comment {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl TryFrom<&str> for Comment {
-    type Error = XmlError;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        try_from_str(s, "XML comment", |s| !s.contains("--") && !s.ends_with('-')).map(Comment)
-    }
-}
-
-impl TryFrom<String> for Comment {
-    type Error = XmlError;
-
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        try_from_str(&s, "XML comment", |s| {
-            !s.contains("--") && !s.ends_with('-')
-        })
-        .map(Comment)
-    }
-}
-
-/// Represents a valid processing instruction target.
-///
-/// A PI target must be a valid XML `Name` (not an NCName — colons are allowed)
-/// and must not match `xml` case-insensitively.
-///
-/// Validity is enforced at construction time via [`TryFrom`].
-///
-/// # Example
-///
-/// ```rust
-/// use biodivine_lib_xml_dom::xml_spec::PiTarget;
-/// use std::convert::TryInto;
-///
-/// let target: PiTarget = "xml-stylesheet".try_into().unwrap();
-/// assert_eq!(target.as_str(), "xml-stylesheet");
-///
-/// // Case-insensitive xml is rejected
-/// let invalid: Result<PiTarget, _> = "xml".try_into();
-/// assert!(invalid.is_err());
-/// let invalid2: Result<PiTarget, _> = "XML".try_into();
-/// assert!(invalid2.is_err());
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct PiTarget(String);
-
-impl PiTarget {
-    /// Returns the PI target as a string slice.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl Deref for PiTarget {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl AsRef<str> for PiTarget {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for PiTarget {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl TryFrom<&str> for PiTarget {
-    type Error = XmlError;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        try_from_str(s, "PI target", |s| {
-            is_valid_name(s) && !s.eq_ignore_ascii_case("xml")
-        })
-        .map(PiTarget)
-    }
-}
-
-impl TryFrom<String> for PiTarget {
-    type Error = XmlError;
-
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        try_from_str(&s, "PI target", |s| {
-            is_valid_name(s) && !s.eq_ignore_ascii_case("xml")
-        })
-        .map(PiTarget)
-    }
-}
-
-/// Represents a valid processing instruction content.
-///
-/// PI content must not contain the string `?>`, which terminates the PI.
-///
-/// Validity is enforced at construction time via [`TryFrom`].
-///
-/// # Example
-///
-/// ```rust
-/// use biodivine_lib_xml_dom::xml_spec::PiData;
-/// use std::convert::TryInto;
-///
-/// let data: PiData = "type=\"text/css\" href=\"style.css\"".try_into().unwrap();
-/// assert_eq!(data.as_str(), "type=\"text/css\" href=\"style.css\"");
-///
-/// // Content containing ?> is rejected
-/// let invalid: Result<PiData, _> = "has ?> in it".try_into();
-/// assert!(invalid.is_err());
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct PiData(String);
-
-impl PiData {
-    /// Returns the PI content as a string slice.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl Deref for PiData {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl AsRef<str> for PiData {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for PiData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl TryFrom<&str> for PiData {
-    type Error = XmlError;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        try_from_str(s, "PI content", |s| !s.contains("?>")).map(PiData)
-    }
-}
-
-impl TryFrom<String> for PiData {
-    type Error = XmlError;
-
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        try_from_str(&s, "PI content", |s| !s.contains("?>")).map(PiData)
+validated_string_newtype! {
+    /// Represents a valid processing instruction content.
+    ///
+    /// PI content must not contain the string `?>`, which terminates the PI.
+    ///
+    /// Validity is enforced at construction time via [`TryFrom`].
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use biodivine_lib_xml_dom::xml_spec::PiData;
+    /// use std::convert::TryInto;
+    ///
+    /// let data: PiData = "type=\"text/css\" href=\"style.css\"".try_into().unwrap();
+    /// assert_eq!(data.as_str(), "type=\"text/css\" href=\"style.css\"");
+    ///
+    /// // Content containing ?> is rejected
+    /// let invalid: Result<PiData, _> = "has ?> in it".try_into();
+    /// assert!(invalid.is_err());
+    /// ```
+    PiData,
+    display_name = "PI content",
+    validate = |s| !s.contains("?>"),
+    error = XmlError::InvalidProcessingInstruction,
+    normalize_line_ends = true,
+    as_str_docs {
+        /// Returns the PI content as a string slice.
     }
 }
 
@@ -514,8 +422,8 @@ fn is_valid_name(s: &str) -> bool {
 /// NCName = Name - (Char* ':' Char*), where Name uses NameStartChar and NameChar
 /// from XML 1.0 Fifth Edition. This implementation uses the full Unicode ranges.
 ///
-/// Note: This function is private in `xml_spec`, because instead of performing manual checks,
-/// we should be using [`NCName`] struct instead.
+/// This is the raw predicate behind the [`NCName`] newtype (it is the `validate` function that
+/// [`NCName`] is built from); prefer [`NCName`] itself wherever a name is constructed.
 fn is_valid_ncname(s: &str) -> bool {
     is_valid_name_with_colon(s, false)
 }
@@ -541,7 +449,7 @@ fn is_valid_name_with_colon(s: &str, allow_colon: bool) -> bool {
 ///
 /// When `allow_colon` is `true`, `:` is permitted (Name). When `false`, it is not (NCName).
 fn is_name_start_char(c: char, allow_colon: bool) -> bool {
-    let cp = c as u32;
+    let cp = u32::from(c);
     (allow_colon && c == ':')
         || c == '_'
         || matches!(cp, 65..=90 | 97..=122)
@@ -557,19 +465,74 @@ fn is_name_start_char(c: char, allow_colon: bool) -> bool {
 ///
 /// When `allow_colon` is `true`, `:` is permitted (Name). When `false`, it is not (NCName).
 fn is_name_char(c: char, allow_colon: bool) -> bool {
-    let cp = c as u32;
+    let cp = u32::from(c);
     is_name_start_char(c, allow_colon)
         || c == '-'
         || c == '.'
         || matches!(cp, 48..=57 | 0xB7 | 0x0300..=0x036F | 0x203F..=0x2040)
 }
 
+/// Whether `value` is a legal value for the `xml:space` attribute.
+///
+/// [`rule.document-structure.xml-space-must-be-enumerated-default-preserve`](crate::xml_spec::rule_set::rule_document_structure_xml_space_must_be_enumerated_default_preserve): the attribute is an
+/// enumerated type with the values `default` and `preserve`. (The rule itself is stated for a DTD
+/// declaration, which this crate does not process; the part that is observable without a DTD is the
+/// value of the attribute, and that is what this predicate checks.)
+pub fn is_valid_xml_space_value(value: &str) -> bool {
+    value == "default" || value == "preserve"
+}
+
+/// Whether `value` is a legal value for the `xml:lang` attribute, or the empty string.
+///
+/// [`rule.document-structure.xml-lang-must-be-bcp47-or-empty`](crate::xml_spec::rule_set::rule_document_structure_xml_lang_must_be_bcp47_or_empty): the value must be a language
+/// identifier as defined by IETF BCP 47, or the empty string.
+///
+/// BCP 47's full grammar (including the registry of registered subtags) is deliberately not
+/// reproduced here; this is the pragmatic subset the specification's own examples need:
+/// a primary subtag of 1-8 ASCII alphanumerics **starting with a letter**, followed by any number
+/// of `-`-separated subtags of 1-8 ASCII alphanumerics. That accepts `en`, `en-GB`, `de-CH-1901`,
+/// `zh-Hant-TW`, `x-private` and `i-klingon`, and rejects what the rule's violating example
+/// rejects (`en_US_very_long_invalid`: underscores, subtags longer than eight characters and a
+/// non-letter start are all refused).
+pub fn is_valid_language_tag(value: &str) -> bool {
+    if value.is_empty() {
+        // "in addition, the empty string may be specified"
+        return true;
+    }
+    let mut subtags = value.split('-');
+    let Some(primary) = subtags.next() else {
+        return false;
+    };
+    if !is_language_primary_subtag(primary) {
+        return false;
+    }
+    subtags.all(is_language_subtag)
+}
+
+/// A BCP 47 primary language subtag: 1-8 ASCII alphanumerics, starting with a letter.
+fn is_language_primary_subtag(subtag: &str) -> bool {
+    !subtag.is_empty()
+        && subtag.len() <= 8
+        && subtag.as_bytes()[0].is_ascii_alphabetic()
+        && subtag.bytes().all(|byte| byte.is_ascii_alphanumeric())
+}
+
+/// A BCP 47 follow-up subtag: 1-8 ASCII alphanumerics.
+fn is_language_subtag(subtag: &str) -> bool {
+    !subtag.is_empty()
+        && subtag.len() <= 8
+        && subtag.bytes().all(|byte| byte.is_ascii_alphanumeric())
+}
+
 /// Validate the URI and prefix according to XML namespace rules.
-pub(crate) fn validate_namespace(uri: &str, prefix: Option<&NCName>) -> Result<(), XmlError> {
+pub(crate) fn validate_namespace(
+    uri: &str,
+    prefix: Option<&NCName>,
+) -> Result<(), XmlError> {
     // URI must not be empty
     if uri.is_empty() {
-        return Err(XmlError::NamespaceError(
-            "Namespace URI must not be empty".to_string(),
+        return Err(XmlError::InvalidNamespace(
+            "a namespace URI must not be empty".to_string(),
         ));
     }
 
@@ -577,8 +540,8 @@ pub(crate) fn validate_namespace(uri: &str, prefix: Option<&NCName>) -> Result<(
     if let Some(p) = prefix {
         // `xmlns` prefix must never be declared
         if p == "xmlns" {
-            return Err(XmlError::NamespaceError(
-                "The prefix 'xmlns' is reserved and cannot be declared".to_string(),
+            return Err(XmlError::ReservedPrefix(
+                "the prefix `xmlns` is reserved and cannot be declared".to_string(),
             ));
         }
 
@@ -587,23 +550,23 @@ pub(crate) fn validate_namespace(uri: &str, prefix: Option<&NCName>) -> Result<(
             validate_xml_prefix_binding(Some(uri))?;
         } else if uri == RESERVED_XML_URI {
             // No prefix other than `xml` may bind to the reserved XML URI
-            return Err(XmlError::NamespaceError(format!(
-                "The URI '{RESERVED_XML_URI}' can only be bound to the 'xml' prefix, not '{p}'"
+            return Err(XmlError::ReservedPrefix(format!(
+                "the URI `{RESERVED_XML_URI}` can only be bound to the `xml` prefix, not `{p}`"
             )));
         }
     }
 
     // Neither reserved URI may be used as a default namespace
     if prefix.is_none() && (uri == RESERVED_XML_URI || uri == RESERVED_XMLNS_URI) {
-        return Err(XmlError::NamespaceError(format!(
-            "The URI '{uri}' cannot be declared as the default namespace"
+        return Err(XmlError::ReservedPrefix(format!(
+            "the URI `{uri}` cannot be declared as the default namespace"
         )));
     }
 
     // No prefix may bind to the reserved xmlns URI
     if uri == RESERVED_XMLNS_URI {
-        return Err(XmlError::NamespaceError(format!(
-            "The URI '{RESERVED_XMLNS_URI}' cannot be bound to any prefix"
+        return Err(XmlError::ReservedPrefix(format!(
+            "the URI `{RESERVED_XMLNS_URI}` cannot be bound to any prefix"
         )));
     }
 
@@ -625,15 +588,15 @@ pub(crate) fn validate_namespace(uri: &str, prefix: Option<&NCName>) -> Result<(
 /// - The local name is not a valid NCName
 pub(crate) fn split_qname(qname: &str) -> Result<(Option<NCName>, NCName), XmlError> {
     if qname.is_empty() {
-        return Err(XmlError::NamespaceError(
-            "Qualified name must not be empty".to_string(),
+        return Err(XmlError::InvalidName(
+            "a qualified name must not be empty".to_string(),
         ));
     }
 
     // Check for multiple colons — a QName may have at most one.
     if qname.matches(':').count() > 1 {
-        return Err(XmlError::NamespaceError(format!(
-            "Qualified name '{qname}' contains more than one colon"
+        return Err(XmlError::InvalidName(format!(
+            "the qualified name `{qname}` contains more than one colon"
         )));
     }
 
@@ -642,8 +605,8 @@ pub(crate) fn split_qname(qname: &str) -> Result<(Option<NCName>, NCName), XmlEr
         let local_str = &qname[colon_pos + 1..];
 
         if prefix_str.is_empty() {
-            return Err(XmlError::NamespaceError(
-                "Qualified name cannot have an empty prefix".to_string(),
+            return Err(XmlError::InvalidName(
+                "a qualified name cannot have an empty prefix".to_string(),
             ));
         }
 
@@ -676,8 +639,9 @@ pub(crate) fn validate_resolved_prefix(
     resolved_uri: Option<&str>,
 ) -> Result<(), XmlError> {
     if prefix == "xmlns" {
-        return Err(XmlError::NamespaceError(
-            "The prefix 'xmlns' is reserved and cannot be used in a qualified name".to_string(),
+        return Err(XmlError::ReservedPrefix(
+            "the prefix `xmlns` is reserved and cannot be used in a qualified name"
+                .to_string(),
         ));
     }
 
@@ -700,42 +664,53 @@ pub(crate) fn validate_resolved_prefix(
 fn validate_xml_prefix_binding(uri: Option<&str>) -> Result<(), XmlError> {
     match uri {
         Some(u) if u == RESERVED_XML_URI => Ok(()),
-        Some(u) => Err(XmlError::NamespaceError(format!(
-            "The prefix 'xml' can only be bound to '{RESERVED_XML_URI}', not '{u}'"
+        Some(u) => Err(XmlError::ReservedPrefix(format!(
+            "the prefix `xml` can only be bound to `{RESERVED_XML_URI}`, not `{u}`"
         ))),
-        None => Err(XmlError::NamespaceError(format!(
-            "The prefix 'xml' must be bound to '{RESERVED_XML_URI}'"
+        None => Err(XmlError::ReservedPrefix(format!(
+            "the prefix `xml` must be bound to `{RESERVED_XML_URI}`"
         ))),
     }
 }
 
-/// Helper function to create an NCName. Panics if the string is invalid.
-/// Primarily intended for use in tests and examples.
+/// Creates an [`NCName`] from a string literal.
+///
+/// This is the convenience constructor for names that are known to be valid, which is what tests and
+/// the examples in the documentation book need; use [`NCName::try_from`] for input that comes from
+/// outside the program, so that an invalid name stays a typed error.
+///
+/// # Panics
+///
+/// Panics if `s` is not a valid `NCName`.
+///
+/// # Examples
+///
+/// ```rust
+/// use biodivine_lib_xml_dom::xml_spec::{NCName, nc_name};
+///
+/// assert_eq!(nc_name("child"), NCName::try_from("child").unwrap());
+/// ```
+#[track_caller]
 pub fn nc_name(s: &str) -> NCName {
-    NCName::try_from(s).unwrap()
+    NCName::try_from(s).expect("`nc_name` expects a valid NCName")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Helper function to verify that a rule file exists for the test
-    /// This ensures that if a rule is removed, the test will break and be noticed
+    /// Asserts that a rule summary exists, so that a rule cannot be renamed or deleted while the
+    /// code (and its documentation link) still claims to implement it.
     fn verify_rule_exists(rule_file: &str) {
-        let rule_path = format!("specification/rules/{}", rule_file);
-        assert!(
-            std::path::Path::new(&rule_path).exists(),
-            "Rule file {} does not exist",
-            rule_file
-        );
+        crate::xml_spec::rules::assert_rule_exists(rule_file);
     }
 
     #[test]
     fn test_ncname_helper() {
-        // rule: rule.well-formedness.name-starts-with-valid-char.md
-        verify_rule_exists("rule.well-formedness.name-starts-with-valid-char.md");
-        // rule: rule.well-formedness.name-valid-chars.md
-        verify_rule_exists("rule.well-formedness.name-valid-chars.md");
+        // rule: rule.well-formedness.name-starts-with-valid-char
+        verify_rule_exists("rule.well-formedness.name-starts-with-valid-char");
+        // rule: rule.well-formedness.name-valid-chars
+        verify_rule_exists("rule.well-formedness.name-valid-chars");
         assert!(is_valid_ncname("a"));
         assert!(is_valid_ncname("_"));
         assert!(is_valid_ncname("a1"));
@@ -768,9 +743,22 @@ mod tests {
     }
 
     #[test]
+    fn test_space_predicate() {
+        // rule: rule.well-formedness.whitespace-definition
+        verify_rule_exists("rule.well-formedness.whitespace-definition");
+        for space in [' ', '\t', '\r', '\n'] {
+            assert!(is_space(space), "{space:?} is XML whitespace");
+        }
+        // Characters that `char::is_whitespace` accepts but the `S` production does not.
+        for other in ['\u{00A0}', '\u{000C}', '\u{000B}', '\u{0085}', 'x'] {
+            assert!(!is_space(other), "{other:?} is not XML whitespace");
+        }
+    }
+
+    #[test]
     fn test_namespace_validation() {
-        // rule: rule.namespace-basics.empty-string-not-namespace-name.md
-        verify_rule_exists("rule.namespace-basics.empty-string-not-namespace-name.md");
+        // rule: rule.namespace-basics.empty-string-not-namespace-name
+        verify_rule_exists("rule.namespace-basics.empty-string-not-namespace-name");
         // Valid namespace
         assert!(validate_namespace("http://example.com", Some(&nc_name("ex"))).is_ok());
         // Empty URI
@@ -787,17 +775,19 @@ mod tests {
 
     #[test]
     fn test_reserved_xml_prefix() {
-        // rule: rule.namespace-basics.xml-prefix-fixed-binding.md
-        verify_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding.md");
-        // rule: rule.namespace-basics.no-other-prefix-to-xml-namespace.md
-        verify_rule_exists("rule.namespace-basics.no-other-prefix-to-xml-namespace.md");
-        // rule: rule.namespace-basics.xml-namespace-not-default.md
-        verify_rule_exists("rule.namespace-basics.xml-namespace-not-default.md");
+        // rule: rule.namespace-basics.xml-prefix-fixed-binding
+        verify_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding");
+        // rule: rule.namespace-basics.no-other-prefix-to-xml-namespace
+        verify_rule_exists("rule.namespace-basics.no-other-prefix-to-xml-namespace");
+        // rule: rule.namespace-basics.xml-namespace-not-default
+        verify_rule_exists("rule.namespace-basics.xml-namespace-not-default");
         // `xml` prefix with its reserved URI is valid
         assert!(validate_namespace(RESERVED_XML_URI, Some(&nc_name("xml"))).is_ok());
 
         // `xml` prefix with a different URI is invalid
-        assert!(validate_namespace("http://example.com", Some(&nc_name("xml"))).is_err());
+        assert!(
+            validate_namespace("http://example.com", Some(&nc_name("xml"))).is_err()
+        );
 
         // Any other prefix with the reserved XML URI is invalid
         assert!(validate_namespace(RESERVED_XML_URI, Some(&nc_name("ex"))).is_err());
@@ -809,15 +799,19 @@ mod tests {
 
     #[test]
     fn test_reserved_xmlns_prefix() {
-        // rule: rule.namespace-basics.xmlns-prefix-not-declared.md
-        verify_rule_exists("rule.namespace-basics.xmlns-prefix-not-declared.md");
-        // rule: rule.namespace-basics.no-other-prefix-to-xmlns-namespace.md
-        verify_rule_exists("rule.namespace-basics.no-other-prefix-to-xmlns-namespace.md");
-        // rule: rule.namespace-basics.xmlns-namespace-not-default.md
-        verify_rule_exists("rule.namespace-basics.xmlns-namespace-not-default.md");
+        // rule: rule.namespace-basics.xmlns-prefix-not-declared
+        verify_rule_exists("rule.namespace-basics.xmlns-prefix-not-declared");
+        // rule: rule.namespace-basics.no-other-prefix-to-xmlns-namespace
+        verify_rule_exists("rule.namespace-basics.no-other-prefix-to-xmlns-namespace");
+        // rule: rule.namespace-basics.xmlns-namespace-not-default
+        verify_rule_exists("rule.namespace-basics.xmlns-namespace-not-default");
         // `xmlns` prefix must never be declared
-        assert!(validate_namespace("http://example.com", Some(&nc_name("xmlns"))).is_err());
-        assert!(validate_namespace(RESERVED_XMLNS_URI, Some(&nc_name("xmlns"))).is_err());
+        assert!(
+            validate_namespace("http://example.com", Some(&nc_name("xmlns"))).is_err()
+        );
+        assert!(
+            validate_namespace(RESERVED_XMLNS_URI, Some(&nc_name("xmlns"))).is_err()
+        );
 
         // The reserved xmlns URI cannot be bound to any prefix
         assert!(validate_namespace(RESERVED_XMLNS_URI, Some(&nc_name("ex"))).is_err());
@@ -829,19 +823,31 @@ mod tests {
 
     #[test]
     fn test_prefix_ncname_validation() {
-        // rule: rule.namespace-usage.prefix-and-localpart-ncname.md
-        verify_rule_exists("rule.namespace-usage.prefix-and-localpart-ncname.md");
-        // rule: rule.well-formedness.name-starts-with-valid-char.md
-        verify_rule_exists("rule.well-formedness.name-starts-with-valid-char.md");
-        // rule: rule.well-formedness.name-valid-chars.md
-        verify_rule_exists("rule.well-formedness.name-valid-chars.md");
+        // rule: rule.namespace-usage.prefix-and-localpart-ncname
+        verify_rule_exists("rule.namespace-usage.prefix-and-localpart-ncname");
+        // rule: rule.well-formedness.name-starts-with-valid-char
+        verify_rule_exists("rule.well-formedness.name-starts-with-valid-char");
+        // rule: rule.well-formedness.name-valid-chars
+        verify_rule_exists("rule.well-formedness.name-valid-chars");
         // Valid prefixes
         assert!(validate_namespace("http://example.com", Some(&nc_name("ex"))).is_ok());
-        assert!(validate_namespace("http://example.com", Some(&nc_name("ex_1"))).is_ok());
-        assert!(validate_namespace("http://example.com", Some(&nc_name("_private"))).is_ok());
-        assert!(validate_namespace("http://example.com", Some(&nc_name("a-b"))).is_ok());
-        assert!(validate_namespace("http://example.com", Some(&nc_name("a.b"))).is_ok());
-        assert!(validate_namespace("http://example.com", Some(&nc_name("A1_B-c.d"))).is_ok());
+        assert!(
+            validate_namespace("http://example.com", Some(&nc_name("ex_1"))).is_ok()
+        );
+        assert!(
+            validate_namespace("http://example.com", Some(&nc_name("_private")))
+                .is_ok()
+        );
+        assert!(
+            validate_namespace("http://example.com", Some(&nc_name("a-b"))).is_ok()
+        );
+        assert!(
+            validate_namespace("http://example.com", Some(&nc_name("a.b"))).is_ok()
+        );
+        assert!(
+            validate_namespace("http://example.com", Some(&nc_name("A1_B-c.d")))
+                .is_ok()
+        );
         assert!(validate_namespace(RESERVED_XML_URI, Some(&nc_name("xml"))).is_ok());
         assert!(validate_namespace("http://example.com", None).is_ok());
 
@@ -855,20 +861,26 @@ mod tests {
 
     #[test]
     fn test_uri_comparison_case_sensitive() {
-        // rule: rule.namespace-basics.uri-comparison-literal-case-sensitive.md
-        verify_rule_exists("rule.namespace-basics.uri-comparison-literal-case-sensitive.md");
-        assert!(validate_namespace("http://example.org/ns", Some(&nc_name("ex"))).is_ok());
-        assert!(validate_namespace("http://example.org/NS", Some(&nc_name("ex"))).is_ok());
+        // rule: rule.namespace-basics.uri-comparison-literal-case-sensitive
+        verify_rule_exists(
+            "rule.namespace-basics.uri-comparison-literal-case-sensitive",
+        );
+        assert!(
+            validate_namespace("http://example.org/ns", Some(&nc_name("ex"))).is_ok()
+        );
+        assert!(
+            validate_namespace("http://example.org/NS", Some(&nc_name("ex"))).is_ok()
+        );
     }
 
     #[test]
     fn test_split_qname_valid() {
-        // rule: rule.namespace-usage.qname-format.md
-        verify_rule_exists("rule.namespace-usage.qname-format.md");
-        // rule: rule.namespace-usage.zero-or-one-colon.md
-        verify_rule_exists("rule.namespace-usage.zero-or-one-colon.md");
-        // rule: rule.namespace-usage.prefix-and-localpart-ncname.md
-        verify_rule_exists("rule.namespace-usage.prefix-and-localpart-ncname.md");
+        // rule: rule.namespace-usage.qname-format
+        verify_rule_exists("rule.namespace-usage.qname-format");
+        // rule: rule.namespace-usage.zero-or-one-colon
+        verify_rule_exists("rule.namespace-usage.zero-or-one-colon");
+        // rule: rule.namespace-usage.prefix-and-localpart-ncname
+        verify_rule_exists("rule.namespace-usage.prefix-and-localpart-ncname");
         // Unprefixed
         let (prefix, local) = split_qname("foo").unwrap();
         assert_eq!(prefix, None);
@@ -887,8 +899,8 @@ mod tests {
 
     #[test]
     fn test_split_qname_invalid() {
-        // rule: rule.namespace-usage.zero-or-one-colon.md
-        verify_rule_exists("rule.namespace-usage.zero-or-one-colon.md");
+        // rule: rule.namespace-usage.zero-or-one-colon
+        verify_rule_exists("rule.namespace-usage.zero-or-one-colon");
         // Multiple colons
         assert!(split_qname("a:b:c").is_err());
 
@@ -913,8 +925,8 @@ mod tests {
 
     #[test]
     fn test_validate_resolved_prefix() {
-        // rule: rule.namespace-basics.xml-prefix-fixed-binding.md
-        verify_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding.md");
+        // rule: rule.namespace-basics.xml-prefix-fixed-binding
+        verify_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding");
         // Valid: regular prefix
         assert!(validate_resolved_prefix("ex", Some("http://example.com")).is_ok());
         assert!(validate_resolved_prefix("ex", None).is_ok());
@@ -934,8 +946,8 @@ mod tests {
 
     #[test]
     fn test_text_wrapper() {
-        // rule: rule.well-formedness.legal-characters.md
-        verify_rule_exists("rule.well-formedness.legal-characters.md");
+        // rule: rule.well-formedness.legal-characters
+        verify_rule_exists("rule.well-formedness.legal-characters");
         // Valid text
         let text: Text = "Hello, World!".try_into().unwrap();
         assert_eq!(text.as_str(), "Hello, World!");
@@ -959,8 +971,10 @@ mod tests {
 
     #[test]
     fn test_cdata_wrapper() {
-        // rule: rule.document-structure.cdata-section-must-not-contain-cdend.md
-        verify_rule_exists("rule.document-structure.cdata-section-must-not-contain-cdend.md");
+        // rule: rule.document-structure.cdata-section-must-not-contain-cdend
+        verify_rule_exists(
+            "rule.document-structure.cdata-section-must-not-contain-cdend",
+        );
         // Valid CDATA
         let cdata: CData = "This is safe content".try_into().unwrap();
         assert_eq!(cdata.as_str(), "This is safe content");
@@ -976,10 +990,10 @@ mod tests {
 
     #[test]
     fn test_comment_wrapper() {
-        // rule: rule.well-formedness.comment-no-double-hyphen.md
-        verify_rule_exists("rule.well-formedness.comment-no-double-hyphen.md");
-        // rule: rule.well-formedness.comment-no-triple-hyphen.md
-        verify_rule_exists("rule.well-formedness.comment-no-triple-hyphen.md");
+        // rule: rule.well-formedness.comment-no-double-hyphen
+        verify_rule_exists("rule.well-formedness.comment-no-double-hyphen");
+        // rule: rule.well-formedness.comment-no-triple-hyphen
+        verify_rule_exists("rule.well-formedness.comment-no-triple-hyphen");
         // Valid comment
         let comment: Comment = " This is valid ".try_into().unwrap();
         assert_eq!(comment.as_str(), " This is valid ");
@@ -1000,10 +1014,10 @@ mod tests {
 
     #[test]
     fn test_pi_target_wrapper() {
-        // rule: rule.well-formedness.pi-target-is-name.md
-        verify_rule_exists("rule.well-formedness.pi-target-is-name.md");
-        // rule: rule.well-formedness.pi-target-not-xml.md
-        verify_rule_exists("rule.well-formedness.pi-target-not-xml.md");
+        // rule: rule.well-formedness.pi-target-is-name
+        verify_rule_exists("rule.well-formedness.pi-target-is-name");
+        // rule: rule.well-formedness.pi-target-not-xml
+        verify_rule_exists("rule.well-formedness.pi-target-not-xml");
         // Valid PI targets
         let target: PiTarget = "xml-stylesheet".try_into().unwrap();
         assert_eq!(target.as_str(), "xml-stylesheet");
@@ -1027,8 +1041,8 @@ mod tests {
 
     #[test]
     fn test_pi_data_wrapper() {
-        // rule: rule.well-formedness.pi-no-contains-close.md
-        verify_rule_exists("rule.well-formedness.pi-no-contains-close.md");
+        // rule: rule.well-formedness.pi-no-contains-close
+        verify_rule_exists("rule.well-formedness.pi-no-contains-close");
         // Valid PI data
         let data: PiData = r#"type="text/css" href="style.css""#.try_into().unwrap();
         assert_eq!(data.as_str(), r#"type="text/css" href="style.css""#);
@@ -1039,5 +1053,86 @@ mod tests {
         // ?> is rejected
         assert!(PiData::try_from("has ?> in it").is_err());
         assert!(PiData::try_from("?> at start").is_err());
+    }
+}
+
+#[cfg(test)]
+mod normalisation_and_value_tests {
+    use super::*;
+
+    #[test]
+    fn line_end_normalisation() {
+        // rule: rule.document-structure.processor-must-normalize-line-breaks
+        rules::assert_rule_exists(
+            "rule.document-structure.processor-must-normalize-line-breaks",
+        );
+
+        assert_eq!(normalize_line_ends("plain"), "plain");
+        assert_eq!(normalize_line_ends("a\r\nb"), "a\nb");
+        assert_eq!(normalize_line_ends("a\rb"), "a\nb");
+        assert_eq!(normalize_line_ends("a\nb"), "a\nb");
+        assert_eq!(normalize_line_ends("a\r\r\nb\rc"), "a\n\nb\nc");
+        // Borrowed when there is nothing to do.
+        assert!(matches!(normalize_line_ends("plain"), Cow::Borrowed(_)));
+        assert!(matches!(normalize_line_ends("a\rb"), Cow::Owned(_)));
+    }
+
+    #[test]
+    fn content_that_cannot_be_escaped_is_normalised_at_construction() {
+        // Comments, CDATA sections and PI data are written verbatim, so a literal `\r` could not
+        // survive a round trip; normalising it at construction makes the stored value exactly what
+        // a re-parse produces. Text nodes and attribute values *can* be escaped (`&#xD;`), so their
+        // bytes are preserved and normalisation happens neither here nor in the parser.
+        let comment: Comment = "a\r\nb".try_into().unwrap();
+        assert_eq!(comment.as_str(), "a\nb");
+        let cdata: CData = "a\rb".try_into().unwrap();
+        assert_eq!(cdata.as_str(), "a\nb");
+        let data: PiData = "a\r\nb".try_into().unwrap();
+        assert_eq!(data.as_str(), "a\nb");
+
+        let text: Text = "a\r\nb".try_into().unwrap();
+        assert_eq!(text.as_str(), "a\r\nb", "text keeps the caller's bytes");
+        let name: NCName = "a".try_into().unwrap();
+        assert_eq!(name.as_str(), "a");
+    }
+
+    #[test]
+    fn xml_space_values() {
+        // rule: rule.document-structure.xml-space-must-be-enumerated-default-preserve
+        rules::assert_rule_exists(
+            "rule.document-structure.xml-space-must-be-enumerated-default-preserve",
+        );
+        assert!(is_valid_xml_space_value("default"));
+        assert!(is_valid_xml_space_value("preserve"));
+        assert!(!is_valid_xml_space_value("preserved"));
+        assert!(!is_valid_xml_space_value("Default"));
+        assert!(!is_valid_xml_space_value(""));
+    }
+
+    #[test]
+    fn language_tags() {
+        // rule: rule.document-structure.xml-lang-must-be-bcp47-or-empty
+        rules::assert_rule_exists(
+            "rule.document-structure.xml-lang-must-be-bcp47-or-empty",
+        );
+
+        // The empty string is explicitly allowed.
+        assert!(is_valid_language_tag(""));
+        // The specification's valid example, plus common shapes.
+        assert!(is_valid_language_tag("en-GB"));
+        assert!(is_valid_language_tag("en"));
+        assert!(is_valid_language_tag("de-CH-1901"));
+        assert!(is_valid_language_tag("zh-Hant-TW"));
+        assert!(is_valid_language_tag("x-private"));
+        assert!(is_valid_language_tag("i-klingon"));
+        // The specification's violating example, plus the obvious neighbours.
+        assert!(!is_valid_language_tag("en_US_very_long_invalid"));
+        assert!(!is_valid_language_tag("en_US"));
+        assert!(!is_valid_language_tag("-en"));
+        assert!(!is_valid_language_tag("en-"));
+        assert!(!is_valid_language_tag("1en"));
+        assert!(!is_valid_language_tag("verylongprimary"));
+        assert!(!is_valid_language_tag("en-abcdefghi")); // a 9-character subtag
+        assert!(is_valid_language_tag("en-too-long-subtag")); // several short subtags are fine
     }
 }

@@ -1,12 +1,88 @@
 [package]
 name = "biodivine-lib-xml-dom"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
+rust-version.workspace = true
+description = "An XML DOM library with safe namespace handling and thread-safe documents."
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["xml", "dom", "namespace", "parser", "serialization"]
+categories = ["parser-implementations", "text-processing"]
+# Keep the published crate to the files the build needs: the rule summaries, three design documents
+# and the model diagram are `include_str!`-ed; the W3C specification HTML, the book sources and the
+# development tooling are not.
+exclude = [
+    ".rustfmt.toml",
+    "AGENTS.md",
+    "clippy.toml",
+    "specification/*.html",
+    "docs/book",
+    "docs/design/build.md",
+    "docs/assets/layers.svg",
+    "docs/*.py",
+    "docs/build_docs.sh",
+    "docs/requirements.txt",
+    "scripts",
+    ".github",
+    "Makefile",
+]
+
+# The Python bindings live in a separate crate, so the core crate contains no PyO3 code at all.
+[workspace]
+members = ["biodivine-lib-xml-dom-py-sys"]
+
+# Single source of truth for the release numbers: both crates inherit these, the Python package
+# reads its version from the built extension (`biodivine_lib_xml_dom.__version__`) and maturin takes
+# the wheel version from `[package] version` via `dynamic = ["version"]`.
+[workspace.package]
+version = "0.1.0"
+# `cargo +1.88.0 test --workspace` is part of `make verify`, and the CI workflow's
+# `min-rust-version` matches this value.
+rust-version = "1.88"
+license = "MIT"
+authors = ["Sybila"]
+repository = "https://github.com/sybila/biodivine-lib-xml-dom"
+
+# Every public item is documented: `missing_docs` makes that a lint instead of a habit, and the
+# docs gate (`RUSTDOCFLAGS="-D warnings" cargo doc`) turns it into a hard failure.
+[workspace.lints.rust]
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+uninlined_format_args = "warn"
+
+# Integer conversions. An `as` cast between integer types can silently truncate, wrap or flip the
+# sign, and it hides the fact that the conversion may not be representable. The four lints below
+# deny exactly those casts, and `clippy::checked_conversions` additionally reports a manual range
+# check that a `TryFrom` expresses better. Where a conversion is genuinely infallible it is written
+# as `From`/`u32::try_from(...)` with an explicit expectation, which documents why it cannot fail.
+cast_possible_truncation = "warn"
+cast_possible_wrap = "warn"
+cast_sign_loss = "warn"
+cast_lossless = "warn"
+checked_conversions = "warn"
+
+# Deterministic iteration. Iterating a hash container yields an order that depends on the hasher and
+# the insertion history, and this library promises deterministic documents, validation reports and
+# error lists. Hash containers stay allowed where they are used as pure lookup maps — `Interner`
+# deduplicates values and the parser's scope stacks resolve prefixes — because those are never
+# iterated; iterating one is a lint error.
+iter_over_hash_type = "warn"
+
+# Note: no `panic = "abort"` in any profile. PyO3 converts a Rust panic into a Python
+# `PanicException`, which is only possible while unwinding; `panic = "abort"` would turn a panic
+# inside the bindings into a process abort instead.
+
+[dev-dependencies]
+proptest = "1"
 
 [dependencies]
+cancel-this = { version = "0.6", default-features = false }
 parking_lot = "0.12"
 quick-xml = "0.41"
 thiserror = "2.0"
 
-[lints.clippy]
-uninlined_format_args = "warn"
+[lints]
+workspace = true

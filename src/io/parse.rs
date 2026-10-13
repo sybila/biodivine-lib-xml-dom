@@ -1,7 +1,8 @@
 //! The XML parser behind the `Document::parse_*` methods.
 //!
 //! The public contract — what is accepted, what is rejected, what happens to content outside the
-//! root element — is documented on [`Document`] and the individual entry points
+//! root element — is documented in the [crate documentation](crate#reading-and-writing-documents)
+//! and on the individual entry points
 //! ([`Document::parse_string`](crate::Document::parse_string) and friends). What follows is the
 //! implementation-level view, which only matters when changing this file.
 //!
@@ -30,8 +31,8 @@
 //! # Document-level content policy
 //!
 //! The data model of this library is one root element plus the nodes below it, so content *outside*
-//! the root element is handled as follows (the same table appears on [`Document`], which is the
-//! public home of this policy):
+//! the root element is handled as follows (the same table appears in the crate documentation, which
+//! is the public home of this policy):
 //!
 //! | input outside the root | result |
 //! | --- | --- |
@@ -55,10 +56,11 @@ use quick_xml::escape::resolve_predefined_entity;
 use quick_xml::events::attributes::AttrError;
 use quick_xml::events::{BytesDecl, BytesStart, Event};
 use std::collections::{BTreeMap, HashMap};
-use std::io::{BufRead, Read};
+use std::io::Read;
 use std::path::Path;
 
 use crate::Namespace;
+use crate::cancellation::CancellationCheck;
 use crate::document::Document;
 use crate::element::Element;
 use crate::error::{XmlError, XmlResult};
@@ -103,7 +105,7 @@ pub(crate) fn parse_string(xml: &str) -> XmlResult<Document> {
 /// # Errors
 ///
 /// Returns [`XmlError::Io`] if the reader fails, plus every error of [`parse_bytes`].
-pub(crate) fn parse_reader<R: BufRead>(mut reader: R) -> XmlResult<Document> {
+pub(crate) fn parse_reader<R: Read>(mut reader: R) -> XmlResult<Document> {
     let mut bytes = Vec::new();
     reader.read_to_end(&mut bytes)?;
     Document::parse_bytes(&bytes)
@@ -121,7 +123,7 @@ pub(crate) fn parse_reader<R: BufRead>(mut reader: R) -> XmlResult<Document> {
 /// - [`XmlError::UnsupportedEncoding`] / [`XmlError::UnsupportedXmlVersion`] if the XML declaration
 ///   names an encoding other than UTF-8 or a version other than 1.0;
 /// - [`XmlError::MalformedXml`] for malformed markup (unbalanced, mismatched or unclosed tags,
-///   duplicate attributes, `<` inside an attribute value, an empty document);
+///   `<` inside an attribute value);
 /// - [`XmlError::MultipleRootElements`] / [`XmlError::ContentOutsideRoot`] /
 ///   [`XmlError::MissingRoot`] for the top-level content rules;
 /// - [`XmlError::InvalidName`] / [`XmlError::InvalidNamespace`] / [`XmlError::ReservedPrefix`] /
@@ -130,9 +132,12 @@ pub(crate) fn parse_reader<R: BufRead>(mut reader: R) -> XmlResult<Document> {
 ///   [`XmlError::InvalidProcessingInstruction`] for illegal nodes;
 /// - [`XmlError::UndeclaredEntityReference`] / [`XmlError::InvalidCharacterReference`] for
 ///   references that cannot be expanded;
-/// - [`XmlError::DuplicateAttribute`] when one element specifies the same attribute twice.
+/// - [`XmlError::DuplicateAttribute`] when one element specifies the same attribute twice;
+/// - [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires.
 ///
-/// No other error kind can be produced, and the function never panics.
+/// # Panics
+///
+/// Panics only if the document has more than [`MAX_NODES`](crate::MAX_NODES) nodes.
 pub(crate) fn parse_bytes(bytes: &[u8]) -> XmlResult<Document> {
     let bytes = match bytes.strip_prefix(UTF8_BOM) {
         Some(stripped) => stripped,
@@ -157,7 +162,7 @@ fn reader_error(error: quick_xml::Error) -> XmlError {
 fn attribute_error(error: AttrError) -> XmlError {
     match error {
         AttrError::Duplicated(first, second) => XmlError::DuplicateAttribute(format!(
-            "duplicate attribute at byte {first} (first declared at byte {second})"
+            "the attribute at byte {first} repeats the one at byte {second}"
         )),
         other => XmlError::MalformedXml(format!("invalid attribute: {other}")),
     }
@@ -216,7 +221,7 @@ struct Parser<'input> {
 impl<'input> Parser<'input> {
     /// Creates a parser that builds its tree into a fresh document.
     fn new(input: &'input str) -> Self {
-        Self::with_document(input, Document::empty())
+        Self::with_document(input, Document::new())
     }
 
     /// Creates a parser that builds its tree into `document`.
@@ -244,10 +249,11 @@ impl<'input> Parser<'input> {
 
     /// Parses the input.
     fn run(mut self) -> XmlResult<Document> {
+        // A long document can take a while to parse, so honour any cancellation trigger that the
+        // caller registered on this thread.
+        let mut check = CancellationCheck::new();
         loop {
-            // A long document can take a while to parse, so honour any cancellation trigger that
-            // the caller registered on this thread.
-            cancel_this::is_cancelled!()?;
+            check.tick()?;
             let event = self.reader.read_event().map_err(reader_error)?;
             let is_eof = matches!(event, Event::Eof);
             self.handle(event)?;
@@ -388,7 +394,7 @@ impl<'input> Parser<'input> {
                 let encoding = std::str::from_utf8(&encoding).map_err(|error| {
                     XmlError::InvalidUtf8(format!("invalid encoding name: {error}"))
                 })?;
-                if !xml_spec::declaration::encoding_is_utf8(encoding) {
+                if !xml_spec::encoding_is_utf8(encoding) {
                     // rule: rule.entities.encoding-must-match-declaration
                     return Err(XmlError::UnsupportedEncoding(encoding.to_string()));
                 }
@@ -415,9 +421,10 @@ impl<'input> Parser<'input> {
             }
         };
 
+        // The version and the encoding were checked above, with the more specific errors.
         self.document.set_xml_declaration(Some(XmlDeclaration::new(
             version, encoding, standalone,
-        )));
+        )?));
         Ok(())
     }
 
@@ -639,7 +646,7 @@ impl<'input> Parser<'input> {
     }
 }
 
-/// Decodes bytes as UTF-8 with a typed error.
+/// Builds the typed error for input that is not valid UTF-8.
 ///
 /// Marked cold because it only runs on the error path in practice.
 #[cold]
@@ -731,7 +738,7 @@ mod tests {
 
         // A mismatched end tag is reported as well.
         let parsed =
-            Parser::with_document("<root><child></root>", Document::empty()).run();
+            Parser::with_document("<root><child></root>", Document::new()).run();
         assert!(matches!(parsed, Err(XmlError::MalformedXml(_))));
     }
 }

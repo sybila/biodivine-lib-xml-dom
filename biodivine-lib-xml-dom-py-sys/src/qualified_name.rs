@@ -34,7 +34,6 @@ impl From<QualifiedName> for PyQualifiedName {
 impl PyQualifiedName {
     /// Creates an expanded name from a local name and an optional namespace.
     ///
-    /// Raises `XmlSyntaxError` if the local name is not a valid `NCName`.
     /// Raises:
     ///     XmlSyntaxError: if the local name is not a valid NCName.
     #[new]
@@ -51,6 +50,7 @@ impl PyQualifiedName {
     }
 
     /// Creates an expanded name with no namespace.
+    ///
     /// Raises:
     ///     XmlSyntaxError: if the local name is not a valid NCName.
     #[staticmethod]
@@ -61,6 +61,7 @@ impl PyQualifiedName {
     }
 
     /// Creates an expanded name in `namespace`.
+    ///
     /// Raises:
     ///     XmlSyntaxError: if the local name is not a valid NCName.
     #[staticmethod]
@@ -80,49 +81,14 @@ impl PyQualifiedName {
         self.inner.namespace().cloned().map(PyNamespace::from)
     }
 
-    /// Resolves an element name written as a string (`"prefix:local"` or `"local"`) against the
-    /// declarations that are in scope for `element` (the default namespace applies to elements).
-    ///
-    /// Raises `XmlNamespaceError` for an undeclared prefix or a reserved one, and
-    /// `XmlSyntaxError` for a malformed name.
-    /// Raises:
-    ///     XmlSyntaxError: if the name is malformed.
-    ///     XmlNamespaceError: if the prefix is undeclared or reserved.
-    #[staticmethod]
-    pub fn resolve_element(
-        element: &crate::element::PyElement,
-        name: &str,
-    ) -> PyResult<Self> {
-        QualifiedName::resolve_element(&element.inner, name)
-            .map(Self::from)
-            .map_err(to_py_err)
-    }
-
-    /// Resolves an attribute name written as a string against the declarations in scope for
-    /// `element`. The default namespace never applies to attributes.
-    /// Raises:
-    ///     XmlSyntaxError: if the name is malformed.
-    ///     XmlNamespaceError: if the prefix is undeclared or reserved.
-    #[staticmethod]
-    pub fn resolve_attribute(
-        element: &crate::element::PyElement,
-        name: &str,
-    ) -> PyResult<Self> {
-        QualifiedName::resolve_attribute(&element.inner, name)
-            .map(Self::from)
-            .map_err(to_py_err)
-    }
-
-    /// A hash consistent with `__eq__` (the same value Rust's `Hash` produces, so
-    /// equal handles hash equally and can be used as dictionary keys).
+    /// A hash consistent with `__eq__`.
     pub fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.inner.hash(&mut hasher);
         hasher.finish()
     }
 
-    /// Equality with another handle of the same type: the same node/document/value
-    /// (Rust's `PartialEq`). Python object identity is *not* part of it.
+    /// Two names are equal if their local name and namespace URI agree.
     pub fn __eq__(&self, other: &Self) -> bool {
         self.inner == other.inner
     }

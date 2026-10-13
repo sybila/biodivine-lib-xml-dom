@@ -20,7 +20,7 @@ fn name(uri: &str, prefix: &str, local: &str) -> QualifiedName {
 
 #[test]
 fn names_accessors_agree() {
-    let document = Document::empty();
+    let document = Document::new();
     let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
     let element =
         document.create_element(QualifiedName::with_namespace("item", &ex).unwrap());
@@ -38,7 +38,7 @@ fn names_accessors_agree() {
 
 #[test]
 fn attribute_crud_is_keyed_by_expanded_name() {
-    let document = Document::empty();
+    let document = Document::new();
     let element = element(&document, "root");
 
     let plain = QualifiedName::without_namespace("attr").unwrap();
@@ -52,7 +52,10 @@ fn attribute_crud_is_keyed_by_expanded_name() {
 
     assert_eq!(element.attribute(&plain).unwrap().as_ref(), "plain");
     assert_eq!(
-        element.attribute_local(&nc_name("attr")).unwrap().as_ref(),
+        element
+            .attribute_without_namespace(&nc_name("attr"))
+            .unwrap()
+            .as_ref(),
         "plain"
     );
     assert_eq!(
@@ -79,7 +82,7 @@ fn attribute_crud_is_keyed_by_expanded_name() {
 
 #[test]
 fn invalid_attribute_values_are_rejected() {
-    let document = Document::empty();
+    let document = Document::new();
     let element = element(&document, "root");
     let plain = QualifiedName::without_namespace("attr").unwrap();
 
@@ -92,14 +95,17 @@ fn invalid_attribute_values_are_rejected() {
     // Markup characters are fine: the serializer escapes them.
     element.set_attribute(plain, "a < b & c");
     assert_eq!(
-        element.attribute_local(&nc_name("attr")).unwrap().as_ref(),
+        element
+            .attribute_without_namespace(&nc_name("attr"))
+            .unwrap()
+            .as_ref(),
         "a < b & c"
     );
 }
 
 #[test]
 fn namespace_declarations_can_be_added_changed_and_removed() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
     let default = Namespace::without_prefix("http://default").unwrap();
@@ -119,7 +125,7 @@ fn namespace_declarations_can_be_added_changed_and_removed() {
     let other = Namespace::prefixed("http://other.com", "ex").unwrap();
     root.declare_namespace(other.clone());
     assert_eq!(
-        root.get_namespace(Some(&nc_name("ex"))),
+        root.lookup_namespace(Some(&nc_name("ex"))),
         Some(other.clone())
     );
 
@@ -129,7 +135,7 @@ fn namespace_declarations_can_be_added_changed_and_removed() {
         Err(XmlError::InvalidNamespace(_))
     ));
     assert_eq!(
-        root.get_namespace(Some(&nc_name("ex"))),
+        root.lookup_namespace(Some(&nc_name("ex"))),
         Some(other.clone())
     );
     // Re-declaring the identical binding is a no-op.
@@ -148,7 +154,7 @@ fn namespace_declarations_can_be_added_changed_and_removed() {
 
 #[test]
 fn declarations_are_inherited_and_shadowed() {
-    let document = Document::empty();
+    let document = Document::new();
     let outer = element(&document, "outer");
     let inner = element(&document, "inner");
     let deeper = element(&document, "deeper");
@@ -162,25 +168,25 @@ fn declarations_are_inherited_and_shadowed() {
 
     // Inheritance.
     assert_eq!(
-        inner.get_namespace(Some(&nc_name("ex"))),
+        inner.lookup_namespace(Some(&nc_name("ex"))),
         Some(outer_ns.clone())
     );
-    assert_eq!(deeper.get_namespace(None), Some(default.clone()));
+    assert_eq!(deeper.lookup_namespace(None), Some(default.clone()));
 
     // Shadowing.
     let inner_ns = Namespace::prefixed("http://inner", "ex").unwrap();
     inner.declare_namespace(inner_ns.clone());
     assert_eq!(
-        inner.get_namespace(Some(&nc_name("ex"))),
+        inner.lookup_namespace(Some(&nc_name("ex"))),
         Some(inner_ns.clone())
     );
     assert_eq!(
-        deeper.get_namespace(Some(&nc_name("ex"))),
+        deeper.lookup_namespace(Some(&nc_name("ex"))),
         Some(inner_ns.clone())
     );
     // The outer element still sees its own binding.
     assert_eq!(
-        outer.get_namespace(Some(&nc_name("ex"))),
+        outer.lookup_namespace(Some(&nc_name("ex"))),
         Some(outer_ns.clone())
     );
     // And the outer one is still in scope, just shadowed.
@@ -196,12 +202,12 @@ fn declarations_are_inherited_and_shadowed() {
     assert_eq!(innermost.1, Some(inner_ns));
 
     // An unknown prefix is simply not bound.
-    assert_eq!(inner.get_namespace(Some(&nc_name("nope"))), None);
+    assert_eq!(inner.lookup_namespace(Some(&nc_name("nope"))), None);
 }
 
 #[test]
 fn an_empty_default_declaration_removes_the_default_namespace() {
-    let document = Document::empty();
+    let document = Document::new();
     let outer = element(&document, "outer");
     let inner = element(&document, "inner");
     outer.append_child(inner.clone());
@@ -210,8 +216,8 @@ fn an_empty_default_declaration_removes_the_default_namespace() {
     outer.declare_namespace(default.clone());
     inner.undeclare_default_namespace();
 
-    assert_eq!(outer.get_namespace(None), Some(default));
-    assert_eq!(inner.get_namespace(None), None);
+    assert_eq!(outer.lookup_namespace(None), Some(default));
+    assert_eq!(inner.lookup_namespace(None), None);
     assert_eq!(
         inner.namespace_declarations().get(&None),
         Some(&None),
@@ -222,7 +228,7 @@ fn an_empty_default_declaration_removes_the_default_namespace() {
 #[test]
 fn removing_a_declaration_is_silent_even_though_the_subtree_relies_on_it() {
     // Editing never checks namespace integrity; validation reports it instead.
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let child = document.create_element(name("http://example.com", "ex", "item"));
     root.append_child(child.clone());
@@ -231,13 +237,13 @@ fn removing_a_declaration_is_silent_even_though_the_subtree_relies_on_it() {
     let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
     root.declare_namespace(ex);
     assert_eq!(
-        child.get_namespace(Some(&nc_name("ex"))),
+        child.lookup_namespace(Some(&nc_name("ex"))),
         Some(Namespace::prefixed("http://example.com", "ex").unwrap())
     );
 
     root.remove_namespace_declaration(Some(&nc_name("ex")));
     // Nothing complains, and the child keeps its (now undeclared) namespace.
-    assert_eq!(child.get_namespace(Some(&nc_name("ex"))), None);
+    assert_eq!(child.lookup_namespace(Some(&nc_name("ex"))), None);
     assert_eq!(child.namespace().unwrap().uri(), "http://example.com");
     assert_eq!(child.qualified_name().to_string(), "ex:item");
     common::assert_consistent(&document);
@@ -245,7 +251,7 @@ fn removing_a_declaration_is_silent_even_though_the_subtree_relies_on_it() {
 
 #[test]
 fn resolution_uses_the_in_scope_declarations() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let child = element(&document, "child");
     root.append_child(child.clone());
@@ -256,7 +262,7 @@ fn resolution_uses_the_in_scope_declarations() {
     root.declare_namespace(ex.clone());
 
     // Elements inherit the default namespace for unprefixed names ...
-    let resolved = child.resolve_qualified_name("item").unwrap();
+    let resolved = child.resolve_element_name("item").unwrap();
     assert_eq!(resolved.namespace().unwrap().uri(), "http://default");
     // ... attributes never do.
     let resolved = child.resolve_attribute_name("item").unwrap();
@@ -264,7 +270,7 @@ fn resolution_uses_the_in_scope_declarations() {
 
     assert_eq!(
         child
-            .resolve_qualified_name("ex:item")
+            .resolve_element_name("ex:item")
             .unwrap()
             .namespace()
             .unwrap()
@@ -294,15 +300,15 @@ fn resolution_uses_the_in_scope_declarations() {
 
     // Errors are typed.
     assert!(matches!(
-        child.resolve_qualified_name("nope:item"),
+        child.resolve_element_name("nope:item"),
         Err(XmlError::UndeclaredPrefix(prefix)) if prefix == "nope"
     ));
     assert!(matches!(
-        child.resolve_qualified_name("a:b:c"),
+        child.resolve_element_name("a:b:c"),
         Err(XmlError::InvalidName(_))
     ));
     assert!(matches!(
-        child.resolve_qualified_name("xmlns:item"),
+        child.resolve_element_name("xmlns:item"),
         Err(XmlError::ReservedPrefix(_))
     ));
 }
@@ -310,7 +316,7 @@ fn resolution_uses_the_in_scope_declarations() {
 #[test]
 fn namespaced_documents_round_trip_through_the_parser() {
     // Parsing assigns the expanded names, so the tree already carries everything the editing API
-    // needs; see G3 for full round-trip fidelity of the serializer.
+    // needs; `tests/io.rs` covers full round-trip fidelity of the serializer.
     let document = Document::parse_string(
         r#"<ex:root xmlns:ex="http://example.com" xmlns="http://default"><child ex:attr="v"/></ex:root>"#,
     )

@@ -15,7 +15,6 @@ import threading
 import pytest
 
 import biodivine_lib_xml_dom as xml
-from biodivine_lib_xml_dom import _sys
 
 
 # ---------------------------------------------------------------------------------------------
@@ -33,12 +32,12 @@ def test_build_and_serialize() -> None:
     root.append_child(child)
 
     assert document.is_valid()
-    serialized = xml.write(document)
+    serialized = document.write()
     assert serialized == '<root><child class="main">Hello, World!</child></root>'
 
-    reparsed = xml.parse(serialized)
+    reparsed = xml.Document.parse(serialized)
     assert reparsed.is_valid()
-    assert xml.write(reparsed) == serialized
+    assert reparsed.write() == serialized
     assert reparsed.root.local_name == "root"
     assert reparsed.root.children()[0].get("class") == "main"
     assert reparsed.root.children()[0].text() is None
@@ -66,17 +65,17 @@ def test_document_invariants_are_enforced() -> None:
 def test_parse_file_and_write_file(tmp_path: pathlib.Path) -> None:
     path = tmp_path / "document.xml"
     path.write_text('<root xmlns:ex="http://example.com"><ex:item>one</ex:item></root>')
-    document = xml.parse_file(path)  # a pathlib.Path is accepted
+    document = xml.Document.parse_file(path)  # a pathlib.Path is accepted
     assert document.is_valid()
     assert document.root.children()[0].qualified_name.local_name == "item"
     assert str(document.root.children()[0].qualified_name) == "ex:item"
 
     out = tmp_path / "copy.xml"
-    xml.write_file(document, out)
-    assert xml.write(xml.parse_file(out)) == xml.write(document)
+    document.write_file(out)
+    assert xml.Document.parse_file(out).write() == document.write()
 
     with pytest.raises(xml.XmlIoError):
-        xml.parse_file(tmp_path / "does-not-exist.xml")
+        xml.Document.parse_file(tmp_path / "does-not-exist.xml")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -96,7 +95,7 @@ def test_namespaces_are_expanded_names() -> None:
     other_prefix = xml.QualifiedName("child", xml.Namespace("http://example.com", "other"))
     assert other_prefix == plain
     assert hash(other_prefix) == hash(plain)
-    assert not plain.namespace.is_equal_ns(xml.Namespace("http://other.com", "ex"))
+    assert not plain.namespace.has_same_uri(xml.Namespace("http://other.com", "ex"))
 
 
 def test_undeclared_prefix_is_reported_by_validation() -> None:
@@ -116,13 +115,13 @@ def test_undeclared_prefix_is_reported_by_validation() -> None:
     assert document.is_valid()
     # Element names are written with their prefix, and the declaration is written once.
     assert (
-        xml.write(document)
+        document.write()
         == '<ex:root xmlns:ex="http://example.com"><ex:child/></ex:root>'
     )
 
 
 def test_default_namespace_and_empty_declaration() -> None:
-    document = xml.parse('<root xmlns="http://d"><inner xmlns=""><leaf/></inner></root>')
+    document = xml.Document.parse('<root xmlns="http://d"><inner xmlns=""><leaf/></inner></root>')
     root = document.root
     inner = root.children()[0]
     leaf = inner.children()[0]
@@ -144,15 +143,15 @@ def test_default_namespace_and_empty_declaration() -> None:
 
 
 def test_namespace_resolution_helpers() -> None:
-    document = xml.parse('<a xmlns:ex="http://e" xmlns="http://d"><b/></a>')
+    document = xml.Document.parse('<a xmlns:ex="http://e" xmlns="http://d"><b/></a>')
     b = document.root.children()[0]
-    assert str(b.resolve_qualified_name("item")) == "item"
-    assert b.resolve_qualified_name("item").namespace.uri == "http://d"
+    assert str(b.resolve_element_name("item")) == "item"
+    assert b.resolve_element_name("item").namespace.uri == "http://d"
     assert b.resolve_attribute_name("item").namespace is None  # the default never applies
     assert b.resolve_attribute_name("ex:item").namespace.uri == "http://e"
     assert b.resolve_attribute_name("xml:lang").namespace.uri == "http://www.w3.org/XML/1998/namespace"
     with pytest.raises(xml.XmlNamespaceError):
-        b.resolve_qualified_name("nope:item")
+        b.resolve_element_name("nope:item")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -161,7 +160,7 @@ def test_namespace_resolution_helpers() -> None:
 
 
 def test_traversal_and_pythonic_protocols() -> None:
-    document = xml.parse("<a><b>one</b><c>two</c></a>")
+    document = xml.Document.parse("<a><b>one</b><c>two</c></a>")
     root = document.root
     assert len(root) == 2
     assert [child.local_name for child in root] == ["b", "c"]
@@ -178,8 +177,8 @@ def test_traversal_and_pythonic_protocols() -> None:
     # Handles are value objects: `==` compares the node, `is` compares Python objects.
     assert root[0].parent == root
     assert root[0].parent is not root
-    assert root[0].is_ancestor(root[1]) is False
-    assert root.is_ancestor(root[1])
+    assert root[0].is_ancestor_of(root[1]) is False
+    assert root.is_ancestor_of(root[1])
 
 
 def test_editing_operations() -> None:
@@ -201,8 +200,8 @@ def test_editing_operations() -> None:
     assert b.parent is None
     assert not b.is_attached
 
-    removed = c.remove()
-    assert removed == c
+    c.detach()
+    assert not c.is_attached
     root.insert_before(root[0], c)
     assert [child.local_name for child in root] == ["c", "a", "after-a"]
 
@@ -213,7 +212,7 @@ def test_editing_operations() -> None:
 
 
 def test_editing_does_not_check_namespaces() -> None:
-    document = xml.parse('<ex:root xmlns:ex="http://example.com"><ex:child/></ex:root>')
+    document = xml.Document.parse('<ex:root xmlns:ex="http://example.com"><ex:child/></ex:root>')
     root = document.root
     assert document.is_valid()
     # Removing a declaration a subtree relies on is silent ...
@@ -224,7 +223,7 @@ def test_editing_does_not_check_namespaces() -> None:
         "undeclared_prefix",
     ]
     # ... and validating does not change the document.
-    assert xml.write(document) == "<ex:root><ex:child/></ex:root>"
+    assert document.write() == "<ex:root><ex:child/></ex:root>"
 
 
 def test_cycles_and_foreign_documents_are_errors() -> None:
@@ -250,7 +249,7 @@ def test_cycles_and_foreign_documents_are_errors() -> None:
 
 
 def test_cross_document_copies() -> None:
-    source = xml.parse('<root xmlns:ex="http://e"><ex:item a="1">text</ex:item></root>')
+    source = xml.Document.parse('<root xmlns:ex="http://e"><ex:item a="1">text</ex:item></root>')
     target = xml.Document()
     wrapper = target.create_element("wrapper")
     target.set_root(wrapper)
@@ -262,7 +261,6 @@ def test_cross_document_copies() -> None:
     assert copy.document != source
     # ... and `Node.document` holds for elements as well, since `Element` subclasses `Node`.
     assert isinstance(copy.document, xml.Document)
-    assert copy.node.document == copy.document
     assert target.is_valid()
     assert str(copy.children()[0].qualified_name) == "ex:item"
     assert copy.children()[0].get("a") == "1"
@@ -279,21 +277,21 @@ def test_mixed_content_kinds_round_trip() -> None:
         '<root>text<!-- comment --><![CDATA[raw <content>]]>'
         '<?target data?><child attr="a &amp; b"/></root>'
     )
-    document = xml.parse(source)
+    document = xml.Document.parse(source)
     kinds = [node.kind for node in document.root]
     assert kinds == [
-        xml.NodeKind.Text,
-        xml.NodeKind.Comment,
-        xml.NodeKind.CData,
-        xml.NodeKind.ProcessingInstruction,
-        xml.NodeKind.Element,
+        xml.NodeKind.TEXT,
+        xml.NodeKind.COMMENT,
+        xml.NodeKind.CDATA,
+        xml.NodeKind.PROCESSING_INSTRUCTION,
+        xml.NodeKind.ELEMENT,
     ]
     assert document.root[0].text() == "text"
     assert document.root[1].comment() == " comment "
     assert document.root[2].cdata() == "raw <content>"
     assert document.root[3].processing_instruction() == ("target", "data")
     assert document.root[4].get("attr") == "a & b"
-    assert xml.write(document) == source
+    assert document.write() == source
 
 
 # ---------------------------------------------------------------------------------------------
@@ -304,17 +302,17 @@ def test_mixed_content_kinds_round_trip() -> None:
 @pytest.mark.parametrize(
     "trigger, expected",
     [
-        (lambda: xml.parse("<a>"), xml.XmlSyntaxError),
-        (lambda: xml.parse('<a xmlns:p=""/>'), xml.XmlNamespaceError),
-        (lambda: xml.parse("<a/><b/>"), xml.XmlSyntaxError),
+        (lambda: xml.Document.parse("<a>"), xml.XmlSyntaxError),
+        (lambda: xml.Document.parse('<a xmlns:p=""/>'), xml.XmlNamespaceError),
+        (lambda: xml.Document.parse("<a/><b/>"), xml.XmlSyntaxError),
         (lambda: xml.Document().create_element("bad name"), xml.XmlSyntaxError),
         (
             lambda: xml.Document()
             .create_element(xml.QualifiedName("a", "http://x"))
-            .node.append_child(xml.Document().create_element("b")),
+            .append_child(xml.Document().create_element("b")),
             xml.XmlDocumentError,
         ),
-        (lambda: xml.parse_file("/nonexistent/file.xml"), xml.XmlIoError),
+        (lambda: xml.Document.parse_file("/nonexistent/file.xml"), xml.XmlIoError),
     ],
 )
 def test_error_hierarchy(trigger, expected) -> None:
@@ -336,10 +334,11 @@ def test_validation_error_carries_every_problem() -> None:
         document.validate()
     summary, payload = caught.value.args
     assert "3 validation problems" in summary
-    # The payload is the native sequence of problems (methods, mirroring the Rust API) ...
-    assert isinstance(payload, _sys.ValidationErrors)
+    # The payload is the same list as the `errors` attribute ...
+    assert payload is caught.value.errors
+    assert isinstance(payload, xml.ValidationErrors)
     assert len(payload) == 3
-    assert sorted(problem.kind() for problem in payload.errors()) == [
+    assert sorted(problem.kind for problem in payload) == [
         "invalid_xml_lang",
         "invalid_xml_space",
         "undeclared_prefix",
@@ -353,7 +352,7 @@ def test_validation_error_carries_every_problem() -> None:
         "undeclared_prefix",
     ]
     assert all(problem.rule.startswith("rule.") for problem in errors)
-    assert [problem.kind for problem in errors] == [problem.kind() for problem in payload.errors()]
+    assert errors == payload
     assert len(errors) == 3
 
 
@@ -384,29 +383,28 @@ def test_identity_and_hashing() -> None:
 
 
 def test_write_options() -> None:
-    document = xml.parse('<?xml version="1.0"?><a><b/></a>')
-    assert xml.write(document) == '<?xml version="1.0"?><a><b/></a>'
+    document = xml.Document.parse('<?xml version="1.0"?><a><b/></a>')
+    assert document.write() == '<?xml version="1.0"?><a><b/></a>'
     assert (
-        xml.write(document, xml.WriteOptions(declaration=xml.DeclarationStyle.Never))
+        document.write(xml.WriteOptions(declaration=xml.DeclarationStyle.NEVER))
         == "<a><b/></a>"
     )
     assert (
-        xml.write(
-            document,
+        document.write(
             xml.WriteOptions(
-                declaration=xml.DeclarationStyle.Never,
-                empty_elements=xml.EmptyElementStyle.ExplicitEndTag,
+                declaration=xml.DeclarationStyle.NEVER,
+                empty_elements=xml.EmptyElementStyle.EXPLICIT_END_TAG,
             ),
         )
         == "<a><b></b></a>"
     )
-    plain = xml.parse("<a/>")
-    assert xml.write(plain, xml.WriteOptions(declaration=xml.DeclarationStyle.Always)) == (
+    plain = xml.Document.parse("<a/>")
+    assert plain.write(xml.WriteOptions(declaration=xml.DeclarationStyle.ALWAYS)) == (
         '<?xml version="1.0" encoding="UTF-8"?><a/>'
     )
     assert plain.xml_declaration is None
     plain.xml_declaration = xml.XmlDeclaration.utf8()
-    assert xml.write(plain).startswith("<?xml")
+    assert plain.write().startswith("<?xml")
 
 
 def test_documented_example_from_the_package_docstring() -> None:
@@ -424,7 +422,7 @@ def test_documented_example_from_the_package_docstring() -> None:
 
     root.declare_namespace(ex)
     assert document.is_valid()
-    assert xml.write(document) == '<root xmlns:ex="http://example.com"><ex:child>Hello</ex:child></root>'
+    assert document.write() == '<root xmlns:ex="http://example.com"><ex:child>Hello</ex:child></root>'
 
 
 # ---------------------------------------------------------------------------------------------
@@ -440,7 +438,7 @@ def test_document_is_shareable_between_threads() -> None:
     write in one thread cannot deadlock against a read in another. The 30-second timeout turns a
     hang into a test failure instead of a stuck run.
     """
-    document = xml.parse("<root>" + "".join(f"<item>{i}</item>" for i in range(64)) + "</root>")
+    document = xml.Document.parse("<root>" + "".join(f"<item>{i}</item>" for i in range(64)) + "</root>")
     root = document.root
     barrier = threading.Barrier(4)
     errors: list[BaseException] = []
@@ -457,7 +455,7 @@ def test_document_is_shareable_between_threads() -> None:
                 else:
                     for child in root.children():
                         _ = child.local_name
-                    _ = xml.write(document)
+                    _ = document.write()
                     _ = document.validate()
             return index
         except BaseException as error:  # pragma: no cover - only on failure
@@ -473,7 +471,7 @@ def test_document_is_shareable_between_threads() -> None:
 
 
 def test_handles_can_be_moved_between_threads() -> None:
-    document = xml.parse("<root><child/></root>")
+    document = xml.Document.parse("<root><child/></root>")
     child = document.root.children()[0]
 
     def detach_from_another_thread() -> None:

@@ -7,6 +7,8 @@
 /// billion nodes in one document (hundreds of gigabytes of node payloads); it is nevertheless
 /// checked explicitly rather than wrapping silently: allocating past the limit panics instead of
 /// producing an aliased index.
+// A `const` cannot call `usize::try_from`; widening a `u32` into a `usize` is lossless on every
+// supported target.
 pub const MAX_NODES: usize = u32::MAX as usize;
 
 /// An opaque index of a node inside the arena of a [`Document`](crate::Document).
@@ -32,7 +34,7 @@ pub const MAX_NODES: usize = u32::MAX as usize;
 /// ```rust
 /// use biodivine_lib_xml_dom::{Document, NodeId, QualifiedName};
 ///
-/// let document = Document::empty();
+/// let document = Document::new();
 /// let node = document.create_text("value").unwrap();
 /// let id = node.id();
 ///
@@ -51,7 +53,8 @@ impl NodeId {
     /// The index is stable for as long as the slot exists. It says nothing about whether the slot
     /// currently holds a node; use [`Document::node`](crate::Document::node) for that.
     pub(crate) fn index(self) -> usize {
-        self.0 as usize
+        usize::try_from(self.0)
+            .expect("a `u32` fits into a `usize` on every supported target")
     }
 
     /// Converts the index of an arena slot into an id.

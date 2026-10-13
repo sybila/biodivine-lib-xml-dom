@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 use crate::arena::config::free_fraction;
 use crate::arena::{Arena, GcStats, NodeData, Slot};
+use crate::cancellation::CancellationCheck;
 use crate::error::XmlResult;
 use crate::node_id::NodeId;
 
@@ -44,8 +45,10 @@ impl Arena {
     /// Runs a collection that honours cancellation triggers registered on this thread.
     ///
     /// Returns [`crate::XmlError::Cancelled`] if such a trigger fires while the arena is being
-    /// marked or swept. A cancelled collection leaves the arena consistent; the nodes it did not get
-    /// to are reclaimed by the next collection.
+    /// marked. Only the mark phase is cancellable: it does not modify the arena, so a cancelled
+    /// collection leaves the document exactly as it was. The sweep is a single linear pass that
+    /// always runs to completion once it has started, because stopping it part-way would leave
+    /// half of an unreachable subtree behind with links into freed slots.
     pub(crate) fn collect_cancellable(&mut self) -> XmlResult<GcStats> {
         let collected = self.collect_internal(true)?;
         Ok(self.stats(collected))
@@ -63,7 +66,7 @@ impl Arena {
     /// The collector proper: mark, sweep, and check the invariants in debug builds.
     fn collect_internal(&mut self, cancellable: bool) -> XmlResult<usize> {
         let marked = self.mark(cancellable)?;
-        let collected = self.sweep(&marked, cancellable)?;
+        let collected = self.sweep(&marked);
         #[cfg(debug_assertions)]
         self.debug_check_reference_counts();
         Ok(collected)
@@ -73,11 +76,14 @@ impl Arena {
     fn mark(&self, cancellable: bool) -> XmlResult<Vec<bool>> {
         let mut marked = vec![false; self.slots.len()];
         let mut stack: Vec<NodeId> = Vec::new();
+        let mut check = if cancellable {
+            CancellationCheck::new()
+        } else {
+            CancellationCheck::disabled()
+        };
 
         for (index, slot) in self.slots.iter().enumerate() {
-            if cancellable {
-                cancel_this::is_cancelled!()?;
-            }
+            check.tick()?;
             if let Some(node) = slot.occupied()
                 && node.external.get() > 0
             {
@@ -90,9 +96,7 @@ impl Arena {
         }
 
         while let Some(id) = stack.pop() {
-            if cancellable {
-                cancel_this::is_cancelled!()?;
-            }
+            check.tick()?;
             let Some(slot) = self.occupied(id) else {
                 continue;
             };
@@ -124,12 +128,11 @@ impl Arena {
     }
 
     /// Frees every unmarked slot and returns how many there were.
-    fn sweep(&mut self, marked: &[bool], cancellable: bool) -> XmlResult<usize> {
+    ///
+    /// Deliberately not cancellable: see [`Arena::collect_cancellable`].
+    fn sweep(&mut self, marked: &[bool]) -> usize {
         let mut collected = 0;
         for index in 0..self.slots.len() {
-            if cancellable {
-                cancel_this::is_cancelled!()?;
-            }
             if marked.get(index).copied().unwrap_or(false) {
                 continue;
             }
@@ -150,7 +153,7 @@ impl Arena {
         }
         #[cfg(debug_assertions)]
         self.debug_check_invariants();
-        Ok(collected)
+        collected
     }
 
     /// Checks every structural invariant of the arena.
@@ -407,7 +410,9 @@ mod tests {
         // and the copy must be complete afterwards.
         let snapshot = arena.snapshot(root, true).unwrap();
         let expected = snapshot.nodes.len();
-        let copy = arena.insert_snapshot(snapshot);
+        let copy = arena
+            .insert_snapshot(snapshot, &mut CancellationCheck::disabled())
+            .unwrap();
         assert_eq!(arena.children(copy).len(), 6);
         assert_eq!(arena.parent(arena.children(copy)[0]), Some(copy));
         assert!(arena.capacity() >= expected);

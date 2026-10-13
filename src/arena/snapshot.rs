@@ -1,7 +1,6 @@
 //! Detached, fully owned copies of subtrees, used to move data between documents.
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 use crate::namespace::Namespace;
 use crate::qualified_name::QualifiedName;
@@ -38,7 +37,7 @@ pub(crate) enum SnapshotNode {
     /// An element, without its children (they live in [`Snapshot::children`]).
     Element {
         name: QualifiedName,
-        attributes: BTreeMap<QualifiedName, Arc<str>>,
+        attributes: BTreeMap<QualifiedName, Text>,
         namespace_declarations: BTreeMap<Option<NCName>, Option<Namespace>>,
     },
     /// A text node.

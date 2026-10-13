@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Union
 
 from . import _sys
 
@@ -17,7 +17,7 @@ class Namespace:
         Namespace("http://example.com", "ex")         # prefixed
         Namespace.prefixed("http://example.com", "ex")
 
-    Equality is structural (URI *and* prefix); use :meth:`is_equal_ns` for the specification's
+    Equality is structural (URI *and* prefix); use :meth:`has_same_uri` for the specification's
     notion of namespace equality, which ignores the prefix.
     """
 
@@ -52,9 +52,11 @@ class Namespace:
         """The namespace prefix, or ``None`` for a default namespace."""
         return self._namespace.prefix()
 
-    def is_equal_ns(self, other: "Namespace") -> bool:
-        """Whether this namespace and ``other`` have the same URI."""
-        return self._namespace.is_equal_ns(_sys.Namespace(other.uri, other.prefix))
+    def has_same_uri(self, other: Union["Namespace", str]) -> bool:
+        """Whether this namespace and ``other`` (a namespace or a URI) have the same URI."""
+        if isinstance(other, str):
+            return self.uri == other
+        return self._namespace.has_same_uri(other._namespace)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Namespace):

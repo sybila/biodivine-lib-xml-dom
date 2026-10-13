@@ -10,7 +10,6 @@
 
 use std::collections::BTreeMap;
 use std::ops::Deref;
-use std::sync::Arc;
 
 use crate::document::Document;
 use crate::error::{XmlError, XmlResult};
@@ -99,9 +98,10 @@ impl Element {
     /// All attributes of this element, keyed by expanded name.
     ///
     /// Because the attributes live in a map keyed by [`QualifiedName`], two attributes with the
-    /// same expanded name are unrepresentable — a locally decidable property — and
-    /// [`rule.elements-and-tags.unique-attribute-specification`](crate::xml_spec::rule_set::rule_elements_and_tags_unique_attribute_specification) are enforced by the storage type.
-    pub fn attributes(&self) -> BTreeMap<QualifiedName, Arc<str>> {
+    /// same expanded name are unrepresentable, so
+    /// [`rule.elements-and-tags.unique-attribute-specification`](crate::xml_spec::rule_set::rule_elements_and_tags_unique_attribute_specification)
+    /// is enforced by the storage type.
+    pub fn attributes(&self) -> BTreeMap<QualifiedName, Text> {
         let id = self.0.id;
         self.0.document.read_arena("Element::attributes", |arena| {
             arena.element(id).attributes.clone()
@@ -109,7 +109,7 @@ impl Element {
     }
 
     /// The value of the attribute with the given expanded name.
-    pub fn attribute(&self, name: &QualifiedName) -> Option<Arc<str>> {
+    pub fn attribute(&self, name: &QualifiedName) -> Option<Text> {
         let id = self.0.id;
         self.0.document.read_arena("Element::attribute", |arena| {
             arena.element(id).attributes.get(name).cloned()
@@ -121,7 +121,7 @@ impl Element {
     /// This is the common case (`<a href="…">`) and is the only way an unprefixed attribute can
     /// be spelled, because the default namespace never applies to attributes
     /// ([`rule.namespace-usage.default-namespace-not-attributes`](crate::xml_spec::rule_set::rule_namespace_usage_default_namespace_not_attributes)).
-    pub fn attribute_local(&self, local_name: &NCName) -> Option<Arc<str>> {
+    pub fn attribute_without_namespace(&self, local_name: &NCName) -> Option<Text> {
         self.attribute(&QualifiedName::new(local_name.clone(), None))
     }
 
@@ -130,11 +130,12 @@ impl Element {
         self.attribute(name).is_some()
     }
 
-    /// Sets an attribute, overwriting any previous value with the same expanded name.
+    /// Sets an attribute, replacing any previous attribute with the same expanded name.
     ///
-    /// Overwriting is the documented default behaviour (a map keyed by expanded name cannot hold
-    /// two entries, and requiring an explicit removal first would make the common "update this
-    /// attribute" case unnecessarily verbose).
+    /// Replacing is the default because a map keyed by expanded name cannot hold two entries, and
+    /// requiring an explicit removal first would make the common "update this attribute" case
+    /// unnecessarily verbose. The replacement is complete: if the previous attribute was written
+    /// with a different prefix for the same namespace URI, the new `name` (and its prefix) wins.
     ///
     /// # Panics
     ///
@@ -173,13 +174,15 @@ impl Element {
             .write_arena("Element::set_attribute_checked", |arena| {
                 let name = arena.intern_name(name);
                 let element = arena.element_mut(id);
-                element.attributes.insert(name, Arc::from(value.as_str()));
+                // `insert` alone would keep the old key, and with it the old prefix.
+                element.attributes.remove(&name);
+                element.attributes.insert(name, value);
             });
         Ok(())
     }
 
     /// Removes an attribute, returning its previous value.
-    pub fn remove_attribute(&self, name: &QualifiedName) -> Option<Arc<str>> {
+    pub fn remove_attribute(&self, name: &QualifiedName) -> Option<Text> {
         let id = self.0.id;
         self.0
             .document
@@ -279,7 +282,7 @@ impl Element {
                     .get(&prefix)
                     .cloned();
                 if let Some(Some(existing)) = existing
-                    && !existing.is_equal_ns(&namespace)
+                    && !existing.has_same_uri(&namespace)
                 {
                     return Err(XmlError::InvalidNamespace(format!(
                         "the prefix `{}` is already declared with a different URI (`{}`)",
@@ -343,12 +346,12 @@ impl Element {
     ///
     /// The predefined `xml` prefix is *not* resolved here: it is implicitly bound even without a
     /// declaration (Namespaces 1.0 §3, [`rule.namespace-basics.xml-prefix-fixed-binding`](crate::xml_spec::rule_set::rule_namespace_basics_xml_prefix_fixed_binding)), which
-    /// [`Element::resolve_qualified_name`] handles.
-    pub fn get_namespace(&self, prefix: Option<&NCName>) -> Option<Namespace> {
+    /// [`Element::resolve_element_name`] handles.
+    pub fn lookup_namespace(&self, prefix: Option<&NCName>) -> Option<Namespace> {
         let id = self.0.id;
         self.0
             .document
-            .read_arena("Element::get_namespace", |arena| {
+            .read_arena("Element::lookup_namespace", |arena| {
                 arena.resolve_prefix(id, prefix)
             })
             .flatten()
@@ -368,8 +371,21 @@ impl Element {
     ///   ([`rule.namespace-usage.prefix-declared`](crate::xml_spec::rule_set::rule_namespace_usage_prefix_declared)).
     /// - [`XmlError::ReservedPrefix`] for the `xmlns` prefix
     ///   ([`rule.namespace-basics.xmlns-not-element-prefix`](crate::xml_spec::rule_set::rule_namespace_basics_xmlns_not_element_prefix)).
-    pub fn resolve_qualified_name(&self, name: &str) -> XmlResult<QualifiedName> {
-        QualifiedName::resolve_element(self, name)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
+    ///
+    /// let document = Document::new();
+    /// let element = document.create_element(QualifiedName::without_namespace("a").unwrap());
+    /// element.declare_namespace(Namespace::without_prefix("http://default.com").unwrap());
+    ///
+    /// let name = element.resolve_element_name("b").unwrap();
+    /// assert_eq!(name.namespace().unwrap().uri(), "http://default.com");
+    /// ```
+    pub fn resolve_element_name(&self, name: &str) -> XmlResult<QualifiedName> {
+        QualifiedName::resolve_with_element(self, name, true)
     }
 
     /// Resolves an attribute name written as a string against the namespace declarations that
@@ -380,9 +396,23 @@ impl Element {
     ///
     /// # Errors
     ///
-    /// As [`Element::resolve_qualified_name`].
+    /// As [`Element::resolve_element_name`].
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
+    ///
+    /// let document = Document::new();
+    /// let element = document.create_element(QualifiedName::without_namespace("a").unwrap());
+    /// element.declare_namespace(Namespace::without_prefix("http://default.com").unwrap());
+    ///
+    /// // Unprefixed attributes ignore the default namespace.
+    /// let name = element.resolve_attribute_name("b").unwrap();
+    /// assert!(name.namespace().is_none());
+    /// ```
     pub fn resolve_attribute_name(&self, name: &str) -> XmlResult<QualifiedName> {
-        QualifiedName::resolve_attribute(self, name)
+        QualifiedName::resolve_with_element(self, name, false)
     }
 
     // -------------------------------------------------------------------------------------
@@ -394,12 +424,11 @@ impl Element {
     /// Shadowing [`Node::shallow_clone`] so that the result is an [`Element`] again: the copy of
     /// an element is always an element.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
-    /// while the copy is being made.
-    pub fn shallow_clone(&self) -> XmlResult<Element> {
-        Ok(Element::new_unchecked(self.0.shallow_clone()?))
+    /// Panics if the copy would take its document past [`MAX_NODES`](crate::MAX_NODES) nodes.
+    pub fn shallow_clone(&self) -> Element {
+        Element::new_unchecked(self.0.shallow_clone())
     }
 
     /// Creates a detached, deep copy of this element in the same document.
@@ -410,6 +439,10 @@ impl Element {
     ///
     /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
     /// while the subtree is being copied.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the copy would take its document past [`MAX_NODES`](crate::MAX_NODES) nodes.
     pub fn deep_clone(&self) -> XmlResult<Element> {
         Ok(Element::new_unchecked(self.0.deep_clone()?))
     }
@@ -418,12 +451,11 @@ impl Element {
     ///
     /// See [`Node::shallow_clone_into`].
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
-    /// while the copy is being made.
-    pub fn shallow_clone_into(&self, target: &Document) -> XmlResult<Element> {
-        Ok(Element::new_unchecked(self.0.shallow_clone_into(target)?))
+    /// Panics if the copy would take its document past [`MAX_NODES`](crate::MAX_NODES) nodes.
+    pub fn shallow_clone_into(&self, target: &Document) -> Element {
+        Element::new_unchecked(self.0.shallow_clone_into(target))
     }
 
     /// Creates a detached, deep copy of this element in `target`.
@@ -435,16 +467,12 @@ impl Element {
     ///
     /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
     /// while the subtree is being copied.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the copy would take its document past [`MAX_NODES`](crate::MAX_NODES) nodes.
     pub fn deep_clone_into(&self, target: &Document) -> XmlResult<Element> {
         Ok(Element::new_unchecked(self.0.deep_clone_into(target)?))
-    }
-
-    /// Detaches this element from its parent and returns it.
-    ///
-    /// Shadowing [`Node::remove`] so that the result stays an [`Element`].
-    pub fn remove(&self) -> Element {
-        self.0.detach();
-        self.clone()
     }
 }
 
@@ -471,10 +499,10 @@ impl std::fmt::Debug for Element {
 impl std::fmt::Display for Element {
     /// Renders this element (and its subtree) as XML.
     ///
-    /// This delegates to the module-level XML serializer, which writes exactly the namespace
-    /// declarations stored in the tree and never invents new ones.
+    /// This uses the document serializer, which writes exactly the namespace declarations stored
+    /// in the tree and never invents new ones. Rendering is never cancelled.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&crate::io::write_element_to_string(self))
+        f.write_str(&crate::io::write_node_to_string(&self.0))
     }
 }
 

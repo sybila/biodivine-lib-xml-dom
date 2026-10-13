@@ -1,4 +1,4 @@
-"""Runs every Python example of the documentation book.
+"""Runs every Python example of the documentation book, and the one in the README.
 
 The book includes these files verbatim, so this module is what makes "the examples work" a checked
 property: a chapter cannot show a snippet that no longer runs.
@@ -6,12 +6,14 @@ property: a chapter cannot show a snippet that no longer runs.
 
 from __future__ import annotations
 
+import re
 import runpy
 from pathlib import Path
 
 import pytest
 
-BOOK_EXAMPLES = Path(__file__).resolve().parents[2] / "docs" / "book" / "examples" / "python"
+ROOT = Path(__file__).resolve().parents[2]
+BOOK_EXAMPLES = ROOT / "docs" / "book" / "examples" / "python"
 EXAMPLES = sorted(path for path in BOOK_EXAMPLES.glob("*.py"))
 
 
@@ -24,3 +26,10 @@ def test_the_book_has_python_examples() -> None:
 @pytest.mark.parametrize("example", EXAMPLES, ids=lambda path: path.stem)
 def test_book_example_runs(example: Path) -> None:
     runpy.run_path(str(example), run_name="__main__")
+
+
+def test_readme_example_runs() -> None:
+    readme = (ROOT / "README.md").read_text()
+    blocks = re.findall(r"```python\n(.*?)```", readme, flags=re.DOTALL)
+    assert len(blocks) == 1, "the README has exactly one Python example"
+    exec(compile(blocks[0], "README.md", "exec"), {"__name__": "__main__"})

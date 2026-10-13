@@ -5,15 +5,10 @@
 #     scripts/verify.sh          # from the repository root, or anywhere
 #     make verify                # same thing
 #
-# It prints every command with its exit code, so a report of "the gates pass" can be checked by
-# re-running this script rather than by trusting a transcript.
-#
 # Scope notes:
-#   * `--all-features` is applied to the *core* crate only. The binding crate's `extension-module`
-#     feature is deliberately enabled only by maturin for wheel builds; turning it on for `cargo
-#     clippy` would check the configuration that is explicitly not the in-process-test one.
-#   * clippy runs with `-D warnings`, so the "0 warnings" claim is a gate rather than a snapshot.
-#     Both profiles are linted: a debug-only import or an unreachable arm can be dead code in one
+#   * The binding crate's `extension-module` feature is deliberately enabled only by maturin for
+#     wheel builds, so no run here enables it.
+#   * clippy runs with `-D warnings`. Both profiles are linted: a debug-only import or an unreachable arm can be dead code in one
 #     profile and live code in the other, so the dev gate alone would not notice it.
 #   * the MSRV run uses the oldest toolchain the project declares (see `[workspace.package]`).
 set -uo pipefail
@@ -25,7 +20,7 @@ cd "$ROOT"
 VENV="${VENV:-$ROOT/.venv}"
 PYTHON="$VENV/bin/python"
 MSRV="1.88.0"
-Pinned="1.95.0"
+PINNED="1.95.0"
 
 failures=0
 run() {
@@ -43,7 +38,7 @@ run() {
 printf '=== environment\n'
 rustc --version
 cargo --version
-for toolchain in "$MSRV" "$Pinned"; do
+for toolchain in "$MSRV" "$PINNED"; do
     rustc "+$toolchain" --version 2>/dev/null || echo "toolchain $toolchain is not installed"
 done
 "$PYTHON" -V
@@ -55,7 +50,6 @@ done
 run cargo fmt --check
 run cargo clippy --workspace --all-targets -- -D warnings
 run cargo clippy --workspace --all-targets --release -- -D warnings
-run cargo clippy -p biodivine-lib-xml-dom --all-targets --all-features -- -D warnings
 run cargo test --workspace
 run cargo test --workspace --release
 
@@ -66,20 +60,19 @@ else
     printf '\n!!! toolchain %s is not installed: cannot verify the declared MSRV\n' "$MSRV"
     failures=$((failures + 1))
 fi
-if rustc "+$Pinned" --version >/dev/null 2>&1; then
-    run cargo "+$Pinned" test --workspace
+if rustc "+$PINNED" --version >/dev/null 2>&1; then
+    run cargo "+$PINNED" test --workspace
 else
-    printf '\n!!! toolchain %s is not installed: cannot verify the CI-pinned toolchain\n' "$Pinned"
+    printf '\n!!! toolchain %s is not installed: cannot verify the CI-pinned toolchain\n' "$PINNED"
     failures=$((failures + 1))
 fi
 
 # --- Miri (undefined behaviour in the data structures) ----------------------------------------
 # Miri needs a nightly toolchain with the `miri` component; when it is not installed the run is
-# reported as skipped rather than as a pass, so an unverified claim is never presented as verified.
-# Miri only ships for nightly (`rustup component add miri`), so it is looked for on the pinned
-# toolchain first and on nightly after that.
+# reported as a failure rather than silently skipped. A pinned toolchain that has Miri is
+# preferred, nightly is the fallback.
 MIRI_TOOLCHAIN=""
-for toolchain in "$Pinned" nightly; do
+for toolchain in "$PINNED" nightly; do
     if cargo "+$toolchain" miri --version >/dev/null 2>&1; then
         MIRI_TOOLCHAIN="$toolchain"
         break
@@ -97,20 +90,18 @@ else
     failures=$((failures + 1))
 fi
 
-# --- examples (the ones the book includes) -----------------------------------------------------
+# --- examples ---------------------------------------------------------------------------------
 run cargo build --examples
-for example in $(ls examples/book_*.rs examples/tour.rs | sed 's|examples/||; s|\.rs||'); do
+for example in $(ls examples/*.rs | sed 's|examples/||; s|\.rs||'); do
     run cargo run --quiet --example "$example"
 done
 
 # --- documentation ----------------------------------------------------------------------------
-# The public documentation is built into a clean target/doc first: the audit sweep inspects the
-# rendered pages, and a previous `--document-private-items` run would leave pages of internal
-# modules behind that a public build never produces.
-rm -rf target/doc
+# Each crate is documented on its own as well as in the workspace: a workspace build unifies the
+# features of shared dependencies, which can hide a link that only resolves with another crate's
+# features (docs.rs builds the core crate on its own).
+run env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p biodivine-lib-xml-dom
 run env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
-run "$PYTHON" docs/audit_docs.py --include-book --self-test
-run "$PYTHON" docs/audit_docs.py --include-book
 run env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace --document-private-items
 run "$PYTHON" scripts/gen_rule_set.py --check
 run "$PYTHON" scripts/gen_rule_coverage.py --check
@@ -118,7 +109,6 @@ run "$PYTHON" scripts/gen_diagrams.py --check
 run "$PYTHON" docs/check_doc_sections.py --self-test
 run "$PYTHON" docs/check_doc_sections.py
 run "$PYTHON" docs/check_book.py
-run "$PYTHON" docs/check_facts.py
 run bash docs/build_docs.sh
 run "$PYTHON" docs/check_book.py --built
 

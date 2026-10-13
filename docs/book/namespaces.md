@@ -62,14 +62,12 @@ one, an unprefixed element name takes whatever the default namespace is in scope
 :::
 ::::
 
-The `xml` prefix is special: it is bound to `http://www.w3.org/XML/1998/namespace` without a
-declaration, so `xml:lang`, `xml:space` and `xml:id` always resolve.
-
 ## Attributes and the `xml` prefix
 
 Attributes are expanded names too, with one twist: an unprefixed attribute is in *no* namespace,
 even when a default namespace is in scope. The `xml` prefix, on the other hand, is always bound
-to its reserved URI, so `xml:lang` works without any declaration.
+to `http://www.w3.org/XML/1998/namespace` without a declaration, so `xml:lang`, `xml:space` and
+`xml:id` always resolve.
 
 ::::{tab-set}
 :::{tab-item} Rust
@@ -167,6 +165,6 @@ output. The contract is: **edits are silent, `validate` reports**.
 :::
 ::::
 
-See [Validating a document](validation.md) for what is reported and
-[Known limitations and gotchas](limitations.md) for what the library deliberately does not do.
+Next: [Parsing and serializing](parsing-and-serializing.md) for reading and writing documents, and
+[Validating a document](validation.md) for what is reported.
 

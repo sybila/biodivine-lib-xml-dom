@@ -127,7 +127,7 @@ prescribe processor behaviour that no API of this library exposes.
 | `rule.entities.document-entity-well-formed` | B: parser (well-formedness) | partial (the rest needs DTD processing) | partially: single well-formed root; the document *is* checked to be well-formed (tags, single root); the DTD parts of the rule are out of scope |
 | `rule.entities.encoding-decl-required-non-utf` | X: out of scope | out of scope | non-UTF-8 encodings |
 | `rule.entities.encoding-must-match-declaration` | B: parser (well-formedness) | enforced | declared encoding must be UTF-8; `unsupported_declarations_are_rejected` |
-| `rule.entities.encoding-name-case-insensitive` | B: parser (well-formedness) | enforced | encoding name comparison; `xml_spec::declaration::encoding_is_utf8`; `the_declaration_is_interpreted_and_preserved` |
+| `rule.entities.encoding-name-case-insensitive` | B: parser (well-formedness) | enforced | encoding name comparison; `xml_spec::encoding_is_utf8`; `the_declaration_is_interpreted_and_preserved` |
 | `rule.entities.encoding-name-conventions` | X: out of scope | out of scope | default for this specification section |
 | `rule.entities.entity-declared-general-ordering` | X: out of scope | out of scope | default for this specification section |
 | `rule.entities.entity-declared-wfc` | X: out of scope | out of scope | default for this specification section |
@@ -189,7 +189,7 @@ prescribe processor behaviour that no API of this library exposes.
 | `rule.namespace-basics.ns-decl-attribute-syntax` | B: parser (well-formedness) | enforced | xmlns / xmlns:prefix recognition; `Parser::namespace_declarations` |
 | `rule.namespace-basics.ns-decl-value-uri-or-empty` | B: parser (well-formedness) | enforced | empty value only for default ns; an empty value is only accepted for the default namespace; `namespaces_are_resolved_and_reported` |
 | `rule.namespace-basics.reserved-xml-prefixes` | A: local (type/construction) | enforced by construction | validate_namespace |
-| `rule.namespace-basics.uri-comparison-literal-case-sensitive` | A: local (type/construction) | enforced by construction | is_equal_ns compares bytes |
+| `rule.namespace-basics.uri-comparison-literal-case-sensitive` | A: local (type/construction) | enforced by construction | `Namespace::has_same_uri` compares bytes |
 | `rule.namespace-basics.xml-namespace-not-default` | A: local (type/construction) | enforced by construction | validate_namespace |
 | `rule.namespace-basics.xml-prefix-fixed-binding` | A: local (type/construction) | enforced by construction | validate_xml_prefix_binding |
 | `rule.namespace-basics.xmlns-namespace-not-default` | A: local (type/construction) | enforced by construction | validate_namespace |
@@ -250,7 +250,7 @@ prescribe processor behaviour that no API of this library exposes.
 | `rule.well-formedness.pi-pass-through` | B: parser (well-formedness) | enforced | PI content kept verbatim; `processing_instruction_content_is_kept_verbatim` |
 | `rule.well-formedness.pi-target-is-name` | A: local (type/construction) | enforced by construction | PiTarget |
 | `rule.well-formedness.pi-target-not-xml` | A: local (type/construction) | enforced by construction | PiTarget |
-| `rule.well-formedness.single-root-element` | B: parser (well-formedness) | enforced | plus structural check in validation; `MultipleRootElements`; `there_must_be_exactly_one_root_element` |
+| `rule.well-formedness.single-root-element` | B: parser (well-formedness) | enforced | one root by construction (`Document::set_root` replaces it); `MultipleRootElements`; `there_must_be_exactly_one_root_element` |
 | `rule.well-formedness.utf-8-utf-16-support` | B: parser (well-formedness) | deferred | UTF-8 only, by project scope; UTF-16 is out of scope; UTF-8 is fully supported (see `entities.utf-utf16-support`) |
 | `rule.well-formedness.whitespace-definition` | B: parser (well-formedness) | enforced | S production for whitespace handling; the `S` production is used for the declaration separator and for recognising ignorable top-level whitespace |
 | `rule.well-formedness.xml-prefix-reserved` | A: local (type/construction) | enforced by construction | validate_namespace / PiTarget |

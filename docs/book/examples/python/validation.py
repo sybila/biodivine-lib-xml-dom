@@ -41,6 +41,6 @@ root.declare_namespace(missing)
 root.set_attribute(("space", XML_NAMESPACE), "preserve")
 root.remove_attribute(("id", XML_NAMESPACE))
 assert document.is_valid()
-assert xml.parse('<a xmlns:ex="http://e"><ex:b/></a>').is_valid()
+assert xml.Document.parse('<a xmlns:ex="http://e"><ex:b/></a>').is_valid()
 print("ok")
 # ANCHOR_END: fix

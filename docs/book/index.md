@@ -47,8 +47,9 @@ page of the crate documentation, and the design notes ship with the rustdoc as w
 ## Running the examples
 
 Every example in this book is a real file: the Rust ones are `examples/book_*.rs` targets of the
-crate, and the Python ones are scripts under `docs/book/examples/python/`. They are executed by the
-test suites, so nothing here can quietly rot.
+crate, and the Python ones are scripts under `docs/book/examples/python/`. `cargo test` compiles the
+Rust examples and `make examples` runs them; the Python test suite runs the Python ones, so nothing
+here can quietly rot.
 
 ```sh
 cargo run --example book_getting_started        # Rust

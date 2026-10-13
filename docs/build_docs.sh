@@ -5,9 +5,10 @@
 #   1. `cargo doc` for the Rust API of both crates, with warnings denied
 #   2. the `# Errors` / `# Panics` conventions (docs/check_doc_sections.py)
 #   3. the book's structure and language pairs (docs/check_book.py)
-#   4. the Python API reference (Sphinx autodoc over the pure-Python package)
-#   5. the documentation book (Sphinx + MyST + sphinx-design)
-#   6. the built book again, now checking chapter titles and the tab markup
+#   4. the native extension, built with maturin if it is not importable yet
+#   5. the Python API reference (Sphinx autodoc over the pure-Python package)
+#   6. the documentation book (Sphinx + MyST + sphinx-design)
+#   7. the built book again, now checking chapter titles and the tab markup
 #
 # Usage:  docs/build_docs.sh          (from the repository root, or anywhere)
 #         make docs                   (same thing)
@@ -39,7 +40,7 @@ if [ -x "$PYTHON" ]; then
     "$PYTHON" -c 'import sys, sphinx, sphinx_design, myst_parser; print("python", sys.version.split()[0]); print("sphinx", sphinx.__version__)'
     "$PYTHON" -m pytest --version 2>/dev/null || true
 else
-    echo "no virtualenv at $VENV (create it with: python3 -m venv .venv && .venv/bin/pip install maturin pytest sphinx sphinx-design myst-parser)"
+    echo "no virtualenv at $VENV (create it with: python3 -m venv .venv && .venv/bin/pip install maturin pytest -r docs/requirements.txt)"
     fail=1
 fi
 command -v cargo >/dev/null || source "$HOME/.cargo/env"

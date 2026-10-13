@@ -2,7 +2,7 @@
 
 import biodivine_lib_xml_dom as xml
 
-document = xml.parse("<root><a/><b/><c/></root>")
+document = xml.Document.parse("<root><a/><b/><c/></root>")
 root = document.root
 
 # ANCHOR: handles
@@ -82,5 +82,5 @@ wrapper = target.create_element("wrapper")
 target.set_root(wrapper)
 wrapper.append_child(root.deep_clone_into(target))
 assert target.is_valid()
-print(xml.write(document))
+print(document.write())
 # ANCHOR_END: import

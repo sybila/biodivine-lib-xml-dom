@@ -17,6 +17,8 @@
 
 use std::fmt;
 
+use crate::error::{XmlError, XmlResult};
+
 /// The version string this library supports.
 pub const XML_VERSION: &str = "1.0";
 
@@ -25,7 +27,9 @@ pub const UTF8_ENCODING_NAME: &str = "UTF-8";
 
 /// The XML declaration of a document.
 ///
-/// See the module documentation for why this is a value on the document rather than a node.
+/// The declaration is a property of the document rather than a node of its tree. A value of this
+/// type is always one this library can write and read back: the version is
+/// [`XML_VERSION`] and the encoding, if present, names UTF-8.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct XmlDeclaration {
     version: String,
@@ -34,26 +38,60 @@ pub struct XmlDeclaration {
 }
 
 impl XmlDeclaration {
-    /// Creates a declaration from its parts, without validating the version or encoding.
+    /// Creates a declaration from its parts.
     ///
-    /// Validation is the parser's job (it has to report [`crate::XmlError::UnsupportedXmlVersion`]
-    /// or [`crate::XmlError::UnsupportedEncoding`]), so this constructor is deliberately cheap and
-    /// infallible.
+    /// The encoding is kept with the spelling it was given (`utf-8` stays `utf-8`), so that a
+    /// parsed declaration is written back as it was read.
+    ///
+    /// # Errors
+    ///
+    /// - [`XmlError::UnsupportedXmlVersion`] if `version` is not [`XML_VERSION`].
+    /// - [`XmlError::UnsupportedEncoding`] if `encoding` does not name UTF-8 (see
+    ///   [`encoding_is_utf8`]).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use biodivine_lib_xml_dom::xml_spec::XmlDeclaration;
+    ///
+    /// let declaration = XmlDeclaration::new("1.0", Some("utf-8"), Some(true)).unwrap();
+    /// assert_eq!(
+    ///     declaration.to_string(),
+    ///     r#"<?xml version="1.0" encoding="utf-8" standalone="yes"?>"#
+    /// );
+    /// assert!(XmlDeclaration::new("1.1", None::<&str>, None).is_err());
+    /// assert!(XmlDeclaration::new("1.0", Some("UTF-16"), None).is_err());
+    /// ```
     pub fn new(
         version: impl Into<String>,
         encoding: Option<impl Into<String>>,
         standalone: Option<bool>,
-    ) -> Self {
-        Self {
-            version: version.into(),
-            encoding: encoding.map(Into::into),
-            standalone,
+    ) -> XmlResult<Self> {
+        let version = version.into();
+        if version != XML_VERSION {
+            return Err(XmlError::UnsupportedXmlVersion(version));
         }
+        let encoding = encoding.map(Into::into);
+        if let Some(encoding) = &encoding
+            && !encoding_is_utf8(encoding)
+        {
+            // rule: rule.entities.encoding-must-match-declaration
+            return Err(XmlError::UnsupportedEncoding(encoding.clone()));
+        }
+        Ok(Self {
+            version,
+            encoding,
+            standalone,
+        })
     }
 
     /// The declaration this crate writes by default: version 1.0, UTF-8, no `standalone`.
     pub fn utf8() -> Self {
-        Self::new(XML_VERSION, Some(UTF8_ENCODING_NAME), None)
+        Self {
+            version: XML_VERSION.to_string(),
+            encoding: Some(UTF8_ENCODING_NAME.to_string()),
+            standalone: None,
+        }
     }
 
     /// The declared XML version.
@@ -75,7 +113,7 @@ impl XmlDeclaration {
     ///
     /// This is the form the serializer needs: `quick-xml` writes `<?`, the content and `?>`
     /// around a declaration event, so the content must be exactly `version="…" …`.
-    pub fn pseudo_attributes(&self) -> String {
+    pub(crate) fn pseudo_attributes(&self) -> String {
         let mut result = format!("version=\"{}\"", self.version);
         if let Some(encoding) = &self.encoding {
             result.push_str(&format!(" encoding=\"{encoding}\""));
@@ -128,15 +166,21 @@ mod tests {
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
         );
         assert_eq!(
-            XmlDeclaration::new("1.0", None::<String>, None).to_string(),
+            XmlDeclaration::new("1.0", None::<String>, None)
+                .unwrap()
+                .to_string(),
             "<?xml version=\"1.0\"?>"
         );
         assert_eq!(
-            XmlDeclaration::new("1.0", Some("UTF-8"), Some(true)).to_string(),
+            XmlDeclaration::new("1.0", Some("UTF-8"), Some(true))
+                .unwrap()
+                .to_string(),
             "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
         );
         assert_eq!(
-            XmlDeclaration::new("1.0", Some("UTF-8"), Some(false)).to_string(),
+            XmlDeclaration::new("1.0", Some("UTF-8"), Some(false))
+                .unwrap()
+                .to_string(),
             "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>"
         );
     }
@@ -148,14 +192,29 @@ mod tests {
             "version=\"1.0\" encoding=\"UTF-8\""
         );
         assert_eq!(
-            XmlDeclaration::new("1.0", None::<String>, Some(false)).pseudo_attributes(),
+            XmlDeclaration::new("1.0", None::<String>, Some(false))
+                .unwrap()
+                .pseudo_attributes(),
             "version=\"1.0\" standalone=\"no\""
         );
     }
 
     #[test]
+    fn unsupported_values_are_rejected() {
+        assert!(matches!(
+            XmlDeclaration::new("1.0\" foo=\"", None::<String>, None),
+            Err(XmlError::UnsupportedXmlVersion(_))
+        ));
+        assert!(matches!(
+            XmlDeclaration::new("1.0", Some("UTF-8\" foo=\""), None),
+            Err(XmlError::UnsupportedEncoding(_))
+        ));
+    }
+
+    #[test]
     fn accessors() {
-        let declaration = XmlDeclaration::new("1.0", Some("UTF-8"), Some(true));
+        let declaration =
+            XmlDeclaration::new("1.0", Some("UTF-8"), Some(true)).unwrap();
         assert_eq!(declaration.version(), "1.0");
         assert_eq!(declaration.encoding(), Some("UTF-8"));
         assert_eq!(declaration.standalone(), Some(true));

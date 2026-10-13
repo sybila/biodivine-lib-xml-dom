@@ -14,16 +14,18 @@ fn main() {
     let root = document.root().unwrap();
 
     // ANCHOR: mapping
-    // The Python layer offers `for child in node` and `node["class"]`; the Rust API
-    // spells the same operations as an explicit child list and an attribute lookup
-    // by local name.
+    // The Python layer offers `for child in node` and `child.get("class")`; the Rust
+    // API spells the same operations as an explicit child list and an attribute
+    // lookup by local name.
     let children = root.child_elements();
     assert_eq!(children.len(), 2);
     let classes: Vec<String> = children
         .iter()
         .map(|child| {
             child
-                .attribute_local(&biodivine_lib_xml_dom::xml_spec::nc_name("class"))
+                .attribute_without_namespace(&biodivine_lib_xml_dom::xml_spec::nc_name(
+                    "class",
+                ))
                 .unwrap()
                 .to_string()
         })
@@ -37,7 +39,7 @@ fn main() {
     // ANCHOR_END: indexing
 
     // ANCHOR: handles
-    // A handle is an identity: it can be compared, used as a map key, and asked
+    // A handle refers to one node: it can be compared, used as a map key, and asked
     // for its document.
     let child = root.child_elements()[0].clone();
     assert!(child.ptr_eq(&root.child_elements()[0]));

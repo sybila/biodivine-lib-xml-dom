@@ -1,4 +1,4 @@
-# Design notes
+# Architecture
 
 How this library is built and why it is built that way. It is written for someone who is about to
 change the code: every section states the decision, the reason for it and what it costs. The API
@@ -83,8 +83,8 @@ Three properties follow, and they are the reason for the design:
   once, at the outermost frame, and never re-acquires it. Internal code takes `&Arena`/`&mut Arena`
   and cannot lock at all, so a check-then-act sequence cannot be interleaved by another thread. In
   debug builds a re-entrancy guard turns a violation into a panic instead of a hang.
-* **Operational transform freedom.** Because all structural edits are validated and applied inside
-  one exclusive borrow, an operation such as "append this child if it would not create a cycle"
+* **Atomic edits.** Because all structural edits are validated and applied inside one exclusive
+  borrow, an operation such as "append this child if it would not create a cycle"
   either happens completely or not at all.
 
 What it costs: node payloads live in a vector, so an index is not a stable pointer across a
@@ -147,24 +147,36 @@ convention:
 
 Handles are `Send + Sync`, and so is `Document`; the counted reference is atomic. The Python
 bindings release the interpreter lock around whole-document work (parsing, serializing, validating,
-copying), so a long operation in one thread does not freeze others.
+copying, collecting), so a long operation in one thread does not freeze others.
 
 ### 4.1 Cancellation
 
-The operations that can take time proportional to the document — parsing, serialization,
-validation, cross-document copies and explicit garbage collection — are *cooperatively
-cancellable* through the [`cancel_this`](https://crates.io/crates/cancel-this) crate. A trigger is
-registered on the current thread (`cancel_this::on_trigger` and friends), the operation checks it at
-every step of its walk, and a cancelled operation returns `XmlError::Cancelled` rather than running
-to completion. There is no cancellation token in any signature: the trigger lives in a thread-local
-scope, so the check is nearly free when nothing is registered.
+The operations that take time proportional to the document (parsing, serialization, validation,
+deep copies and explicit garbage collection) are *cooperatively cancellable* through the
+[`cancel_this`](https://crates.io/crates/cancel-this) crate. A trigger is registered on the current
+thread (`cancel_this::on_trigger` and friends), the operation consults it periodically, and a
+cancelled operation returns `XmlError::Cancelled` rather than running to completion. There is no
+cancellation token in any signature: the trigger lives in a thread-local scope. Consulting it costs
+a thread-local borrow and a dynamic call, so the walks do it once every 1024 steps rather than on
+every node (`src/cancellation.rs`).
 
-Cancellation is designed to leave the document consistent. A cancelled collection simply leaves the
-unreachable nodes it had not reached for the next collection; a cancelled copy builds nothing in the
-target. The collector invoked *implicitly* by the allocator is deliberately not cancellable, because
-allocation is infallible; only the explicit `collect_garbage` honours triggers. The Python bindings
-register the interpreter's own signal check (`cancel_this::on_python`) around every operation that
-releases the GIL, so a `KeyboardInterrupt` aborts it and surfaces as a `KeyboardInterrupt`.
+A cancelled operation leaves the document as it was, which constrains where the checks may go:
+
+* parsing and validation build their result privately, so stopping them discards nothing visible;
+* a deep copy first reads the source into a snapshot and then builds the copy from it; both phases
+  are cancellable, and a copy cancelled while it is being built frees the nodes it allocated, so a
+  cancelled copy creates nothing;
+* the collector's mark phase is read-only and cancellable, while the sweep is not: stopping the sweep
+  part-way would free half of an unreachable subtree and leave the other half linked to freed slots;
+* serialization streams its output, so a cancelled write leaves the output written so far — the one
+  observable effect, and it is documented on the write methods.
+
+The collector invoked *implicitly* by the allocator is not cancellable, because allocation is
+infallible. Cheap operations (single-node edits, shallow copies) and the `Display` implementations,
+which cannot report an error, never consult the triggers.
+
+The Python bindings build on this without running Python code under a document lock; see
+`bindings.md`.
 
 ## 5. Errors
 
@@ -220,10 +232,11 @@ is organized by feature so that the file tree tells you where something lives:
 | `src/namespace.rs`, `src/qualified_name.rs` | the two name types: a namespace with its prefix, and an expanded name |
 | `src/interner.rs` | the per-document name interner |
 | `src/error.rs` | the error type (`XmlError`) and the `XmlResult` alias |
+| `src/cancellation.rs` | the periodic cancellation check used by the long operations |
 | `src/io.rs`, `src/io/{parse,write}.rs` | the parser and the serializer implementations |
 | `src/validation.rs` | whole-document validation |
 | `src/xml_spec.rs`, `src/xml_spec/*` | specification types, predicates, validation rules and the rule set |
-| `src/documentation.rs` | this document, the build instructions, the bindings map and the rule coverage |
+| `src/documentation.rs` | this document, the bindings map and the rule coverage |
 
 Only the crate root, `xml_spec` and `documentation` are public; everything else is an internal
 module, which is why the documentation never names one.
@@ -237,8 +250,9 @@ module, which is why the documentation never names one.
   parsing and serialization round trips, validation, cloning, concurrency, garbage collection.
 * **Property tests** (`proptest`) for the invariants that should hold for *every* input: serializing
   and re-parsing, editing sequences, and round trips through mutated input.
-* **Examples** in `examples/` are real programs, and the ones the book includes are executed by the
-  test suite, so no chapter can show code that no longer runs.
+* **Examples** in `examples/` are real programs. `cargo test` compiles them, `make examples` and
+  `scripts/verify.sh` run them, and the Python examples of the book are run by the Python test
+  suite, so no chapter can show code that no longer compiles or runs.
 * **Documentation tests**: every rustdoc example is compiled and executed by `cargo test`.
 
 `scripts/verify.sh` runs all of it, plus formatting, clippy in both profiles, the declared minimum

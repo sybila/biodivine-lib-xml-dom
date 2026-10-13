@@ -1,4 +1,7 @@
 //! [`PyDocument`]: the handle to one XML document.
+//!
+//! The doc comments on `#[pymethods]` become Python docstrings, so they are written for Python
+//! readers: plain text plus a `Raises:` section, without rustdoc links.
 
 use biodivine_lib_xml_dom::Document;
 use pyo3::prelude::*;
@@ -10,9 +13,11 @@ use std::path::PathBuf;
 use crate::element::PyElement;
 use crate::error::to_py_err;
 use crate::gc::PyGcStats;
+use crate::interrupt::run_interruptible;
 use crate::node::PyNode;
 use crate::node_id::PyNodeId;
 use crate::qualified_name::PyQualifiedName;
+use crate::validation::PyValidationError;
 use crate::write_options::{PyWriteOptions, PyXmlDeclaration};
 
 /// An XML document.
@@ -49,7 +54,7 @@ impl PyDocument {
     /// Creates a new, empty document (no root element).
     #[new]
     pub fn new() -> Self {
-        Document::empty().into()
+        Document::new().into()
     }
 
     /// The root element, or `None` if the document has none.
@@ -62,11 +67,9 @@ impl PyDocument {
     /// The previous root is not deleted: it stays in the arena as a detached subtree, so existing
     /// handles to it remain valid.
     ///
-    /// Raises `XmlDocumentError` if `root` belongs to another document or is already attached to a
-    /// parent. (Rust has a panicking `set_root` and a `set_root_checked`; Python has no panics, so
-    /// this is the `_checked` behaviour under the plain name.)
     /// Raises:
-    ///     XmlDocumentError: if `root` belongs to another document or is already attached to a parent.
+    ///     XmlDocumentError: if `root` belongs to another document or is already attached to a
+    ///         parent.
     #[pyo3(signature = (root))]
     pub fn set_root(&self, root: &PyElement) -> PyResult<Option<PyElement>> {
         self.inner
@@ -89,8 +92,6 @@ impl PyDocument {
 
     /// Creates a new, detached text node.
     ///
-    /// Raises `XmlSyntaxError` if the content contains characters that are not legal in XML, so an
-    /// invalid text node cannot be created at all.
     /// Raises:
     ///     XmlSyntaxError: if the content contains characters that are not legal in XML.
     pub fn create_text(&self, text: &str) -> PyResult<PyNode> {
@@ -102,7 +103,6 @@ impl PyDocument {
 
     /// Creates a new, detached comment node.
     ///
-    /// Raises `XmlSyntaxError` if the content contains `--` or ends with `-`.
     /// Raises:
     ///     XmlSyntaxError: if the content contains `--` or ends with `-`.
     pub fn create_comment(&self, text: &str) -> PyResult<PyNode> {
@@ -114,7 +114,6 @@ impl PyDocument {
 
     /// Creates a new, detached CDATA section.
     ///
-    /// Raises `XmlSyntaxError` if the content contains `]]>`.
     /// Raises:
     ///     XmlSyntaxError: if the content contains `]]>`.
     pub fn create_cdata(&self, text: &str) -> PyResult<PyNode> {
@@ -126,11 +125,9 @@ impl PyDocument {
 
     /// Creates a new, detached processing instruction.
     ///
-    /// Raises `XmlSyntaxError` if the target is not a valid XML `Name` or matches `xml`
-    /// case-insensitively, or if the content contains `?>`.
     /// Raises:
-    ///     XmlSyntaxError: if the target is not a valid XML name or matches `xml` case-insensitively,
-    ///     or if the content contains `?>`.
+    ///     XmlSyntaxError: if the target is not a valid XML name or matches `xml`
+    ///         case-insensitively, or if the content contains `?>`.
     pub fn create_processing_instruction(
         &self,
         target: &str,
@@ -154,52 +151,44 @@ impl PyDocument {
             .set_xml_declaration(declaration.map(|declaration| declaration.inner));
     }
 
-    /// Checks the whole document and reports **every** problem it can find.
-    ///
-    /// Raises `XmlValidationError` whose `args[1]` is a `ValidationErrors` sequence; the message is
-    /// the same multi-line summary Rust produces. Use [`PyDocument::validation_errors`] to get the
-    /// list without catching an exception.
+    /// Checks the whole document and reports every problem it can find.
     ///
     /// The GIL is released for the duration of the walk.
+    ///
     /// Raises:
-    ///     XmlValidationError: if the document has any problem. `args[0]` is the multi-line summary
-    ///     and `args[1]` the `ValidationErrors` sequence.
+    ///     XmlValidationError: if the document has any problem. `args[0]` is the multi-line
+    ///         summary and `args[1]` the list of `ValidationError` objects.
+    ///     BaseException: whatever a Python signal handler raises to interrupt the operation.
     pub fn validate(&self, py: Python<'_>) -> PyResult<()> {
         let document = self.inner.clone();
-        py.detach(|| cancel_this::on_python(|| document.validate()))
-            .map_err(to_py_err)
+        run_interruptible(py, document.node_count(), move || document.validate())
     }
 
     /// Every problem found by whole-document validation, as a list (empty when the document is
     /// valid).
     ///
-    /// This is the non-raising counterpart of [`PyDocument::validate`].
-    ///
     /// Raises:
-    ///     KeyboardInterrupt: if a Python interrupt is delivered during the walk.
+    ///     BaseException: whatever a Python signal handler raises to interrupt the operation (for
+    ///         example `KeyboardInterrupt`).
     pub fn validation_errors(
         &self,
         py: Python<'_>,
-    ) -> PyResult<Vec<crate::validation::PyXmlValidationError>> {
+    ) -> PyResult<Vec<PyValidationError>> {
         let document = self.inner.clone();
-        let errors = py
-            .detach(|| cancel_this::on_python(|| document.validation_errors()))
-            .map_err(to_py_err)?;
-        Ok(errors
-            .into_errors()
-            .into_iter()
-            .map(crate::validation::PyXmlValidationError::from)
-            .collect())
+        let errors = run_interruptible(py, document.node_count(), move || {
+            document.validation_errors()
+        })?;
+        Ok(errors.into_iter().map(PyValidationError::from).collect())
     }
 
-    /// Whether the document passes [`PyDocument::validate`].
+    /// Whether the document passes `validate`.
     ///
     /// Raises:
-    ///     KeyboardInterrupt: if a Python interrupt is delivered during the walk.
+    ///     BaseException: whatever a Python signal handler raises to interrupt the operation (for
+    ///         example `KeyboardInterrupt`).
     pub fn is_valid(&self, py: Python<'_>) -> PyResult<bool> {
         let document = self.inner.clone();
-        py.detach(|| cancel_this::on_python(|| document.is_valid()))
-            .map_err(to_py_err)
+        run_interruptible(py, document.node_count(), move || document.is_valid())
     }
 
     /// The number of nodes this document currently holds.
@@ -229,12 +218,14 @@ impl PyDocument {
     /// bound memory earlier, or to observe what is still alive.
     ///
     /// Raises:
-    ///     KeyboardInterrupt: if a Python interrupt is delivered during the collection.
+    ///     BaseException: whatever a Python signal handler raises to interrupt the operation (for
+    ///         example `KeyboardInterrupt`).
     pub fn collect_garbage(&self, py: Python<'_>) -> PyResult<PyGcStats> {
         let document = self.inner.clone();
-        py.detach(|| cancel_this::on_python(|| document.collect_garbage()))
-            .map(PyGcStats::from)
-            .map_err(to_py_err)
+        run_interruptible(py, document.node_count(), move || {
+            document.collect_garbage()
+        })
+        .map(PyGcStats::from)
     }
 
     /// The number of nodes this document may hold before it considers its arena full.
@@ -247,11 +238,10 @@ impl PyDocument {
         self.inner.ptr_eq(&other.inner)
     }
 
-    /// A hash consistent with `__eq__` (the same value Rust's `Hash` produces, so
-    /// equal handles hash equally and can be used as dictionary keys).
+    /// A hash consistent with `__eq__`: handles of one document hash equally.
     pub fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
-        hash_document(&self.inner, &mut hasher);
+        self.inner.hash(&mut hasher);
         hasher.finish()
     }
 
@@ -294,20 +284,21 @@ impl PyDocument {
     ///
     /// Raises:
     ///     XmlIoError: if the file cannot be read.
-    ///     XmlSyntaxError / XmlNamespaceError: as `parse_bytes`.
+    ///     XmlSyntaxError: if the input is not well-formed or is not valid UTF-8.
+    ///     XmlNamespaceError: if a namespace is used illegally.
     #[staticmethod]
     #[pyo3(signature = (path))]
     pub fn parse_file(py: Python<'_>, path: PathBuf) -> PyResult<PyDocument> {
         crate::io::parse_file(py, path)
     }
 
-    /// Serializes this document into a string, using the default options.
+    /// Serializes this document into a string, with the given options or the default ones.
     ///
     /// A document without a root element and without a declaration serializes to the empty string.
     ///
     /// Raises:
-    ///     XmlSyntaxError: if the output were not valid UTF-8, which cannot happen for a document
-    ///     built through this API (reported rather than panicking).
+    ///     BaseException: whatever a Python signal handler raises to interrupt the operation (for
+    ///         example `KeyboardInterrupt`).
     #[pyo3(signature = (options = None))]
     pub fn write_string(
         &self,
@@ -317,7 +308,7 @@ impl PyDocument {
         crate::io::write_string(py, self, options)
     }
 
-    /// Writes this document to a file, using the default options.
+    /// Writes this document to a file, with the given options or the default ones.
     ///
     /// Raises:
     ///     XmlIoError: if the file cannot be created or written.
@@ -330,9 +321,4 @@ impl PyDocument {
     ) -> PyResult<()> {
         crate::io::write_file(py, self, path, options)
     }
-}
-
-/// Hashes the document by identity, exactly as Rust's `Hash for Document` does.
-fn hash_document<H: Hasher>(document: &Document, state: &mut H) {
-    document.hash(state);
 }

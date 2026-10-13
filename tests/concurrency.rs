@@ -29,9 +29,9 @@ fn wait_for(receiver: &Receiver<()>, count: usize) {
 
 #[test]
 fn two_threads_adding_opposite_children_never_create_a_cycle() {
-    // This is the ported version of the `it_cycle_race` reproduction probe from G1, which created
-    // ~29% of cycles with the old per-node locking. With one lock the entire check-then-act
-    // sequence is a single critical section, so the number of created cycles must be exactly 0.
+    // Two threads repeatedly make `a` a child of `b` and `b` a child of `a`. With one lock per
+    // document the entire check-then-act sequence is a single critical section, so the number of
+    // created cycles must be exactly 0.
     let pairs_per_round = 256usize;
     let rounds = 500usize;
     let cycles = Arc::new(AtomicUsize::new(0));
@@ -39,7 +39,7 @@ fn two_threads_adding_opposite_children_never_create_a_cycle() {
     let (sender, receiver) = channel();
 
     for _ in 0..rounds {
-        let document = Document::empty();
+        let document = Document::new();
         let pairs: Vec<(Element, Element)> = (0..pairs_per_round)
             .map(|_| (element(&document, "a"), element(&document, "b")))
             .collect();
@@ -64,7 +64,7 @@ fn two_threads_adding_opposite_children_never_create_a_cycle() {
                 }
                 // Cycle check: walking up from a node must never return to it.
                 for (first, _) in pairs.iter() {
-                    if first.is_ancestor(&first.node()) {
+                    if first.is_ancestor_of(&first.node()) {
                         cycles.fetch_add(1, Ordering::Relaxed);
                     }
                 }
@@ -99,7 +99,7 @@ fn two_threads_adding_opposite_children_never_create_a_cycle() {
 
 #[test]
 fn readers_and_writers_do_not_deadlock() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root.clone());
     for index in 0..16 {
@@ -147,7 +147,7 @@ fn readers_and_writers_do_not_deadlock() {
 fn structural_edits_stay_consistent_under_contention() {
     // Several threads repeatedly move a small set of nodes around. With a single lock every move
     // is atomic, so the tree must still satisfy every invariant afterwards.
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root.clone());
 
@@ -198,7 +198,7 @@ fn handles_can_be_moved_between_threads() {
     assert_sync::<Element>();
     assert_sync::<Node>();
 
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root.clone());
 
@@ -234,7 +234,7 @@ fn handles_can_be_moved_between_threads() {
 
 #[test]
 fn a_node_handle_remains_valid_after_being_moved_by_another_thread() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root.clone());
     let child = element(&document, "child");

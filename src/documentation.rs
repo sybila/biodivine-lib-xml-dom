@@ -1,13 +1,13 @@
-//! Project documentation: design notes, build instructions, the bindings map and rule coverage.
+//! Project documentation: design notes, the bindings map and rule coverage.
 //!
 //! This module is documentation rather than API. It exists so that the reasoning behind the library
-//! — and the material a contributor needs — is reachable from the same place as the API reference,
-//! instead of living only in files that a reader of the documentation would never find.
+//! is reachable from the same place as the API reference, instead of living only in files that a
+//! reader of the documentation would never find. Instructions for working on the repository itself
+//! are in `docs/design/build.md`.
 //!
 //! | page | contents |
 //! | --- | --- |
 //! | [`architecture`] | how the library is built and why: the arena model, handles and the collector, the concurrency argument, the error model, the namespace contract, module layout, testing and trade-offs |
-//! | [`build`] | setting the repository up from a fresh checkout, running the checks, building the three documentation artifacts |
 //! | [`bindings`] | the Rust ↔ Python mapping, item by item, with the deliberate differences |
 //! | [`rule_coverage`] | which XML specification rules this library acts on, in which layer, and which are deliberately out of scope |
 //!
@@ -22,10 +22,6 @@
 /// How the library is built and why, including the trade-offs each decision accepts.
 #[doc = include_str!("../docs/design/architecture.md")]
 pub mod architecture {}
-
-/// Setting the project up, running the checks, and building the documentation artifacts.
-#[doc = include_str!("../docs/design/build.md")]
-pub mod build {}
 
 /// The Rust ↔ Python mapping: what is mirrored, and what is deliberately different.
 #[doc = include_str!("../docs/design/bindings.md")]

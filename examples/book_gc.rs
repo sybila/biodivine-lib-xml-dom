@@ -5,7 +5,7 @@
 use biodivine_lib_xml_dom::{Document, QualifiedName};
 
 fn main() {
-    let document = Document::empty();
+    let document = Document::new();
     let root =
         document.create_element(QualifiedName::without_namespace("root").unwrap());
     document.set_root(root.clone());

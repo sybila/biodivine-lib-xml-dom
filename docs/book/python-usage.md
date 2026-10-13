@@ -1,9 +1,9 @@
 # Using the Python package
 
-Using the Python package: what it adds to the mirrored Rust API, what the Pythonic protocols are,
-how errors and validation surface, and what identity and equality mean for handles. The Rust API is
-described in the rest of this book and in its rustdoc; the item-by-item mapping between the two is
-the `documentation::bindings` page of that rustdoc.
+This chapter covers what the Python package adds to the Rust API, which Pythonic protocols it
+supports, how errors and validation surface, and what identity and equality mean for handles. The
+Rust API is described in the rest of this book and in its rustdoc; the item-by-item mapping between
+the two is the `documentation::bindings` page of that rustdoc.
 
 ## Three layers, one behaviour
 
@@ -15,6 +15,10 @@ Rust behaviour:
   `QualifiedName`;
 * a `Namespace` may be given anywhere a namespace is expected, or a URI string;
 * any `PathLike` is accepted for file paths;
+* parsing and writing are `Document` methods, as in Rust: `Document.parse` (a `str` or bytes),
+  `Document.parse_file`, `document.write()` and `document.write_file(path)`;
+* values that Rust reads with a method are properties (`document.root`, `node.parent`,
+  `element.attributes`, ...), and the enums are `enum.Enum` classes;
 * a failure raises one of the `XmlError` subclasses rather than returning an error value, because
   Python has no `Result` type.
 
@@ -99,9 +103,9 @@ Python has protocols Rust does not: `len(node)`, `node[i]` and `for child in nod
 :::
 ::::
 
-## Handles as identities
+## Handles
 
-A handle is an identity in both languages: it can be used as a dictionary key, and it knows its
+A handle refers to one node in both languages: it can be used as a dictionary key, and it knows its
 document, its parent and its id.
 
 ::::{tab-set}
@@ -157,20 +161,25 @@ non-raising form for collecting the list.
 try:
     document.validate()
 except xml.XmlValidationError as error:
-    summary, problems = error.args
-    for problem in problems:
+    for problem in error.errors:
         print(problem.kind, problem.node, problem.message, problem.rule)
 ```
 
-All exceptions derive from `XmlError`; the subclasses are `XmlSyntaxError` (the input is not
-well-formed), `XmlNamespaceError`, `XmlDocumentError` (an operation on the tree itself: foreign
-document, cycle, bad index) and `XmlIoError`.
+The exceptions of this library derive from `XmlError`; the subclasses are `XmlSyntaxError` (the
+input is not well-formed), `XmlNamespaceError`, `XmlDocumentError` (an operation on the tree itself:
+foreign document, cycle, bad index), `XmlIoError` and `XmlValidationError`.
+
+A long operation (parsing, writing, validating, a deep copy or a garbage collection) started on the
+main thread can be interrupted by Ctrl+C or by any other Python signal handler that raises. The
+handler's exception (`KeyboardInterrupt` for Ctrl+C) is raised as soon as the operation has stopped,
+and the document is left as it was.
 
 ## Identity and equality
 
-Handles are value objects: `==` compares the *node* (document identity plus arena index) and `hash`
-follows, so handles work as dictionary keys; `is` compares Python objects, which are created on
-demand. Use `a.ptr_eq(b)` when you want to be explicit, and `a is b` never.
+`==` on two handles compares the *node* they refer to (document identity plus arena index), and
+`hash` follows, so handles work as dictionary keys. `is` compares Python objects, which are created
+on demand, so two handles to the same node are `==` but usually not `is`. `a.ptr_eq(b)` is the
+explicit spelling of `a == b`.
 
 ## A note on types
 
@@ -179,3 +188,5 @@ The package ships a `py.typed` marker and full annotations, so type checkers see
 the exception hierarchy. The native `_sys` module is importable but is not the documented surface —
 `tests-python/test_public_surface.py` exists precisely to keep it that way.
 
+Next: [Known limitations and gotchas](limitations.md) collects what the library deliberately does
+not do.

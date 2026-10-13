@@ -40,7 +40,7 @@ fn panic_message(operation: impl FnOnce()) -> String {
 
 #[test]
 fn attaching_and_detaching_keeps_the_tree_consistent() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let first = element(&document, "first");
     let second = element(&document, "second");
@@ -61,7 +61,7 @@ fn attaching_and_detaching_keeps_the_tree_consistent() {
 
 #[test]
 fn detaching_is_idempotent_and_returns_the_previous_parent() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let child = element(&document, "child");
     root.append_child(child.clone());
@@ -73,21 +73,8 @@ fn detaching_is_idempotent_and_returns_the_previous_parent() {
 }
 
 #[test]
-fn remove_returns_the_detached_node_itself() {
-    let document = Document::empty();
-    let root = element(&document, "root");
-    let child = element(&document, "child");
-    root.append_child(child.clone());
-
-    let removed = child.remove();
-    assert!(removed.ptr_eq(&child));
-    assert!(!removed.is_attached());
-    assert!(root.children().is_empty());
-}
-
-#[test]
 fn attaching_a_detached_subtree_restores_it() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let parent = element(&document, "parent");
     let grandchild = element(&document, "grandchild");
@@ -103,7 +90,7 @@ fn attaching_a_detached_subtree_restores_it() {
 
 #[test]
 fn insertion_positions_are_stable() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let a = element(&document, "a");
     let b = element(&document, "b");
@@ -129,7 +116,7 @@ fn insertion_positions_are_stable() {
 
 #[test]
 fn replacing_swaps_the_node_in_place() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let old = element(&document, "old");
     let replacement = element(&document, "replacement");
@@ -145,7 +132,7 @@ fn replacing_swaps_the_node_in_place() {
 
 #[test]
 fn replacing_a_node_by_itself_is_a_documented_no_op() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let child = element(&document, "child");
     root.append_child(child.clone());
@@ -175,7 +162,7 @@ fn replacing_a_node_by_itself_is_a_documented_no_op() {
 
 #[test]
 fn mixed_content_node_kinds_are_preserved() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     root.append_child(document.create_text("before").unwrap());
     root.append_child(document.create_comment(" note ").unwrap());
@@ -207,7 +194,7 @@ fn mixed_content_node_kinds_are_preserved() {
 
 #[test]
 fn cycles_are_rejected() {
-    let document = Document::empty();
+    let document = Document::new();
     let a = element(&document, "a");
     let b = element(&document, "b");
     let c = element(&document, "c");
@@ -233,7 +220,7 @@ fn cycles_are_rejected() {
 
 #[test]
 fn non_elements_cannot_be_parents() {
-    let document = Document::empty();
+    let document = Document::new();
     let text = document.create_text("hello").unwrap();
     let child = element(&document, "child");
     assert!(matches!(
@@ -244,8 +231,8 @@ fn non_elements_cannot_be_parents() {
 
 #[test]
 fn foreign_documents_are_rejected() {
-    let first = Document::empty();
-    let second = Document::empty();
+    let first = Document::new();
+    let second = Document::new();
     let parent = element(&first, "parent");
     let foreign = element(&second, "foreign");
 
@@ -272,7 +259,7 @@ fn foreign_documents_are_rejected() {
 
 #[test]
 fn the_root_cannot_be_attached_as_a_child() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let child = element(&document, "child");
     document.set_root(root.clone());
@@ -281,13 +268,13 @@ fn the_root_cannot_be_attached_as_a_child() {
         child.append_child_checked(root.clone()),
         Err(XmlError::CannotAttachRoot)
     ));
-    assert!(!root.is_ancestor(&child.node()));
+    assert!(!root.is_ancestor_of(&child.node()));
     assert_consistent(&document);
 }
 
 #[test]
 fn an_attached_element_cannot_become_the_root() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let child = element(&document, "child");
     root.append_child(child.clone());
@@ -303,8 +290,8 @@ fn an_attached_element_cannot_become_the_root() {
 
 #[test]
 fn a_foreign_element_cannot_become_the_root() {
-    let first = Document::empty();
-    let second = Document::empty();
+    let first = Document::new();
+    let second = Document::new();
     let foreign = element(&second, "foreign");
 
     assert!(matches!(
@@ -316,7 +303,7 @@ fn a_foreign_element_cannot_become_the_root() {
 
 #[test]
 fn out_of_range_insertions_are_rejected() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let child = element(&document, "child");
     root.append_child(child.clone());
@@ -332,7 +319,7 @@ fn out_of_range_insertions_are_rejected() {
 
 #[test]
 fn relative_insertion_requires_a_sibling_of_the_same_parent() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let other = element(&document, "other");
     let child = element(&document, "child");
@@ -351,7 +338,7 @@ fn relative_insertion_requires_a_sibling_of_the_same_parent() {
 
 #[test]
 fn setting_the_root_returns_the_previous_one() {
-    let document = Document::empty();
+    let document = Document::new();
     let first = element(&document, "first");
     let second = element(&document, "second");
 
@@ -397,7 +384,7 @@ fn assert_panics_without_side_effects(
 
 #[test]
 fn panicking_append_child_leaves_the_document_unchanged() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let child = element(&document, "child");
     let grandchild = element(&document, "grandchild");
@@ -418,8 +405,8 @@ fn panicking_append_child_leaves_the_document_unchanged() {
 
 #[test]
 fn panicking_append_child_on_a_foreign_document_leaves_everything_unchanged() {
-    let first = Document::empty();
-    let second = Document::empty();
+    let first = Document::new();
+    let second = Document::new();
     let root = element(&first, "root");
     first.set_root(root.clone());
     let foreign = element(&second, "foreign");
@@ -432,7 +419,7 @@ fn panicking_append_child_on_a_foreign_document_leaves_everything_unchanged() {
 
 #[test]
 fn panicking_insert_child_leaves_the_document_unchanged() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let child = element(&document, "child");
     root.append_child(child.clone());
@@ -448,7 +435,7 @@ fn panicking_insert_child_leaves_the_document_unchanged() {
 
 #[test]
 fn panicking_replace_with_leaves_the_document_unchanged() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let detached = element(&document, "detached");
     let replacement = element(&document, "replacement");
@@ -471,7 +458,7 @@ fn panicking_replace_with_leaves_the_document_unchanged() {
 
 #[test]
 fn panicking_set_root_leaves_the_document_unchanged() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let child = element(&document, "child");
     root.append_child(child.clone());
@@ -484,7 +471,7 @@ fn panicking_set_root_leaves_the_document_unchanged() {
 
 #[test]
 fn panicking_set_attribute_leaves_the_document_unchanged() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     root.set_attribute(QualifiedName::without_namespace("a").unwrap(), "b");
     document.set_root(root.clone());
@@ -501,7 +488,7 @@ fn panicking_set_attribute_leaves_the_document_unchanged() {
 
 #[test]
 fn a_detached_subtree_stays_editable_clonable_and_reattachable() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root.clone());
 
@@ -514,7 +501,7 @@ fn a_detached_subtree_stays_editable_clonable_and_reattachable() {
     parent.detach();
     assert!(!parent.is_attached());
     assert!(!child.is_attached());
-    assert!(parent.is_ancestor(&child.node()));
+    assert!(parent.is_ancestor_of(&child.node()));
 
     // Still editable while detached.
     let extra = element(&document, "extra");
@@ -524,7 +511,7 @@ fn a_detached_subtree_stays_editable_clonable_and_reattachable() {
         parent
             .attribute(&QualifiedName::without_namespace("a").unwrap())
             .unwrap(),
-        "b".into()
+        "b"
     );
     assert_eq!(child.child_elements(), vec![extra.clone()]);
 
@@ -545,7 +532,7 @@ fn a_detached_subtree_stays_editable_clonable_and_reattachable() {
 
 #[test]
 fn attachment_state_is_only_about_the_root_of_the_document() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let child = element(&document, "child");
     root.append_child(child.clone());
@@ -567,7 +554,7 @@ fn attachment_state_is_only_about_the_root_of_the_document() {
 
 #[test]
 fn sibling_and_index_queries_agree_with_the_child_list() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let a = element(&document, "a");
     let b = element(&document, "b");
@@ -591,7 +578,7 @@ fn sibling_and_index_queries_agree_with_the_child_list() {
 
 #[test]
 fn descendants_are_returned_in_document_pre_order() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let a = element(&document, "a");
     let a1 = element(&document, "a1");
@@ -613,7 +600,7 @@ fn descendants_are_returned_in_document_pre_order() {
 fn a_deeply_nested_document_does_not_overflow_the_stack() {
     // The previous implementation recursed through `Arc` handles for parent lookups, so deep
     // documents were limited by the stack size.
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root.clone());
 
@@ -626,8 +613,8 @@ fn a_deeply_nested_document_does_not_overflow_the_stack() {
 
     assert_eq!(root.descendants().len(), 5_000);
     assert!(current.is_attached());
-    assert!(root.is_ancestor(&current.node()));
-    assert!(!current.is_ancestor(&root.node()));
+    assert!(root.is_ancestor_of(&current.node()));
+    assert!(!current.is_ancestor_of(&root.node()));
 }
 
 /// The local names of an element's element children, in order.

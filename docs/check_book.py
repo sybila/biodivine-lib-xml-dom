@@ -17,8 +17,8 @@ includes are checked rather than promised:
   longest line of any highlighted code block (the budget is `CODE_LINE_BUDGET`, which is the same
   number `.rustfmt.toml` uses, so `cargo fmt` cannot reflow an example past it).
 
-Requirement (7) asks for a book in which *every* example is available in both Rust and Python with a
-switch between them. That is a structural property, so it is checked rather than promised:
+Every example of the book is available in both Rust and Python with a switch between them. That is a
+structural property, so it is checked rather than promised:
 
 * every ``tab-set`` in the book contains exactly two ``tab-item`` blocks, one labelled Rust and one
   Python, each in its own sync group (so choosing a language in one example switches all of them);
@@ -152,7 +152,6 @@ def parse_tab_sets(lines: list[str]) -> list[list[tuple[str, str, str]]]:
             if not item:
                 index += 1
                 continue
-            item_fence = len(item.group("fence"))
             label = item.group("label")
             sync = ""
             include = ""
@@ -324,7 +323,7 @@ def check_built() -> list[str]:
     return problems
 
 
-def longest_code_line(pages: dict[str, pathlib.Path]) -> tuple[int, str]:
+def longest_code_line(pages: dict[str, Path]) -> tuple[int, str]:
     """The longest line of any highlighted code block in the built book."""
     longest, where = 0, ""
     for stem, page in sorted(pages.items()):

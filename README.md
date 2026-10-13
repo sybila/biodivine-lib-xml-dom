@@ -15,26 +15,29 @@ The parts that are usually awkward are the parts this library gets right:
   of calls can deadlock. Handles are cheap (`Send + Sync`) views into the document.
 * **Integrity by construction, and one validation pass.** Locally decidable properties are enforced
   by the types (`NCName`, `Text`, `Comment`, …), so nothing invalid can enter a document; the
-  whole-document properties (namespace scope, unique `xml:id`s, structural invariants) are collected
-  by `Document::validate()`, which reports *every* problem at once.
+  whole-document properties (namespace scope, unique `xml:id`s, `xml:lang` and `xml:space` values)
+  are collected by `Document::validate()`, which reports *every* problem at once.
 * **No namespace magic.** Editing never adds, removes or rewrites a namespace declaration; edits are
-  silent and fast, and `validate()` is where you ask. The [documentation book](docs/book) states the
-  full contract.
-* **Cancellable long operations.** Parsing, serialization, validation, cross-document copies and
-  explicit garbage collection honour [cancel-this](https://crates.io/crates/cancel-this) triggers
-  registered on the current thread, so a long operation can be aborted; the Python bindings also
-  react to the interpreter's own signals (Ctrl+C).
+  silent and fast, and `validate()` is where you ask.
+* **Cancellable long operations.** Parsing, serialization, validation, deep copies and explicit
+  garbage collection honour [cancel-this](https://crates.io/crates/cancel-this) triggers, and a
+  cancelled operation leaves the document unchanged. In Python, Ctrl+C interrupts them.
 
-## Three layers
+## Installation
 
-```text
-biodivine-lib-xml-dom            the Rust library (no PyO3 code at all)
-biodivine-lib-xml-dom-py-sys     a thin PyO3 mirror of the Rust API, imported as `..._sys`
-biodivine_lib_xml_dom            the pure-Python package: coercion, Pythonic protocols, conveniences
+Rust:
+
+```sh
+cargo add biodivine-lib-xml-dom
 ```
 
-The mapping between the Rust API and the Python one is itemised in
-[`docs/design/bindings.md`](docs/design/bindings.md), including what is deliberately not mirrored.
+Python (built from this repository, see [`docs/design/build.md`](docs/design/build.md)):
+
+```sh
+python3 -m venv .venv
+.venv/bin/pip install maturin
+make python-extension
+```
 
 ## Examples
 
@@ -43,7 +46,7 @@ Rust:
 ```rust
 use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
 
-let document = Document::empty();
+let document = Document::new();
 let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
 
 let root = document.create_element(QualifiedName::with_namespace("root", &ex).unwrap());
@@ -78,63 +81,36 @@ child.append_child(document.create_text("Hello, World!"))
 root.append_child(child)
 
 assert document.is_valid()
-assert xml.write(document) == (
+assert document.write() == (
     '<ex:root xmlns:ex="http://example.com"><ex:child>Hello, World!</ex:child></ex:root>'
 )
 ```
 
-More, with a language switch on every example, in the [documentation book](docs/book).
-
-## Building and testing
-
-```sh
-make build              # cargo build --workspace
-make test               # cargo test --workspace (both crates)
-make python-extension   # build the native extension into .venv (maturin develop --release)
-make test-python        # pytest against the built extension
-make examples           # run every Rust example the book includes
-make lint               # cargo fmt --check, cargo clippy, pytest
-make docs               # rustdoc + Python API reference + the book
-```
-
-By hand, without `make`:
-
-```sh
-cargo test --workspace
-RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
-
-python3 -m venv .venv
-.venv/bin/pip install maturin pytest
-.venv/bin/pip install -r docs/requirements.txt
-cd biodivine-lib-xml-dom-py-sys && VIRTUAL_ENV=../.venv ../.venv/bin/maturin develop --release && cd ..
-.venv/bin/python -m pytest biodivine-lib-xml-dom-py-sys/tests-python
-docs/build_docs.sh
-```
-
-`docs/design/build.md` has the full setup, including the minimum supported Rust version and every
-`make` target.
+Both examples are tested: the Rust one as a documentation test, the Python one by the Python test
+suite.
 
 ## Documentation
 
 | where | what |
 | --- | --- |
-| `cargo doc --open` | the Rust API (rustdoc), including the `documentation` module with the design notes |
-| [`docs/book`](docs/book) | the book: tutorials with Rust/Python examples you can switch between |
-| `biodivine-lib-xml-dom-py-sys/docs` | the Python API reference (Sphinx autodoc) |
+| `cargo doc --open` | the Rust API, including the `documentation` module with the design notes |
+| `docs/book` | the book: tutorials with Rust and Python examples you can switch between (`make docs` builds it) |
+| `biodivine-lib-xml-dom-py-sys/docs` | the Python API reference (`make docs` builds it) |
 | [`docs/design/architecture.md`](docs/design/architecture.md) | how the library is built and why: the arena model, the collector, the concurrency argument, the trade-offs |
-| [`docs/design/build.md`](docs/design/build.md) | setting the project up and running the checks |
 | [`docs/design/bindings.md`](docs/design/bindings.md) | the Rust ↔ Python mapping, item by item |
 | [`docs/design/rule-coverage.md`](docs/design/rule-coverage.md) | which XML rules this library acts on, in which layer, and what is out of scope |
-| [`specification`](specification) | the XML 1.0 and Namespaces 1.0 specifications and one file per rule |
+| [`docs/design/build.md`](docs/design/build.md) | setting the project up, running the checks and building the documentation |
 
 ## Scope and limitations
 
 XML 1.0 (fifth edition) and Namespaces in XML 1.0 (third edition), UTF-8 only. `DOCTYPE`
 declarations are read and ignored, so there is no DTD processing: no DTD-defined entities, attribute
-types or content models, and no validity checking. The book's
-[Known limitations and gotchas](docs/book/limitations.md) chapter lists every deliberate limitation,
-from top-level comments being discarded to the name interner never shrinking.
+types or content models, and no validity checking. The book's "Known limitations and gotchas"
+chapter (`docs/book/limitations.md`) lists every deliberate limitation, from top-level comments
+being discarded to the name interner never shrinking.
 
 ## License
 
-MIT.
+The code is available under the [MIT license](LICENSE). The `specification` directory contains
+material from W3C Recommendations, which is used under the W3C Document License; see
+[`specification/NOTICE.md`](specification/NOTICE.md).

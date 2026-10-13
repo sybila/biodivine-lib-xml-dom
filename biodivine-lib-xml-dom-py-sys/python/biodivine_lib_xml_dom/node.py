@@ -2,35 +2,44 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Iterator, List, Optional, Union
+import enum
+from typing import TYPE_CHECKING, Iterator, List, Optional, Tuple, Union, overload
 
 from . import _convert, _sys
 from .node_id import NodeId
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle is broken on purpose
     from .document import Document
+    from .element import Element
 
 
-class NodeKind:
-    """The kind of a node.
+class NodeKind(enum.Enum):
+    """The kind of a node."""
 
-    A thin namespace over the native enum, so ``biodivine_lib_xml_dom.NodeKind.Element`` and
-    ``node.kind == NodeKind.Element`` work in Python.
-    """
+    ELEMENT = "element"
+    TEXT = "text"
+    COMMENT = "comment"
+    CDATA = "cdata"
+    PROCESSING_INSTRUCTION = "processing_instruction"
 
-    Element = _sys.NodeKind.Element
-    Text = _sys.NodeKind.Text
-    Comment = _sys.NodeKind.Comment
-    CData = _sys.NodeKind.CData
-    ProcessingInstruction = _sys.NodeKind.ProcessingInstruction
+
+_NODE_KINDS = {
+    int(_sys.NodeKind.Element): NodeKind.ELEMENT,
+    int(_sys.NodeKind.Text): NodeKind.TEXT,
+    int(_sys.NodeKind.Comment): NodeKind.COMMENT,
+    int(_sys.NodeKind.CData): NodeKind.CDATA,
+    int(_sys.NodeKind.ProcessingInstruction): NodeKind.PROCESSING_INSTRUCTION,
+}
 
 
 class Node:
     """A handle to one node: an element, text, comment, CDATA section or processing instruction.
 
-    The handle is cheap to copy, stays valid even when the node is detached, and can be passed
-    between threads. Cloning the handle (``node`` or ``copy.copy(node)``) refers to the *same* node;
-    use :meth:`deep_clone`/:meth:`shallow_clone` to duplicate the node itself.
+    Nodes are created by the ``create_*`` methods of :class:`Document` and found by walking a
+    document; the class has no public constructor. The handle is cheap to copy, stays valid even
+    when the node is detached, and can be passed between threads. Copying the handle
+    (``copy.copy(node)``) refers to the *same* node; use :meth:`deep_clone`/:meth:`shallow_clone`
+    to duplicate the node itself.
 
     Pythonic extras over the Rust API: children can be iterated and indexed directly
     (``for child in node``, ``node[0]``, ``len(node)``), and the content accessors
@@ -40,8 +49,10 @@ class Node:
 
     __slots__ = ("_node",)
 
-    def __init__(self, node: Union["Node", "_sys.Node"]) -> None:
-        self._node = node._node if isinstance(node, Node) else node
+    def __init__(self) -> None:
+        raise TypeError(
+            f"{type(self).__name__} objects are created by the methods of Document"
+        )
 
     @classmethod
     def _wrap(cls, node: "_sys.Node") -> "Node":
@@ -51,7 +62,7 @@ class Node:
             from .element import Element
 
             return Element._wrap(element, node)
-        wrapper = cls.__new__(cls)
+        wrapper = object.__new__(Node)
         wrapper._node = node
         return wrapper
 
@@ -63,12 +74,7 @@ class Node:
 
     @property
     def document(self) -> "Document":
-        """The document this node belongs to.
-
-        A property (like :attr:`id`, :attr:`kind`, :attr:`parent` and the sibling accessors), so
-        ``node.document == document`` works; the native ``_sys.Node.document()`` stays a method
-        because there the point is to mirror the Rust API.
-        """
+        """The document this node belongs to."""
         from .document import Document
 
         return Document._wrap(self._node.document())
@@ -76,6 +82,10 @@ class Node:
     def ptr_eq(self, other: "Node") -> bool:
         """Whether two handles refer to the same node of the same document."""
         return self._node.ptr_eq(_convert.unwrap_node(other))
+
+    def belongs_to(self, document: "Document") -> bool:
+        """Whether this node belongs to ``document``."""
+        return self._node.belongs_to(_convert.unwrap_document(document))
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Node):
@@ -85,27 +95,30 @@ class Node:
     def __hash__(self) -> int:
         return hash(self._node)
 
+    def __copy__(self) -> "Node":
+        return self
+
     # -- classification -------------------------------------------------------------------
     @property
-    def kind(self) -> "_sys.NodeKind":
+    def kind(self) -> NodeKind:
         """The kind of this node."""
-        return self._node.kind()
+        return _NODE_KINDS[int(self._node.kind())]
 
     def as_element(self) -> Optional["Element"]:
         """This node as an :class:`Element`, or ``None`` if it has a different kind."""
         from .element import Element
 
         inner = self._node.as_element()
-        return None if inner is None else Element._wrap(inner)
+        return None if inner is None else Element._wrap(inner, self._node)
 
     @property
     def is_attached(self) -> bool:
         """Whether the node is reachable from the document root."""
         return self._node.is_attached()
 
-    def is_ancestor(self, other: "Node") -> bool:
+    def is_ancestor_of(self, other: "Node") -> bool:
         """Whether this node is a strict ancestor of ``other``."""
-        return self._node.is_ancestor(_convert.unwrap_node(other))
+        return self._node.is_ancestor_of(_convert.unwrap_node(other))
 
     # -- traversal ------------------------------------------------------------------------
     @property
@@ -158,6 +171,12 @@ class Node:
     def __len__(self) -> int:
         return len(self._node.children())
 
+    @overload
+    def __getitem__(self, index: int) -> "Node": ...
+
+    @overload
+    def __getitem__(self, index: slice) -> List["Node"]: ...
+
     def __getitem__(self, index: Union[int, slice]) -> Union["Node", List["Node"]]:
         return self.children()[index]
 
@@ -174,7 +193,7 @@ class Node:
         """The content as CDATA, or ``None``."""
         return self._node.cdata()
 
-    def processing_instruction(self) -> Optional[tuple]:
+    def processing_instruction(self) -> Optional[Tuple[str, str]]:
         """The ``(target, data)`` pair, or ``None``."""
         return self._node.processing_instruction()
 
@@ -183,11 +202,7 @@ class Node:
         """Detaches this node from its parent and returns the previous parent."""
         return _convert.optional(self._node.detach())
 
-    def remove(self) -> "Node":
-        """Detaches this node and returns the node itself."""
-        return Node._wrap(self._node.remove())
-
-    def append_child(self, child: Union["Node", "Element"]) -> None:
+    def append_child(self, child: "Node") -> None:
         """Appends ``child``, moving it if it is already attached.
 
         Raises `XmlDocumentError` for a foreign document, a cycle or an attempt to attach the root.
@@ -195,21 +210,22 @@ class Node:
         """
         self._node.append_child(_convert.unwrap_node(child))
 
-    def insert_child(self, index: int, child: Union["Node", "Element"]) -> None:
+    def insert_child(self, index: int, child: "Node") -> None:
         """Inserts ``child`` as the ``index``-th child (interpreted after detaching it)."""
         self._node.insert_child(index, _convert.unwrap_node(child))
 
-    def insert_before(self, sibling: Union["Node", "Element"], child: Union["Node", "Element"]) -> None:
+    def insert_before(self, sibling: "Node", child: "Node") -> None:
         """Inserts ``child`` directly before ``sibling``."""
         self._node.insert_before(_convert.unwrap_node(sibling), _convert.unwrap_node(child))
 
-    def insert_after(self, sibling: Union["Node", "Element"], child: Union["Node", "Element"]) -> None:
+    def insert_after(self, sibling: "Node", child: "Node") -> None:
         """Inserts ``child`` directly after ``sibling``."""
         self._node.insert_after(_convert.unwrap_node(sibling), _convert.unwrap_node(child))
 
-    def replace_with(self, replacement: Union["Node", "Element"]) -> "Node":
+    def replace_with(self, replacement: "Node") -> "Node":
         """Replaces this node with ``replacement`` and returns this node (now detached)."""
-        return Node._wrap(self._node.replace_with(_convert.unwrap_node(replacement)))
+        self._node.replace_with(_convert.unwrap_node(replacement))
+        return self
 
     # -- cloning --------------------------------------------------------------------------
     def shallow_clone(self) -> "Node":
@@ -222,7 +238,7 @@ class Node:
 
     def shallow_clone_into(self, target: "Document") -> "Node":
         """A detached copy of this node without children, in ``target``."""
-        return Node._wrap(self._node.shallow_clone_into(target._document))
+        return Node._wrap(self._node.shallow_clone_into(_convert.unwrap_document(target)))
 
     def deep_clone_into(self, target: "Document") -> "Node":
         """A detached deep copy of this subtree in ``target``.
@@ -230,14 +246,10 @@ class Node:
         This is the way to move a tree between documents (attaching a node to a parent of another
         document is an error). The copy is a point-in-time snapshot.
         """
-        return Node._wrap(self._node.deep_clone_into(target._document))
-
-    def belongs_to(self, document: "Document") -> bool:
-        """Whether this node belongs to ``document``."""
-        return self._node.belongs_to(document._document)
+        return Node._wrap(self._node.deep_clone_into(_convert.unwrap_document(target)))
 
     def __str__(self) -> str:
-        return self._node.__str__()
+        return str(self._node)
 
     def __repr__(self) -> str:
         return repr(self._node)

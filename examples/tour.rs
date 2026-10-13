@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // --- 1: build a document ------------------------------------------------------------------
     println!("\n1. Building a document programmatically");
-    let document = Document::empty();
+    let document = Document::new();
 
     let html = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html")?;
     let svg = Namespace::prefixed("http://www.w3.org/2000/svg", "svg")?;
@@ -115,7 +115,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     root.append_child(copy);
     println!("bookstore now has {} books", root.child_elements().len());
 
-    let removed = first_book.remove();
+    first_book.detach();
+    let removed = first_book;
     println!(
         "removed {} -> {} books left, removed node still usable: {}",
         removed.local_name(),
@@ -125,7 +126,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // --- 5: copy a subtree into another document --------------------------------------------
     println!("\n5. Copying between documents");
-    let other = Document::empty();
+    let other = Document::new();
     let imported = root.deep_clone_into(&other).unwrap();
     let _ = other.set_root(imported.clone());
     println!(
@@ -135,7 +136,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // --- 6: a comment-bearing document ------------------------------------------------------
     println!("\n6. Comments, CDATA and processing instructions");
-    let annotated = Document::empty();
+    let annotated = Document::new();
     let annotated_root =
         annotated.create_element(QualifiedName::without_namespace("root")?);
     annotated.set_root(annotated_root.clone());

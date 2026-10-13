@@ -1,7 +1,7 @@
 //! The XML serializer behind the `Document::write_*` methods.
 //!
-//! The public contract is documented on [`Document`] and the individual entry
-//! points ([`Document::write_string`](crate::Document::write_string) and friends); what follows is
+//! The public contract is documented in the [crate documentation](crate#reading-and-writing-documents)
+//! and on the individual entry points ([`Document::write_string`](crate::Document::write_string) and friends); what follows is
 //! the implementation-level view, which only matters when changing this file.
 //!
 //! # Fidelity
@@ -46,6 +46,7 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
+use crate::cancellation::CancellationCheck;
 use crate::document::Document;
 use crate::element::Element;
 use crate::error::{XmlError, XmlResult};
@@ -54,7 +55,8 @@ use crate::qualified_name::QualifiedName;
 use crate::xml_spec::XmlDeclaration;
 
 /// When to write the `<?xml …?>` declaration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
 pub enum DeclarationStyle {
     /// Never write a declaration.
     Never,
@@ -70,7 +72,8 @@ pub enum DeclarationStyle {
 }
 
 /// How to write an element that has no children.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
 pub enum EmptyElementStyle {
     /// `<a/>` (the default).
     #[default]
@@ -80,17 +83,44 @@ pub enum EmptyElementStyle {
 }
 
 /// Options for [`Document::write_string_with`], [`Document::write_file_with`] and
-/// [`Document::write_writer_with`].
+/// [`Document::write_to_with`].
 ///
 /// [`WriteOptions::default`] is "write the declaration when the document has one" plus
 /// "self-closing empty elements", which reproduces the input of a parsed document as closely as
-/// the data model allows.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// the data model allows. The struct is `#[non_exhaustive]` so that options can be added later;
+/// build it with the `with_*` methods:
+///
+/// ```rust
+/// use biodivine_lib_xml_dom::{DeclarationStyle, EmptyElementStyle, WriteOptions};
+///
+/// let options = WriteOptions::default()
+///     .with_declaration(DeclarationStyle::Always)
+///     .with_empty_elements(EmptyElementStyle::ExplicitEndTag);
+/// assert_eq!(options.declaration, DeclarationStyle::Always);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
 pub struct WriteOptions {
     /// When to write the XML declaration.
     pub declaration: DeclarationStyle,
     /// How to write elements without children.
     pub empty_elements: EmptyElementStyle,
+}
+
+impl WriteOptions {
+    /// These options with `declaration` as the declaration style.
+    #[must_use]
+    pub fn with_declaration(mut self, declaration: DeclarationStyle) -> Self {
+        self.declaration = declaration;
+        self
+    }
+
+    /// These options with `empty_elements` as the style of elements without children.
+    #[must_use]
+    pub fn with_empty_elements(mut self, empty_elements: EmptyElementStyle) -> Self {
+        self.empty_elements = empty_elements;
+        self
+    }
 }
 
 /// Serializes a document into a string with the default options; the implementation of
@@ -116,7 +146,7 @@ pub(crate) fn write_string_with(
     options: &WriteOptions,
 ) -> XmlResult<String> {
     let mut buffer = Vec::new();
-    doc.write_writer_with(&mut buffer, options)?;
+    doc.write_to_with(&mut buffer, options)?;
     String::from_utf8(buffer).map_err(|error| {
         XmlError::InvalidUtf8(format!("invalid UTF-8 in output: {error}"))
     })
@@ -128,7 +158,7 @@ pub(crate) fn write_string_with(
 /// # Errors
 ///
 /// Returns [`XmlError::Io`] if the file cannot be created or written, plus the errors of
-/// [`write_writer_with`](crate::Document::write_writer_with).
+/// [`write_to_with`](crate::Document::write_to_with).
 pub(crate) fn write_file<P: AsRef<Path>>(doc: &Document, path: P) -> XmlResult<()> {
     doc.write_file_with(path, &WriteOptions::default())
 }
@@ -144,27 +174,31 @@ pub(crate) fn write_file_with<P: AsRef<Path>>(
     path: P,
     options: &WriteOptions,
 ) -> XmlResult<()> {
-    let file = File::create(path)?;
-    doc.write_writer_with(BufWriter::new(file), options)
+    let mut writer = BufWriter::new(File::create(path)?);
+    doc.write_to_with(&mut writer, options)?;
+    // Dropping a `BufWriter` flushes it too, but silently discards the error.
+    writer.flush()?;
+    Ok(())
 }
 
 /// Writes a document to a writer with the default options; the implementation of
-/// [`Document::write_writer`](crate::Document::write_writer).
+/// [`Document::write_to`](crate::Document::write_to).
 ///
 /// # Errors
 ///
-/// Returns [`XmlError::Io`] if the underlying writer fails.
-pub(crate) fn write_writer<W: Write>(doc: &Document, writer: W) -> XmlResult<()> {
-    doc.write_writer_with(writer, &WriteOptions::default())
+/// As [`write_to_with`](crate::Document::write_to_with).
+pub(crate) fn write_to<W: Write>(doc: &Document, writer: W) -> XmlResult<()> {
+    doc.write_to_with(writer, &WriteOptions::default())
 }
 
 /// Writes a document to a writer with explicit options; the implementation of
-/// [`Document::write_writer_with`](crate::Document::write_writer_with).
+/// [`Document::write_to_with`](crate::Document::write_to_with).
 ///
 /// # Errors
 ///
-/// Returns [`XmlError::Io`] if the underlying writer fails.
-pub(crate) fn write_writer_with<W: Write>(
+/// Returns [`XmlError::Io`] if the underlying writer fails, and [`XmlError::Cancelled`] if a
+/// cancellation trigger registered on this thread fires while the tree is being written.
+pub(crate) fn write_to_with<W: Write>(
     doc: &Document,
     writer: W,
     options: &WriteOptions,
@@ -172,24 +206,27 @@ pub(crate) fn write_writer_with<W: Write>(
     let mut writer = Writer::new(writer);
     write_declaration(&mut writer, doc, options)?;
     if let Some(root) = doc.root() {
-        write_subtree(&mut writer, &root.node(), options)?;
+        let mut check = CancellationCheck::new();
+        write_subtree(&mut writer, &root.node(), options, &mut check)?;
     }
     Ok(())
 }
 
 /// Serializes one subtree (an element or any other node kind) to a string.
 ///
-/// Used by the `Display` implementations of [`Element`] and [`Node`]; the declaration is never
-/// written, because a subtree is not a document.
+/// Used by the `Display` implementations of [`Element`] and [`Node`]; the
+/// declaration is never written, because a subtree is not a document. A `Display` implementation
+/// cannot report an error, so this walk never consults the cancellation triggers.
 ///
 /// # Panics
 ///
 /// Writing into an in-memory buffer cannot fail; the intermediate `Result` is unwrapped with a
 /// message saying so.
-pub(crate) fn write_element_to_string(element: &Element) -> String {
+pub(crate) fn write_node_to_string(node: &Node) -> String {
     let mut buffer = Vec::new();
     let mut writer = Writer::new(&mut buffer);
-    write_subtree(&mut writer, &element.node(), &WriteOptions::default())
+    let mut check = CancellationCheck::disabled();
+    write_subtree(&mut writer, node, &WriteOptions::default(), &mut check)
         .expect("writing XML into a memory buffer cannot fail");
     String::from_utf8(buffer).expect("the serializer only ever emits UTF-8")
 }
@@ -238,13 +275,13 @@ fn write_subtree<W: Write>(
     writer: &mut Writer<W>,
     root: &Node,
     options: &WriteOptions,
+    check: &mut CancellationCheck,
 ) -> XmlResult<()> {
     let mut tasks: Vec<Task> = vec![Task::Enter(root.clone())];
     let mut buffer = String::new();
 
     while let Some(task) = tasks.pop() {
-        // Serializing a large document walks the whole tree, so honour cancellation.
-        cancel_this::is_cancelled!()?;
+        check.tick()?;
         match task {
             Task::Exit(name) => {
                 writer.write_event(Event::End(BytesEnd::new(name)))?;

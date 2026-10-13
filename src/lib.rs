@@ -19,7 +19,7 @@
 //! ```rust
 //! use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
 //!
-//! let document = Document::empty();
+//! let document = Document::new();
 //! let html = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
 //!
 //! let root = document.create_element(QualifiedName::with_namespace("html", &html).unwrap());
@@ -94,7 +94,7 @@
 //! | parse a file | [`Document::parse_file`] | — |
 //! | serialize to a string | [`Document::write_string`], [`Document::write_string_with`] | [`WriteOptions`] |
 //! | serialize to a file | [`Document::write_file`], [`Document::write_file_with`] | [`WriteOptions`] |
-//! | serialize to a writer | [`Document::write_writer`], [`Document::write_writer_with`] | [`WriteOptions`] |
+//! | serialize to a writer | [`Document::write_to`], [`Document::write_to_with`] | [`WriteOptions`] |
 //!
 //! Parsing is strict: the input has to be a well-formed XML 1.0 document with exactly one root
 //! element, and every failure is a typed [`XmlError`] rather than a panic or a half-built document.
@@ -141,7 +141,8 @@
 //!   (attributes never take the default namespace);
 //! * **values** — `xml:id` syntax and uniqueness, `xml:lang` values are BCP 47 or empty, `xml:space`
 //!   values are one of the two enumerated values;
-//! * **structure** — the document has at most one root element and the stored tree is consistent.
+//! * **structure** — the document has a root element. (That it has *only* one, and that the tree
+//!   is a tree, is guaranteed by construction.)
 //!
 //! What it deliberately does not check: everything that would need DTD processing (attribute
 //! *types*, content models, and the "must be declared" constraints on `xml:lang`/`xml:space`).
@@ -154,18 +155,34 @@
 //! attached. Document-wide rules (`xml:id` uniqueness) are checked over the tree below the root
 //! only: a detached copy of a subtree would otherwise be reported as a duplicate of its original.
 //!
-//! See [`ValidationErrorKind`] for the individual findings and [`XmlValidationErrors`] for the
-//! collection a failed validation returns.
+//! A failed validation returns [`XmlError::Validation`], which carries the [`ValidationErrors`];
+//! [`Document::validation_errors`] returns the same findings as a plain list, and
+//! [`ValidationErrorKind`] describes each of them.
 //!
-//! # Cancellation
+//! ## Cancellation
 //!
-//! The operations that can take time proportional to the document — parsing, serialization,
-//! validation, cross-document copies and explicit garbage collection — cooperate with the
-//! [`cancel_this`] crate. A trigger registered on the current thread with
-//! [`cancel_this::on_trigger`] (or one of its helpers, such as [`cancel_this::on_timeout`] or
-//! [`cancel_this::on_atomic`]) is checked periodically, and a cancelled operation returns
-//! [`XmlError::Cancelled`] instead of running to completion. With no trigger registered the checks
-//! are nearly free and never fire.
+//! The operations that take time proportional to the document (parsing, serialization,
+//! validation, deep copies and explicit garbage collection) cooperate with the [`cancel_this`]
+//! crate. A trigger registered on the current thread with [`cancel_this::on_trigger`] (or one of
+//! its helpers, such as [`cancel_this::on_timeout`] or [`cancel_this::on_atomic`]) is consulted
+//! periodically, and a cancelled operation returns [`XmlError::Cancelled`] instead of running to
+//! completion. Triggers are thread-local: a trigger registered on one thread never cancels an
+//! operation running on another.
+//!
+//! A cancelled operation leaves the document unchanged, with one exception that is in the nature
+//! of streaming output: a cancelled [`Document::write_file`] or [`Document::write_to`] has already
+//! written part of the document to its destination. In detail:
+//!
+//! | operation | what a cancellation leaves behind |
+//! | --- | --- |
+//! | parsing | nothing: no document is returned |
+//! | validation | nothing: no report is returned |
+//! | [`Node::deep_clone`], [`Node::deep_clone_into`] | nothing: the part of the copy built so far is freed again |
+//! | [`Document::collect_garbage`] | nothing: only the read-only search for reachable nodes is cancellable, never the reclaiming |
+//! | serialization | the output written so far |
+//!
+//! Cheap operations are never cancelled: single-node edits, [`Node::shallow_clone`], and the
+//! `Display` implementations, which cannot report an error.
 //!
 //! ```rust
 //! use biodivine_lib_xml_dom::{cancel_this, Document, XmlError};
@@ -179,63 +196,18 @@
 //! assert!(matches!(result, Err(XmlError::Cancelled(_))));
 //! ```
 //!
-//! The Python bindings additionally register the interpreter's own signal check
-//! ([`cancel_this::on_python`]), so a `KeyboardInterrupt` (Ctrl+C) cancels a running operation and
-//! is re-raised in Python as a `KeyboardInterrupt`.
+//! The Python bindings use the same mechanism to let Ctrl+C (or any other Python signal handler
+//! that raises) interrupt a long operation.
 //!
-//! # Examples
+//! ## More examples
 //!
-//! ## Building and serializing a document
-//!
-//! ```rust
-//! use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
-//!
-//! let document = Document::empty();
-//! let html = Namespace::prefixed("http://www.w3.org/1999/xhtml", "html").unwrap();
-//! let root = document.create_element(QualifiedName::with_namespace("html", &html).unwrap());
-//! root.declare_namespace(html.clone());
-//! document.set_root(root.clone());
-//!
-//! let body = document.create_element(QualifiedName::with_namespace("body", &html).unwrap());
-//! body.set_attribute(QualifiedName::without_namespace("class").unwrap(), "main");
-//! body.append_child(document.create_text("Hello, World!").unwrap());
-//! root.append_child(body);
-//!
-//! let xml = document.write_string().unwrap();
-//! assert!(xml.contains("Hello, World!"));
-//! assert_eq!(
-//!     root.child_elements()[0].namespace().unwrap().uri(),
-//!     "http://www.w3.org/1999/xhtml"
-//! );
-//! ```
-//!
-//! ## Parsing and traversing
-//!
-//! ```rust
-//! use biodivine_lib_xml_dom::Document;
-//!
-//! let document = Document::parse_string(
-//!     r#"<root xmlns:ex="http://example.com"><ex:item>one</ex:item></root>"#,
-//! )
-//! .unwrap();
-//!
-//! let root = document.root().unwrap();
-//! assert_eq!(root.local_name(), "root");
-//!
-//! let item = &root.child_elements()[0];
-//! assert_eq!(item.qualified_name().to_string(), "ex:item");
-//! assert_eq!(item.namespace().unwrap().uri(), "http://example.com");
-//!
-//! assert!(document.write_string().unwrap().contains("one"));
-//! ```
-//!
-//! ## Detached nodes and multiple documents
+//! ### Detached nodes and multiple documents
 //!
 //! ```rust
 //! use biodivine_lib_xml_dom::{Document, QualifiedName};
 //!
-//! let first = Document::empty();
-//! let second = Document::empty();
+//! let first = Document::new();
+//! let second = Document::new();
 //!
 //! let root = first.create_element(QualifiedName::without_namespace("root").unwrap());
 //! first.set_root(root.clone());
@@ -256,12 +228,12 @@
 //! assert_eq!(copy.children().len(), 1);
 //! ```
 //!
-//! ## Sharing between threads
+//! ### Sharing between threads
 //!
 //! ```rust
 //! use biodivine_lib_xml_dom::{Document, QualifiedName};
 //!
-//! let document = Document::empty();
+//! let document = Document::new();
 //! let root = document.create_element(QualifiedName::without_namespace("root").unwrap());
 //! document.set_root(root.clone());
 //!
@@ -291,12 +263,13 @@
 //! | [`Node`], [`Element`], [`QualifiedName`], [`Namespace`] | the handles and names you work with |
 //! | [`Document::validate`] and [`ValidationErrorKind`] | whole-document validation and its findings |
 //! | [`xml_spec`] | the specification types, the predicates, and [`xml_spec::rule_set`] with one module per XML rule |
-//! | [`documentation`] | the design notes, the build instructions, the Rust/Python mapping and the [rule coverage](documentation::rule_coverage) |
+//! | [`documentation`] | the design notes, the Rust/Python mapping and the [rule coverage](documentation::rule_coverage) |
 //! | the documentation book that ships with the repository | tutorials with Rust and Python examples side by side |
 //! | the `biodivine_lib_xml_dom` Python package | the same API with Pythonic wrappers; see [the bindings map](documentation::bindings) |
 //! | the `examples` directory | runnable programs, including the ones the book embeds |
 
 mod arena;
+mod cancellation;
 mod document;
 pub mod documentation;
 mod element;
@@ -315,12 +288,10 @@ mod validation;
 /// This module holds everything that exists because of the XML 1.0 and Namespaces in XML 1.0
 /// specifications: the validated string newtypes ([`NCName`](xml_spec::NCName),
 /// [`Text`](xml_spec::Text), [`Comment`](xml_spec::Comment), [`CData`](xml_spec::CData),
-/// [`PiTarget`](xml_spec::PiTarget), [`PiData`](xml_spec::PiData)), reserved prefix and URI
-/// constants, and the name/namespace predicates the rest of the crate builds on.
-///
-/// Keeping specification logic here (rather than next to the code that happens to use it) is the
-/// convention this project follows, together with annotating rules with the identifier of the
-/// corresponding file in `specification/rules/`.
+/// [`PiTarget`](xml_spec::PiTarget), [`PiData`](xml_spec::PiData)), the
+/// [`XmlDeclaration`](xml_spec::XmlDeclaration), the reserved namespace URIs, the predicates for
+/// attribute values that only the specification defines, and [`rule_set`](xml_spec::rule_set),
+/// the summaries of the specification rules that the rest of the documentation links to.
 pub mod xml_spec;
 
 pub use crate::arena::{GcConfig, GcStats};
@@ -332,101 +303,31 @@ pub use crate::namespace::Namespace;
 pub use crate::node::{Node, NodeContent, NodeKind};
 pub use crate::node_id::{MAX_NODES, NodeId};
 pub use crate::qualified_name::QualifiedName;
-pub use crate::validation::{
-    ValidationErrorKind, XmlValidationError, XmlValidationErrors,
-};
+pub use crate::validation::{ValidationError, ValidationErrorKind, ValidationErrors};
 
-// Re-exported because the trigger types are part of this crate's public API: [`XmlError::Cancelled`]
-// carries a [`cancel_this::Cancelled`], and a caller registers the triggers with
-// [`cancel_this::on_trigger`] and friends.
+/// The cancellation crate this library cooperates with, re-exported so that a caller can register
+/// triggers with exactly the version this library checks.
+///
+/// See [cancellation](crate#cancellation) for which operations consult the triggers.
 pub use cancel_this;
+
+// The examples of the README are compiled and run as documentation tests.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::xml_spec::nc_name;
 
     #[test]
-    fn test_create_document() {
-        let document = Document::empty();
-        assert!(document.root().is_none());
-    }
-
-    #[test]
-    fn test_create_element() {
-        let document = Document::empty();
-        let element =
-            document.create_element(QualifiedName::without_namespace("test").unwrap());
-        assert_eq!(element.local_name(), "test");
-        assert!(element.namespace().is_none());
-        assert!(!element.is_attached());
-    }
-
-    #[test]
-    fn test_add_children() {
-        let document = Document::empty();
-        let parent = document
-            .create_element(QualifiedName::without_namespace("parent").unwrap());
-        let child =
-            document.create_element(QualifiedName::without_namespace("child").unwrap());
-
-        parent.append_child(child.clone());
-        document.set_root(parent.clone());
-
-        let children = parent.children();
-        assert_eq!(children.len(), 1);
-        assert_eq!(children[0].kind(), NodeKind::Element);
-        assert_eq!(children[0].as_element().unwrap().local_name(), "child");
-        assert!(child.is_attached());
-    }
-
-    #[test]
-    fn test_namespace_declaration() {
-        let document = Document::empty();
-        let root =
-            document.create_element(QualifiedName::without_namespace("root").unwrap());
-        root.declare_namespace(
-            Namespace::prefixed("http://example.com", "ex").unwrap(),
-        );
-
-        assert_eq!(
-            root.get_namespace(Some(&nc_name("ex"))),
-            Some(Namespace::prefixed("http://example.com", "ex").unwrap())
-        );
-    }
-
-    #[test]
-    fn test_qualified_name_resolution() {
-        let document = Document::empty();
-        let root =
-            document.create_element(QualifiedName::without_namespace("root").unwrap());
-        root.declare_namespace(
-            Namespace::prefixed("http://example.com", "ex").unwrap(),
-        );
-
-        let resolved = root.resolve_qualified_name("ex:test").unwrap();
-        assert_eq!(resolved.local_name(), "test");
-        assert_eq!(resolved.namespace().unwrap().uri(), "http://example.com");
-    }
-
-    #[test]
-    fn test_document_reference() {
-        let document = Document::empty();
-        let element =
-            document.create_element(QualifiedName::without_namespace("test").unwrap());
-        document.set_root(element);
-        assert!(document.root().is_some());
-    }
-
-    #[test]
-    fn test_dropping_a_document_frees_its_nodes() {
+    fn dropping_a_document_frees_its_nodes() {
         use std::sync::{Arc as StdArc, Weak};
 
-        // Regression test for the absence of reference cycles: with a per-node `Arc` design, the
-        // parent <-> child links formed a reference cycle and the whole tree stayed alive.
-        // The arena stores indices instead, so dropping every handle must free the document.
+        // The arena stores indices rather than reference-counted links between nodes, so there is
+        // no parent <-> child reference cycle: dropping every handle must free the document.
         let weak: Weak<crate::document::DocumentInner> = {
-            let document = Document::empty();
+            let document = Document::new();
             let root = document
                 .create_element(QualifiedName::without_namespace("root").unwrap());
             let child = document

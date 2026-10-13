@@ -10,7 +10,7 @@ the same behaviour, including how this package maps onto the Rust API, is in the
 ```{eval-rst}
 .. automodule:: biodivine_lib_xml_dom
    :members:
-   :exclude-members: Document, Element, Namespace, Node, NodeId, NodeKind, QualifiedName, ValidationError, ValidationErrors, WriteOptions, DeclarationStyle, EmptyElementStyle, XmlDeclaration, XmlError, XmlSyntaxError, XmlNamespaceError, XmlDocumentError, XmlIoError, XmlValidationError, parse, parse_file, write, write_file
+   :exclude-members: Document, Element, Namespace, Node, NodeId, NodeKind, QualifiedName, ValidationError, ValidationErrors, WriteOptions, DeclarationStyle, EmptyElementStyle, XmlDeclaration, XmlError, XmlSyntaxError, XmlNamespaceError, XmlDocumentError, XmlIoError, XmlValidationError, GcStats
 ```
 
 ## Documents
@@ -24,6 +24,11 @@ the same behaviour, including how this package maps onto the Rust API, is in the
 
 ```{eval-rst}
 .. automodule:: biodivine_lib_xml_dom.node
+   :members:
+```
+
+```{eval-rst}
+.. automodule:: biodivine_lib_xml_dom.node_id
    :members:
 ```
 
@@ -58,14 +63,16 @@ the same behaviour, including how this package maps onto the Rust API, is in the
    :members:
 ```
 
-## Parsing, writing and options
-
-```{eval-rst}
-.. automodule:: biodivine_lib_xml_dom.parsing
-   :members:
-```
+## Serialization options
 
 ```{eval-rst}
 .. automodule:: biodivine_lib_xml_dom.write_options
+   :members:
+```
+
+## Garbage collection
+
+```{eval-rst}
+.. automodule:: biodivine_lib_xml_dom.gc
    :members:
 ```

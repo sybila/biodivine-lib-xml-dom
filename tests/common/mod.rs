@@ -1,9 +1,32 @@
-#![allow(dead_code)] // Shared helpers: not every test binary uses every one of them.
-//!
 //! Helpers shared by the integration tests.
 //!
 //! These tests only use the public API, so they double as a check that the API is actually usable
 //! from outside the crate.
+
+// Shared helpers: not every test binary uses every one of them.
+#![allow(dead_code)]
+
+/// Checks that the code and the rule summaries in `specification/rules/` agree.
+///
+/// Every place that enforces an XML rule names it in a `// rule: <identifier>` comment, and the
+/// tests assert that a summary file exists for that identifier, so a rule cannot be renamed or
+/// deleted while the code still claims to implement it.
+pub mod rules {
+    use std::path::Path;
+
+    /// Asserts that `specification/rules/<identifier>.md` exists.
+    #[track_caller]
+    pub fn assert_rule_exists(identifier: &str) {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("specification/rules")
+            .join(format!("{identifier}.md"));
+        assert!(
+            path.is_file(),
+            "the code claims to implement `{identifier}`, but {} does not exist",
+            path.display()
+        );
+    }
+}
 
 use biodivine_lib_xml_dom::{Document, QualifiedName};
 
@@ -94,7 +117,7 @@ pub fn assert_consistent(document: &Document) {
                 continue;
             }
             assert!(
-                !node.is_ancestor(&root.node()),
+                !node.is_ancestor_of(&root.node()),
                 "node {} is an ancestor of the document root",
                 node.id()
             );

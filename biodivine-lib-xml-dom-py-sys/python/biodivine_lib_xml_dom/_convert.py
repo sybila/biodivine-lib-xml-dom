@@ -1,19 +1,17 @@
 """Argument coercion and result wrapping, shared by the wrapper classes.
 
-The pure-Python layer never exposes a ``_sys`` object directly: every method that returns a
-document, node or element wraps it in the corresponding Python class first, so users only ever see
+The pure-Python layer never exposes a ``_sys`` object: every method that returns a document, node,
+element, name or namespace wraps it in the corresponding Python class first, so users only ever see
 the Pythonic types and ``isinstance`` works as expected.
 
 The wrapper classes register themselves here at import time (:func:`register`), which keeps this
 module free of imports of its siblings and therefore keeps the package's import graph acyclic.
-Coercion is duck-typed on the private ``_node``/``_element``/``_name``/``_namespace`` attributes, so
-it works for the wrapper classes and for their subclasses alike.
 """
 
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Iterable, Optional, Tuple, Type, Union
+from typing import Any, Dict, Iterable, List, Optional, Union
 
 PathLike = Union[str, "os.PathLike[str]"]
 
@@ -27,17 +25,15 @@ def register(sys_class: type, wrapper_class: type) -> None:
 
 
 def unwrap_node(value: Any) -> Any:
-    """Returns the native node/element behind ``value``.
-
-    Accepts a :class:`~biodivine_lib_xml_dom.Node`, an
-    :class:`~biodivine_lib_xml_dom.Element`, or an already-unwrapped native object.
-    """
+    """Returns the native node behind a :class:`~biodivine_lib_xml_dom.Node` (or ``Element``)."""
     inner = getattr(value, "_node", None)
-    return value if inner is None else inner
+    if inner is None:
+        raise TypeError(f"expected a Node or an Element, got {type(value).__name__}")
+    return inner
 
 
 def unwrap_element(value: Any) -> Any:
-    """Returns the native element behind ``value``."""
+    """Returns the native element behind an :class:`~biodivine_lib_xml_dom.Element`."""
     inner = getattr(value, "_element", None)
     if inner is not None:
         return inner
@@ -45,6 +41,14 @@ def unwrap_element(value: Any) -> Any:
     if element is None:
         raise TypeError("this node is not an element")
     return element
+
+
+def unwrap_document(value: Any) -> Any:
+    """Returns the native document behind a :class:`~biodivine_lib_xml_dom.Document`."""
+    inner = getattr(value, "_document", None)
+    if inner is None:
+        raise TypeError(f"expected a Document, got {type(value).__name__}")
+    return inner
 
 
 def unwrap_name(value: Any) -> Any:
@@ -66,9 +70,6 @@ def unwrap_name(value: Any) -> Any:
         return inner
     from . import _sys
 
-    if isinstance(value, _sys.QualifiedName):
-        # Already native: this happens when a caller mixes the two layers explicitly.
-        return value
     if isinstance(value, tuple):
         if len(value) != 2:
             raise TypeError(
@@ -78,19 +79,12 @@ def unwrap_name(value: Any) -> Any:
         from .name import QualifiedName
 
         return QualifiedName(value[0], value[1])._name
-    return _sys.QualifiedName.without_namespace(value)
-
-
-def unwrap_namespace(value: Any) -> Any:
-    """Returns the native namespace behind ``value``; a string is read as a URI."""
-    inner = getattr(value, "_namespace", None)
-    if inner is not None:
-        return inner
-    from . import _sys
-
-    if isinstance(value, _sys.Namespace):
-        return value
-    return _sys.Namespace(value)
+    if isinstance(value, str):
+        return _sys.QualifiedName.without_namespace(value)
+    raise TypeError(
+        f"expected a QualifiedName, a str or a (local_name, namespace) tuple, "
+        f"got {type(value).__name__}"
+    )
 
 
 def to_path(value: PathLike) -> str:
@@ -99,14 +93,14 @@ def to_path(value: PathLike) -> str:
 
 
 def wrap(value: Any) -> Any:
-    """Wraps a native result in its Python counterpart (leaving other values untouched)."""
-    for sys_class, wrapper_class in _WRAPPERS.items():
-        if isinstance(value, sys_class):
-            return wrapper_class._wrap(value)  # type: ignore[attr-defined]
-    return value
+    """Wraps a native result in its Python counterpart."""
+    wrapper_class = _WRAPPERS.get(type(value))
+    if wrapper_class is None:
+        raise TypeError(f"no Python wrapper for {type(value).__name__}")
+    return wrapper_class._wrap(value)  # type: ignore[attr-defined]
 
 
-def wrap_many(values: Iterable[Any]) -> list:
+def wrap_many(values: Iterable[Any]) -> List[Any]:
     """Wraps every element of ``values``."""
     return [wrap(value) for value in values]
 
@@ -114,8 +108,3 @@ def wrap_many(values: Iterable[Any]) -> list:
 def optional(value: Optional[Any]) -> Any:
     """Wraps ``value`` unless it is ``None``."""
     return None if value is None else wrap(value)
-
-
-def wrap_namespaces(values: Iterable[Tuple[Optional[str], Any]]) -> Dict[Optional[str], Any]:
-    """Turns a list of ``(prefix, namespace)`` pairs into a dict, wrapping the namespaces."""
-    return {prefix: optional(namespace) for prefix, namespace in values}

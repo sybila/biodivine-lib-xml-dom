@@ -413,7 +413,7 @@ fn qualified(name: &NameChoice, local: &str) -> QualifiedName {
 }
 
 fn build_document(generated: &GenDocument) -> Document {
-    let document = Document::empty();
+    let document = Document::new();
     let root = build_element(
         &document,
         &generated.root,

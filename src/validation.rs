@@ -1,8 +1,9 @@
 //! Whole-document validation.
 //!
-//! Some properties of a document can only be judged by looking at the document as a whole — is every used prefix actually declared *here*, rather than somewhere else? are all
-//! `xml:id` values distinct? is the tree still a tree? Those are the checks in this module, and
-//! they are deliberately separate from the editing API:
+//! Some properties of a document can only be judged by looking at the document as a whole: is
+//! every used prefix actually declared *here*, rather than somewhere else? Are all `xml:id` values
+//! distinct? Those are the checks in this module, and they are deliberately separate from the
+//! editing API:
 //!
 //! * editing never checks namespace integrity — you can remove a declaration that
 //!   a subtree still relies on, or move an element into a scope where its prefix means something
@@ -10,17 +11,21 @@
 //! * [`Document::validate`] then reports *every* problem it can find in one pass, so a caller can
 //!   fix them all in one sweep instead of discovering them one failed operation at a time.
 //!
-//! The rules themselves live in [`crate::xml_spec::validation`], because they are statements about
-//! XML rather than about this library. This module is the traversal that feeds them, plus the error
-//! type that makes a *set* of problems usable as a single error.
+//! The rules themselves live in the `xml_spec` module, because they are statements about XML rather
+//! than about this library. This module is the traversal that feeds them, plus the error type that
+//! makes a *set* of problems usable as a single error.
+//!
+//! The other structural rules (the tree is a tree, the root is an element without a parent, the
+//! namespace declarations respect the reserved bindings) are guaranteed by construction: the arena
+//! maintains them on every mutation and [`crate::Namespace`] refuses an illegal binding, so they
+//! are not part of the validation report.
 //!
 //! # What is checked
 //!
 //! | group | rule files |
 //! | --- | --- |
-//! | structure (self-check of the arena's invariants) | [`rule.well-formedness.single-root-element`](crate::xml_spec::rule_set::rule_well_formedness_single_root_element), [`rule.well-formedness.elements-nest-properly`](crate::xml_spec::rule_set::rule_well_formedness_elements_nest_properly) |
+//! | structure | [`rule.well-formedness.document-production`](crate::xml_spec::rule_set::rule_well_formedness_document_production) (a root element exists) |
 //! | namespace scope | [`rule.namespace-usage.prefix-declared`](crate::xml_spec::rule_set::rule_namespace_usage_prefix_declared), `prefix-declaration-scope`, `default-namespace-scope`, `default-namespace-not-attributes`, [`rule.namespace-basics.xmlns-not-element-prefix`](crate::xml_spec::rule_set::rule_namespace_basics_xmlns_not_element_prefix), `xml-prefix-fixed-binding` |
-//! | namespace declarations | `rule.namespace-basics.*` reserved-binding rules |
 //! | values | [`rule.attributes.id-must-be-name`](crate::xml_spec::rule_set::rule_attributes_id_must_be_name), `id-must-be-unique`, [`rule.document-structure.xml-lang-must-be-bcp47-or-empty`](crate::xml_spec::rule_set::rule_document_structure_xml_lang_must_be_bcp47_or_empty), `xml-space-must-be-enumerated-default-preserve` |
 //!
 //! # What is deliberately not checked
@@ -44,13 +49,13 @@
 use std::fmt;
 
 use crate::arena::{Arena, NodeData};
+use crate::cancellation::CancellationCheck;
 use crate::error::XmlResult;
 use crate::node_id::NodeId;
 use crate::qualified_name::QualifiedName;
 use crate::xml_spec::validation::{
     NamespaceScope, ScopeViolation, check_attribute_name, check_element_name,
-    check_namespace_declaration, xml_id_attribute, xml_lang_attribute,
-    xml_space_attribute,
+    xml_id_attribute, xml_lang_attribute, xml_space_attribute,
 };
 use crate::xml_spec::{NCName, is_valid_language_tag, is_valid_xml_space_value};
 
@@ -59,28 +64,13 @@ use crate::xml_spec::{NCName, is_valid_language_tag, is_valid_xml_space_value};
 /// Every variant is named after the rule it comes from; the corresponding rule file is named in
 /// the variant's documentation.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ValidationErrorKind {
     // -------------------------------------------------------------------------------------
-    // Structure. Every variant below except `MissingRoot` is a *defensive self-check*: the arena
-    // maintains those invariants on every mutation (parent and child links are written together,
-    // `set_root` replaces the root rather than appending a second one, and cycles are rejected by
-    // `Arena::attach`), so no sequence of public API calls can produce them. They are checked
-    // anyway so that the guarantee does not depend on the maintaining code being correct, and so
-    // that the corresponding document-level rules have an explicit enforcement point. Only
-    // `MissingRoot` is reachable through the public API (a document to which no root was set).
+    // Structure.
     // -------------------------------------------------------------------------------------
     /// The document has no root element ([`rule.well-formedness.document-production`](crate::xml_spec::rule_set::rule_well_formedness_document_production)).
     MissingRoot,
-    /// The root of the document is not an element ([`rule.well-formedness.single-root-element`](crate::xml_spec::rule_set::rule_well_formedness_single_root_element)).
-    RootIsNotAnElement,
-    /// The root of the document has a parent ([`rule.well-formedness.single-root-element`](crate::xml_spec::rule_set::rule_well_formedness_single_root_element)).
-    RootHasParent,
-    /// A node's parent link and the parent's child list disagree
-    /// ([`rule.well-formedness.elements-nest-properly`](crate::xml_spec::rule_set::rule_well_formedness_elements_nest_properly)).
-    ParentChildMismatch,
-    /// Following parent links from a node returns to it
-    /// ([`rule.well-formedness.elements-nest-properly`](crate::xml_spec::rule_set::rule_well_formedness_elements_nest_properly)).
-    CyclicStructure,
 
     // -------------------------------------------------------------------------------------
     // Namespace scope.
@@ -133,16 +123,6 @@ pub enum ValidationErrorKind {
         /// The prefix of the name.
         prefix: NCName,
     },
-    /// A namespace declaration violates one of the reserved-binding rules
-    /// (`rule.namespace-basics.*`).
-    IllegalNamespaceDeclaration {
-        /// The prefix of the declaration, or `None` for the default namespace.
-        prefix: Option<NCName>,
-        /// The URI it binds.
-        uri: String,
-        /// The problem, as described by [`crate::Namespace`]'s validation rules.
-        reason: String,
-    },
 
     // -------------------------------------------------------------------------------------
     // Values.
@@ -178,12 +158,6 @@ impl ValidationErrorKind {
     pub fn rule(&self) -> &'static str {
         match self {
             Self::MissingRoot => "rule.well-formedness.document-production",
-            Self::RootIsNotAnElement | Self::RootHasParent => {
-                "rule.well-formedness.single-root-element"
-            }
-            Self::ParentChildMismatch | Self::CyclicStructure => {
-                "rule.well-formedness.elements-nest-properly"
-            }
             Self::UndeclaredPrefix { .. } => "rule.namespace-usage.prefix-declared",
             Self::PrefixBoundToDifferentUri { .. } => {
                 "rule.namespace-usage.prefix-declaration-scope"
@@ -199,9 +173,6 @@ impl ValidationErrorKind {
             Self::ReservedPrefix { .. } => {
                 "rule.namespace-basics.xmlns-not-element-prefix"
             }
-            Self::IllegalNamespaceDeclaration { .. } => {
-                "rule.namespace-basics.xml-prefix-fixed-binding"
-            }
             Self::XmlIdIsNotAName { .. } => "rule.attributes.id-must-be-name",
             Self::DuplicateXmlId { .. } => "rule.attributes.id-must-be-unique",
             Self::InvalidXmlLang { .. } => {
@@ -216,13 +187,13 @@ impl ValidationErrorKind {
 
 /// One problem found by [`crate::Document::validate`].
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct XmlValidationError {
+pub struct ValidationError {
     kind: ValidationErrorKind,
     node: Option<NodeId>,
     message: String,
 }
 
-impl XmlValidationError {
+impl ValidationError {
     /// Creates an issue attached to a node.
     fn at(kind: ValidationErrorKind, node: NodeId, message: impl Into<String>) -> Self {
         Self {
@@ -260,7 +231,7 @@ impl XmlValidationError {
     }
 }
 
-impl fmt::Display for XmlValidationError {
+impl fmt::Display for ValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.node {
             Some(node) => {
@@ -271,25 +242,38 @@ impl fmt::Display for XmlValidationError {
     }
 }
 
-impl std::error::Error for XmlValidationError {}
+impl std::error::Error for ValidationError {}
 
-/// Every problem [`crate::Document::validate`] found, in one value.
+/// Every problem [`crate::Document::validate`] found, as one error value.
 ///
-/// The list is deterministic (nodes in arena order, and within one node the checks run in a fixed
-/// order), so comparing two validation runs is meaningful.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct XmlValidationErrors {
-    errors: Vec<XmlValidationError>,
+/// This is the payload of [`crate::XmlError::Validation`], so it always holds at least one
+/// problem. The list is deterministic (nodes in arena order, and within one node the checks run in
+/// a fixed order), so comparing two validation runs is meaningful.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValidationErrors {
+    errors: Vec<ValidationError>,
 }
 
-impl XmlValidationErrors {
+impl ValidationErrors {
+    /// Wraps a list of problems that validation found.
+    ///
+    /// Crate-internal so that a [`ValidationErrors`] value always comes from a validation run and
+    /// is never empty.
+    pub(crate) fn new(errors: Vec<ValidationError>) -> Self {
+        debug_assert!(
+            !errors.is_empty(),
+            "a validation error lists at least one problem"
+        );
+        Self { errors }
+    }
+
     /// The issues, in deterministic order.
-    pub fn as_slice(&self) -> &[XmlValidationError] {
+    pub fn as_slice(&self) -> &[ValidationError] {
         &self.errors
     }
 
     /// Iterates over the issues, in deterministic order.
-    pub fn iter(&self) -> std::slice::Iter<'_, XmlValidationError> {
+    pub fn iter(&self) -> std::slice::Iter<'_, ValidationError> {
         self.errors.iter()
     }
 
@@ -299,17 +283,20 @@ impl XmlValidationErrors {
     }
 
     /// Whether no issues were found.
+    ///
+    /// Always `false` for a value returned by this crate; provided because a length without
+    /// `is_empty` is unidiomatic.
     pub fn is_empty(&self) -> bool {
         self.errors.is_empty()
     }
 
-    /// The issues, as an owning iterator.
-    pub fn into_errors(self) -> Vec<XmlValidationError> {
+    /// The issues, as an owned vector.
+    pub fn into_vec(self) -> Vec<ValidationError> {
         self.errors
     }
 }
 
-impl fmt::Display for XmlValidationErrors {
+impl fmt::Display for ValidationErrors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} validation problem", self.errors.len())?;
         if self.errors.len() != 1 {
@@ -322,17 +309,20 @@ impl fmt::Display for XmlValidationErrors {
     }
 }
 
-impl std::error::Error for XmlValidationErrors {}
+impl std::error::Error for ValidationErrors {}
 
-impl From<Vec<XmlValidationError>> for XmlValidationErrors {
-    fn from(errors: Vec<XmlValidationError>) -> Self {
-        Self { errors }
+impl IntoIterator for ValidationErrors {
+    type Item = ValidationError;
+    type IntoIter = std::vec::IntoIter<ValidationError>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.errors.into_iter()
     }
 }
 
-impl<'a> IntoIterator for &'a XmlValidationErrors {
-    type Item = &'a XmlValidationError;
-    type IntoIter = std::slice::Iter<'a, XmlValidationError>;
+impl<'a> IntoIterator for &'a ValidationErrors {
+    type Item = &'a ValidationError;
+    type IntoIter = std::slice::Iter<'a, ValidationError>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.errors.iter()
@@ -347,99 +337,37 @@ impl<'a> IntoIterator for &'a XmlValidationErrors {
 ///
 /// The walk honours cancellation: a trigger registered on this thread aborts it with
 /// [`crate::XmlError::Cancelled`] instead of scanning the whole document.
-pub(crate) fn validate_arena(arena: &Arena) -> XmlResult<Vec<XmlValidationError>> {
+pub(crate) fn validate_arena(arena: &Arena) -> XmlResult<Vec<ValidationError>> {
     let mut errors = Vec::new();
-    check_structure(arena, &mut errors)?;
-    check_nodes(arena, &mut errors)?;
-    check_xml_id_uniqueness(arena, &mut errors)?;
+    let mut check = CancellationCheck::new();
+    check_root(arena, &mut errors);
+    check_nodes(arena, &mut errors, &mut check)?;
+    check_xml_id_uniqueness(arena, &mut errors, &mut check)?;
     Ok(errors)
 }
 
-/// The structural self-checks.
+/// The document has a root element.
 ///
-/// Only the missing-root check can fire for a document built through this crate's API; the others
-/// verify invariants that [`Arena`] maintains on every mutation (see the note on
-/// [`ValidationErrorKind`]'s structural variants). They are cheap, they are what the corresponding
-/// specification rules are about, and they mean a future refactor cannot break the tree model
-/// silently.
-fn check_structure(
-    arena: &Arena,
-    errors: &mut Vec<XmlValidationError>,
-) -> XmlResult<()> {
-    match arena.root() {
-        None => errors.push(XmlValidationError::document(
+/// The other structural properties (one root, an acyclic tree whose parent and child links agree)
+/// are invariants that [`Arena`] maintains on every mutation, so there is nothing to report; debug
+/// builds assert them after every collection.
+fn check_root(arena: &Arena, errors: &mut Vec<ValidationError>) {
+    if arena.root().is_none() {
+        errors.push(ValidationError::document(
             ValidationErrorKind::MissingRoot,
             "the document has no root element",
-        )),
-        Some(root) => {
-            if !arena.is_element(root) {
-                errors.push(XmlValidationError::at(
-                    ValidationErrorKind::RootIsNotAnElement,
-                    root,
-                    "the root of the document is not an element",
-                ));
-            }
-            if arena.parent(root).is_some() {
-                errors.push(XmlValidationError::at(
-                    ValidationErrorKind::RootHasParent,
-                    root,
-                    "the root of the document has a parent",
-                ));
-            }
-        }
+        ));
     }
-
-    for id in arena.occupied_ids() {
-        cancel_this::is_cancelled!()?;
-        let Some(parent) = arena.parent(id) else {
-            continue;
-        };
-        let occurrences = arena
-            .children(parent)
-            .iter()
-            .filter(|&&child| child == id)
-            .count();
-        if occurrences != 1 {
-            errors.push(XmlValidationError::at(
-                ValidationErrorKind::ParentChildMismatch,
-                id,
-                format!(
-                    "node {id} claims parent {parent}, but appears {occurrences} times in its child list"
-                ),
-            ));
-        }
-
-        // Walk up, bounded by the number of slots: a cycle would otherwise loop forever.
-        let mut current = Some(parent);
-        let mut steps = 0usize;
-        while let Some(node) = current {
-            if node == id {
-                errors.push(XmlValidationError::at(
-                    ValidationErrorKind::CyclicStructure,
-                    id,
-                    format!("node {id} is its own ancestor"),
-                ));
-                break;
-            }
-            steps += 1;
-            if steps > arena.live() {
-                errors.push(XmlValidationError::at(
-                    ValidationErrorKind::CyclicStructure,
-                    id,
-                    format!("the parent chain of node {id} does not terminate"),
-                ));
-                break;
-            }
-            current = arena.parent(node);
-        }
-    }
-    Ok(())
 }
 
 /// The per-node checks: names against their scope, and attribute values.
-fn check_nodes(arena: &Arena, errors: &mut Vec<XmlValidationError>) -> XmlResult<()> {
+fn check_nodes(
+    arena: &Arena,
+    errors: &mut Vec<ValidationError>,
+    check: &mut CancellationCheck,
+) -> XmlResult<()> {
     for id in arena.occupied_ids() {
-        cancel_this::is_cancelled!()?;
+        check.tick()?;
         let NodeData::Element(element) = arena.data(id) else {
             continue;
         };
@@ -451,22 +379,6 @@ fn check_nodes(arena: &Arena, errors: &mut Vec<XmlValidationError>) -> XmlResult
         for name in element.attributes.keys() {
             if let Err(violation) = check_attribute_name(name, &scope) {
                 errors.push(scope_error(id, name, violation, true));
-            }
-        }
-        for (prefix, namespace) in &element.namespace_declarations {
-            if let Some(namespace) = namespace
-                && let Err(reason) =
-                    check_namespace_declaration(prefix.as_ref(), namespace.uri())
-            {
-                errors.push(XmlValidationError::at(
-                    ValidationErrorKind::IllegalNamespaceDeclaration {
-                        prefix: prefix.clone(),
-                        uri: namespace.uri().to_string(),
-                        reason: reason.clone(),
-                    },
-                    id,
-                    format!("illegal namespace declaration: {reason}"),
-                ));
             }
         }
 
@@ -482,13 +394,13 @@ fn check_nodes(arena: &Arena, errors: &mut Vec<XmlValidationError>) -> XmlResult
 fn check_xml_attribute_values(
     id: NodeId,
     element: &crate::arena::ElementData,
-    errors: &mut Vec<XmlValidationError>,
+    errors: &mut Vec<ValidationError>,
 ) {
     if let Some(value) = xml_id_attribute(element)
         && NCName::try_from(value).is_err()
     {
         // rule: rule.attributes.id-must-be-name
-        errors.push(XmlValidationError::at(
+        errors.push(ValidationError::at(
             ValidationErrorKind::XmlIdIsNotAName {
                 value: value.to_string(),
             },
@@ -500,7 +412,7 @@ fn check_xml_attribute_values(
         && !is_valid_language_tag(value)
     {
         // rule: rule.document-structure.xml-lang-must-be-bcp47-or-empty
-        errors.push(XmlValidationError::at(
+        errors.push(ValidationError::at(
             ValidationErrorKind::InvalidXmlLang {
                 value: value.to_string(),
             },
@@ -514,7 +426,7 @@ fn check_xml_attribute_values(
         && !is_valid_xml_space_value(value)
     {
         // rule: rule.document-structure.xml-space-must-be-enumerated-default-preserve
-        errors.push(XmlValidationError::at(
+        errors.push(ValidationError::at(
             ValidationErrorKind::InvalidXmlSpace {
                 value: value.to_string(),
             },
@@ -534,7 +446,8 @@ fn check_xml_attribute_values(
 /// one issue, so a value shared by three attached elements produces two issues.
 fn check_xml_id_uniqueness(
     arena: &Arena,
-    errors: &mut Vec<XmlValidationError>,
+    errors: &mut Vec<ValidationError>,
+    check: &mut CancellationCheck,
 ) -> XmlResult<()> {
     let Some(root) = arena.root() else {
         return Ok(());
@@ -545,21 +458,15 @@ fn check_xml_id_uniqueness(
         std::collections::BTreeMap::new();
     let mut queue = std::collections::VecDeque::new();
     queue.push_back(root);
-    let mut visited = 0usize;
     while let Some(id) = queue.pop_front() {
-        cancel_this::is_cancelled!()?;
-        visited += 1;
-        if visited > arena.live() {
-            // Structure problems are reported by `check_structure`; do not loop here as well.
-            return Ok(());
-        }
+        check.tick()?;
         if let NodeData::Element(element) = arena.data(id)
             && let Some(value) = xml_id_attribute(element)
             && let Ok(name) = NCName::try_from(value)
         {
             // rule: rule.attributes.id-must-be-unique
             if let Some(previous) = seen.insert(value.to_string(), id) {
-                errors.push(XmlValidationError::at(
+                errors.push(ValidationError::at(
                     ValidationErrorKind::DuplicateXmlId { id: name },
                     id,
                     format!(
@@ -586,7 +493,7 @@ fn scope_error(
     name: &QualifiedName,
     violation: ScopeViolation,
     attribute: bool,
-) -> XmlValidationError {
+) -> ValidationError {
     let what = if attribute { "attribute" } else { "element" };
     let (kind, message) = match violation {
         ScopeViolation::UndeclaredPrefix { prefix } => (
@@ -649,5 +556,5 @@ fn scope_error(
             format!("the {what} name `{name}` uses the reserved prefix `{prefix}`"),
         ),
     };
-    XmlValidationError::at(kind, node, message)
+    ValidationError::at(kind, node, message)
 }

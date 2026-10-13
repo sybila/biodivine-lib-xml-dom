@@ -12,11 +12,11 @@ use std::sync::Arc;
 ///
 /// Two [`Namespace`] objects are considered equal if they have the same URI **and** the
 /// same prefix. The XML specification defines namespace equality by URI comparison alone;
-/// use [`Namespace::is_equal_ns`] for that. The derived [`PartialEq`] implementation
+/// use [`Namespace::has_same_uri`] for that. The derived [`PartialEq`] implementation
 /// additionally requires the prefix to match, which is useful for distinguishing namespace
 /// declarations that bind the same URI under different prefixes.
 ///
-/// # Conditions for a valid namespace:
+/// # Conditions for a valid namespace
 ///
 /// - The URI must not be empty.
 /// - The prefix, if present, must be a valid XML NCName per XML 1.0 Fifth Edition:
@@ -28,7 +28,6 @@ use std::sync::Arc;
 /// - No prefix may be bound to `http://www.w3.org/2000/xmlns/`.
 /// - The default namespace (no prefix) must not be `http://www.w3.org/XML/1998/namespace`
 ///   or `http://www.w3.org/2000/xmlns/`.
-///
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Namespace {
     data: Arc<NamespaceData>,
@@ -64,10 +63,9 @@ impl Namespace {
     /// assert!(ns.is_ok());
     /// let ns = Namespace::new("http://example.com".to_string(), None);
     /// assert!(ns.is_ok());
+    /// // The prefix is an `NCName`, so an invalid prefix is rejected before this constructor.
     /// let invalid: Result<NCName, _> = "123".try_into();
-    /// if let Err(_) = invalid {
-    ///     // Invalid NCNames are rejected at construction
-    /// }
+    /// assert!(invalid.is_err());
     /// ```
     pub fn new(uri: String, prefix: Option<NCName>) -> Result<Self, XmlError> {
         xml_spec::validate_namespace(&uri, prefix.as_ref())?;
@@ -173,11 +171,11 @@ impl Namespace {
     /// use biodivine_lib_xml_dom::Namespace;
     /// let ns1 = Namespace::prefixed("http://example.com", "ex").unwrap();
     /// let ns2 = Namespace::without_prefix("http://example.com").unwrap();
-    /// assert!(ns1.is_equal_ns(&ns2));
+    /// assert!(ns1.has_same_uri(&ns2));
     /// let ns3 = Namespace::without_prefix("http://different.com").unwrap();
-    /// assert!(!ns1.is_equal_ns(&ns3));
+    /// assert!(!ns1.has_same_uri(&ns3));
     /// ```
-    pub fn is_equal_ns(&self, other: &Namespace) -> bool {
+    pub fn has_same_uri(&self, other: &Namespace) -> bool {
         self.uri() == other.uri()
     }
 
@@ -200,7 +198,7 @@ mod tests {
 
     #[test]
     fn test_namespace_support() {
-        let doc = Document::empty();
+        let doc = Document::new();
         let namespace = Namespace::prefixed("http://example.com", "ex").unwrap();
         let element = doc
             .create_element(QualifiedName::with_namespace("test", &namespace).unwrap());
@@ -236,19 +234,19 @@ mod tests {
     }
 
     #[test]
-    fn test_namespace_is_equal_ns() {
+    fn test_namespace_has_same_uri() {
         let ns1 = Namespace::prefixed("http://example.com", "ex").unwrap();
         let ns2 = Namespace::without_prefix("http://example.com").unwrap();
         let ns3 = Namespace::prefixed("http://example.com", "other").unwrap();
         let ns4 = Namespace::without_prefix("http://different.com").unwrap();
         // Same URI, different prefixes
-        assert!(ns1.is_equal_ns(&ns2));
-        assert!(ns1.is_equal_ns(&ns3));
+        assert!(ns1.has_same_uri(&ns2));
+        assert!(ns1.has_same_uri(&ns3));
         // Different URIs
-        assert!(!ns1.is_equal_ns(&ns4));
-        assert!(!ns2.is_equal_ns(&ns4));
+        assert!(!ns1.has_same_uri(&ns4));
+        assert!(!ns2.has_same_uri(&ns4));
         // Identical objects
-        assert!(ns1.is_equal_ns(&ns1));
+        assert!(ns1.has_same_uri(&ns1));
     }
 
     #[test]

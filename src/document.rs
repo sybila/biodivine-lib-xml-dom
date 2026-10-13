@@ -32,6 +32,7 @@ use crate::error::{XmlError, XmlResult};
 use crate::node::Node;
 use crate::node_id::NodeId;
 use crate::qualified_name::QualifiedName;
+use crate::validation::{ValidationError, ValidationErrors};
 use crate::xml_spec::{CData, Comment, PiData, PiTarget, Text, XmlDeclaration};
 
 /// Debug-only detector for re-entrant access to one document's lock.
@@ -165,20 +166,20 @@ pub struct Document {
 
 impl Default for Document {
     fn default() -> Self {
-        Self::empty()
+        Self::new()
     }
 }
 
 impl Document {
     /// Creates a new, empty document (no root element) with the default [`GcConfig`].
-    pub fn empty() -> Self {
+    pub fn new() -> Self {
         Self::with_gc_config(GcConfig::default())
     }
 
     /// Creates a new, empty document whose arena uses `config`.
     ///
     /// The configuration controls when the document collects garbage and how its arena grows; see
-    /// [`GcConfig`]. The default is [`Document::empty`].
+    /// [`GcConfig`]. The default is [`Document::new`].
     ///
     /// # Examples
     ///
@@ -204,7 +205,7 @@ impl Document {
     /// Runs `read` with shared access to the arena.
     ///
     /// This is the *only* way to read arena state. It is crate-internal so that the locking
-    /// invariant can be audited by looking at the handful of call sites plus this helper.
+    /// invariant can be checked by looking at the handful of call sites plus this helper.
     ///
     /// # Panics
     ///
@@ -297,6 +298,11 @@ impl Document {
 
     /// Like [`Document::write_one`], but for an edit that can fail (for example because it was
     /// cancelled), so that the failure is propagated instead of being turned into `None`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `edit` returns the id of a slot that holds no node, which the callers rule out by
+    /// returning the id of a node they have just allocated.
     #[track_caller]
     pub(crate) fn write_one_result(
         &self,
@@ -305,7 +311,9 @@ impl Document {
     ) -> XmlResult<Node> {
         self.write_arena(operation, |arena| {
             let id = edit(arena)?;
-            let reference = arena.external_ref(id).ok_or(XmlError::NodeNotFound(id))?;
+            let reference = arena
+                .external_ref(id)
+                .expect("the edit returns the id of a live node");
             Ok(Node::from_ref(self.clone(), id, reference))
         })
     }
@@ -327,9 +335,7 @@ impl Document {
 
     /// Replaces the XML declaration of this document.
     ///
-    /// The declaration is not validated here; use
-    /// [`crate::xml_spec::declaration::encoding_is_utf8`] and compare
-    /// [`crate::xml_spec::XML_VERSION`] if the value does not come from this crate's parser.
+    /// An [`XmlDeclaration`] is validated when it is constructed, so any value can be stored.
     pub fn set_xml_declaration(&self, declaration: Option<XmlDeclaration>) {
         self.write_arena("Document::set_xml_declaration", |arena| {
             arena.set_declaration(declaration);
@@ -509,9 +515,8 @@ impl Document {
 
     /// Checks the whole document and reports **every** problem it can find.
     ///
-    /// Whole-document validation: the checks that need a holistic view — namespace scope
-    /// integrity, the structural invariants, and the document-wide value rules — are collected in
-    /// one pass instead of failing at the first problem, so that a caller can fix everything in one
+    /// Whole-document validation: the checks that need a holistic view — a root element exists,
+    /// namespace scope integrity, and the document-wide value rules — are collected in one pass instead of failing at the first problem, so that a caller can fix everything in one
     /// sweep. The checks themselves are described in the [crate documentation](crate#validation) and
     /// the individual findings are listed in [`ValidationErrorKind`](crate::ValidationErrorKind).
     ///
@@ -533,16 +538,9 @@ impl Document {
     ///   model), and neither is a missing root: [`crate::ValidationErrorKind::MissingRoot`] is
     ///   reported, and the rest of the document is still checked.
     ///
-    /// The structural diagnostics ([`crate::ValidationErrorKind::ParentChildMismatch`],
-    /// [`crate::ValidationErrorKind::CyclicStructure`], [`crate::ValidationErrorKind::RootHasParent`],
-    /// [`crate::ValidationErrorKind::RootIsNotAnElement`]) are *defensive self-checks* of invariants the
-    /// arena maintains on every mutation, so no sequence of public API calls can produce them;
-    /// only [`crate::ValidationErrorKind::MissingRoot`] is reachable from the API. They exist so that the
-    /// guarantee does not depend on the maintaining code being correct.
-    ///
     /// # Errors
     ///
-    /// Returns [`XmlError::Validation`] carrying one [`crate::XmlValidationError`] per problem. Each
+    /// Returns [`XmlError::Validation`] carrying one [`ValidationError`] per problem. Each
     /// carries a [`crate::ValidationErrorKind`], the offending [`NodeId`] (or `None` for a problem
     /// about the document as a whole, such as a missing root element) and a human-readable message.
     /// The list is deterministic.
@@ -555,7 +553,7 @@ impl Document {
     /// ```rust
     /// use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName, XmlError};
     ///
-    /// let document = Document::empty();
+    /// let document = Document::new();
     /// let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
     /// let root = document.create_element(QualifiedName::with_namespace("item", &ex).unwrap());
     /// document.set_root(root.clone());
@@ -574,7 +572,7 @@ impl Document {
         if errors.is_empty() {
             Ok(())
         } else {
-            Err(XmlError::Validation(errors.into()))
+            Err(XmlError::Validation(ValidationErrors::new(errors)))
         }
     }
 
@@ -594,18 +592,17 @@ impl Document {
 
     /// Every problem found by [`Document::validate`], as a list (empty when the document is valid).
     ///
-    /// This is the non-raising counterpart of [`Document::validate`].
+    /// This is the counterpart of [`Document::validate`] for code that wants to inspect the
+    /// problems rather than propagate them as an error.
     ///
     /// # Errors
     ///
     /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
     /// while the document is being walked.
-    pub fn validation_errors(&self) -> XmlResult<crate::XmlValidationErrors> {
-        match self.validate() {
-            Ok(()) => Ok(crate::XmlValidationErrors::default()),
-            Err(XmlError::Validation(errors)) => Ok(errors),
-            Err(error) => Err(error),
-        }
+    pub fn validation_errors(&self) -> XmlResult<Vec<ValidationError>> {
+        self.read_arena("Document::validation_errors", |arena| {
+            crate::validation::validate_arena(arena)
+        })
     }
 
     /// The number of nodes this document currently holds.
@@ -637,7 +634,7 @@ impl Document {
     /// ```rust
     /// use biodivine_lib_xml_dom::{Document, NodeId};
     ///
-    /// let document = Document::empty();
+    /// let document = Document::new();
     /// let node = document.create_text("kept").unwrap();
     ///
     /// assert!(document.node(node.id()).is_some());
@@ -665,15 +662,15 @@ impl Document {
     /// # Errors
     ///
     /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
-    /// during the collection. A collection that is cancelled part-way leaves the document
-    /// consistent; the remaining unreachable nodes are reclaimed by the next collection.
+    /// while the collector is looking for reachable nodes. A cancelled collection reclaims nothing
+    /// and leaves the document unchanged; once the collector starts reclaiming, it finishes.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use biodivine_lib_xml_dom::Document;
     ///
-    /// let document = Document::empty();
+    /// let document = Document::new();
     /// let discarded = document.create_text("temporary").unwrap();
     ///
     /// // A handle keeps the node ...
@@ -743,8 +740,8 @@ mod tests {
 
     #[test]
     fn documents_are_equal_by_identity() {
-        let a = Document::empty();
-        let b = Document::empty();
+        let a = Document::new();
+        let b = Document::new();
         let a2 = a.clone();
         assert!(a == a2);
         assert!(a != b);
@@ -754,7 +751,7 @@ mod tests {
 
     #[test]
     fn empty_documents_have_no_root() {
-        let document = Document::empty();
+        let document = Document::new();
         assert!(document.root().is_none());
         assert_eq!(document.node_count(), 0);
         assert!(document.clear_root().is_none());
@@ -764,12 +761,12 @@ mod tests {
     /// this is the operation that would deadlock.
     ///
     /// Debug-only, because the guard itself is: in release builds it compiles away, so there is
-    /// nothing to observe. `cargo test --release` found this the hard way.
+    /// nothing to observe.
     #[cfg(debug_assertions)]
     #[test]
     #[should_panic(expected = "re-entrant access to the lock of one document")]
     fn re_entrant_access_to_the_same_document_panics_in_debug_builds() {
-        let document = Document::empty();
+        let document = Document::new();
         document.read_arena("outer", |_| {
             document.read_arena("inner", |_| ());
         });
@@ -780,8 +777,8 @@ mod tests {
     /// document identity precisely so that it reports the real hazard and not this one.
     #[test]
     fn nesting_access_to_two_different_documents_is_allowed() {
-        let first = Document::empty();
-        let second = Document::empty();
+        let first = Document::new();
+        let second = Document::new();
         let result = first.read_arena("first", |first_arena| {
             let inner = second.read_arena("second", |second_arena| second_arena.live());
             (first_arena.live(), inner)

@@ -8,13 +8,12 @@
 
 mod common;
 
-use biodivine_lib_xml_dom::xml_spec::rules;
 use biodivine_lib_xml_dom::{
     DeclarationStyle, Document, EmptyElementStyle, Namespace, NodeContent,
     QualifiedName, WriteOptions, XmlError,
 };
 
-use common::element;
+use common::{element, rules};
 
 /// Parses and returns the text content of the root element's first text child.
 fn root_text(xml: &str) -> String {
@@ -138,7 +137,7 @@ fn attribute_value_normalisation_in_both_directions() {
     // And the serializer writes those characters back as character references, so a value
     // containing whitespace round-trips byte-exactly.
     for value in ["x\ty", "x\ny", "x\ry", "x\ty\nz\rw"] {
-        let document = Document::empty();
+        let document = Document::new();
         let root = element(&document, "a");
         document.set_root(root.clone());
         root.set_attribute(QualifiedName::without_namespace("b").unwrap(), value);
@@ -514,7 +513,7 @@ fn xml_lang_and_xml_space_round_trip_with_the_implicit_xml_prefix() {
         "`xml` must resolve without a declaration"
     );
 
-    // The value predicates G4 will use accept these values ...
+    // The value predicates used by validation accept these values ...
     assert!(biodivine_lib_xml_dom::xml_spec::is_valid_language_tag(
         "en-GB"
     ));
@@ -529,7 +528,7 @@ fn xml_lang_and_xml_space_round_trip_with_the_implicit_xml_prefix() {
 
     // A value that breaks the `xml:space` enumeration is *validity*, not well-formedness: the
     // parser stores it (no DTD means no attribute types) and `is_valid_xml_space_value` rejects
-    // it, so the whole-document validation pass (G4) is what reports it.
+    // it, so the whole-document validation pass is what reports it.
     let loose = Document::parse_string(r#"<a xml:space="preserved"/>"#).unwrap();
     assert_eq!(
         loose
@@ -674,7 +673,7 @@ fn prefixes_are_preserved() {
 
 #[test]
 fn namespace_declarations_are_never_invented_or_removed() {
-    let document = Document::empty();
+    let document = Document::new();
     let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
     let root =
         document.create_element(QualifiedName::with_namespace("item", &ex).unwrap());
@@ -703,10 +702,11 @@ fn empty_elements_and_write_options() {
     assert_eq!(document.write_string().unwrap(), "<a/>");
     assert_eq!(
         document
-            .write_string_with(&WriteOptions {
-                declaration: DeclarationStyle::Never,
-                empty_elements: EmptyElementStyle::ExplicitEndTag,
-            })
+            .write_string_with(
+                &WriteOptions::default()
+                    .with_declaration(DeclarationStyle::Never)
+                    .with_empty_elements(EmptyElementStyle::ExplicitEndTag)
+            )
             .unwrap(),
         "<a></a>"
     );
@@ -716,10 +716,11 @@ fn empty_elements_and_write_options() {
     assert_eq!(document.write_string().unwrap(), "<a><b/><c>text</c></a>");
     assert_eq!(
         document
-            .write_string_with(&WriteOptions {
-                declaration: DeclarationStyle::Never,
-                empty_elements: EmptyElementStyle::ExplicitEndTag,
-            })
+            .write_string_with(
+                &WriteOptions::default()
+                    .with_declaration(DeclarationStyle::Never)
+                    .with_empty_elements(EmptyElementStyle::ExplicitEndTag)
+            )
             .unwrap(),
         "<a><b></b><c>text</c></a>"
     );
@@ -734,19 +735,17 @@ fn declaration_style_is_honoured() {
 
     assert_eq!(
         with_declaration
-            .write_string_with(&WriteOptions {
-                declaration: DeclarationStyle::Never,
-                ..Default::default()
-            })
+            .write_string_with(
+                &WriteOptions::default().with_declaration(DeclarationStyle::Never)
+            )
             .unwrap(),
         "<a/>"
     );
     assert_eq!(
         without
-            .write_string_with(&WriteOptions {
-                declaration: DeclarationStyle::Always,
-                ..Default::default()
-            })
+            .write_string_with(
+                &WriteOptions::default().with_declaration(DeclarationStyle::Always)
+            )
             .unwrap(),
         r#"<?xml version="1.0" encoding="UTF-8"?><a/>"#
     );
@@ -756,7 +755,8 @@ fn declaration_style_is_honoured() {
             "1.0",
             Some("UTF-8"),
             Some(false),
-        ),
+        )
+        .unwrap(),
     ));
     assert_eq!(
         without.write_string().unwrap(),
@@ -768,7 +768,7 @@ fn declaration_style_is_honoured() {
 fn text_is_escaped_so_that_it_round_trips() {
     // rule: rule.well-formedness.escape-ampersand-and-lt
     rules::assert_rule_exists("rule.well-formedness.escape-ampersand-and-lt");
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "a");
     document.set_root(root.clone());
     root.append_child(document.create_text("A & B < C > D").unwrap());
@@ -780,7 +780,7 @@ fn text_is_escaped_so_that_it_round_trips() {
 
 #[test]
 fn a_literal_carriage_return_in_text_round_trips() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "a");
     document.set_root(root.clone());
     root.append_child(document.create_text("x\ry\nz").unwrap());
@@ -795,7 +795,7 @@ fn a_literal_carriage_return_in_text_round_trips() {
 
 #[test]
 fn text_containing_a_cdata_close_round_trips() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "a");
     document.set_root(root.clone());
     root.append_child(document.create_text("a ]]> b").unwrap());
@@ -806,7 +806,7 @@ fn text_containing_a_cdata_close_round_trips() {
 
 #[test]
 fn adjacent_text_nodes_are_merged_on_output() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "a");
     document.set_root(root.clone());
     root.append_child(document.create_text("one").unwrap());
@@ -834,7 +834,7 @@ fn processing_instruction_content_is_kept_verbatim() {
 
     // The whitespace separating target and content is syntax: exactly one character of it is
     // removed, the rest of the content is data and is preserved (including leading and trailing
-    // whitespace, which the pre-rewrite implementation trimmed away).
+    // whitespace).
     for (input, expected) in [
         ("<?a?>", ""),
         ("<?a ?>", ""),
@@ -870,7 +870,7 @@ fn processing_instruction_content_is_kept_verbatim() {
 
 #[test]
 fn empty_text_nodes_have_no_representation_and_are_omitted() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "a");
     document.set_root(root.clone());
     root.append_child(document.create_text("").unwrap());
@@ -881,7 +881,7 @@ fn empty_text_nodes_have_no_representation_and_are_omitted() {
 
     assert_eq!(document.write_string().unwrap(), "<a>text<b/></a>");
     // Comments and CDATA sections have a representation for "empty" and keep it.
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "a");
     document.set_root(root.clone());
     root.append_child(document.create_comment("").unwrap());
@@ -894,7 +894,7 @@ fn empty_text_nodes_have_no_representation_and_are_omitted() {
 
 #[test]
 fn comments_cdata_and_processing_instructions_are_written_verbatim() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "a");
     document.set_root(root.clone());
     root.append_child(
@@ -923,7 +923,7 @@ fn comments_cdata_and_processing_instructions_are_written_verbatim() {
 
 #[test]
 fn a_document_without_a_root_serializes_to_nothing_useful_but_does_not_fail() {
-    let document = Document::empty();
+    let document = Document::new();
     assert_eq!(document.write_string().unwrap(), "");
     document.set_xml_declaration(Some(
         biodivine_lib_xml_dom::xml_spec::XmlDeclaration::utf8(),
@@ -944,7 +944,7 @@ fn a_deeply_nested_document_round_trips() {
     // nested document (a stack overflow would abort the process, which no API could report).
     const DEPTH: usize = 5_000;
 
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root.clone());
     let mut current = root;
@@ -983,9 +983,9 @@ fn a_deeply_nested_document_round_trips() {
 
 #[test]
 fn rules_referenced_by_the_parser_and_serializer_exist() {
-    // Every rule this module claims to implement must still have a summary file. This is the check
-    // that keeps the annotations in `parse.rs`/`write.rs` honest, and it is what makes the
-    // corresponding rows of the rule coverage document checkable rather than asserted.
+    // Every rule this module claims to implement must still have a summary file, so the
+    // annotations in `parse.rs`/`write.rs` and the rule coverage document cannot drift from the
+    // rule summaries.
     let rules_referenced = [
         "rule.attributes.char-ref-legal-char",
         "rule.attributes.char-refs-expanded",
@@ -1026,9 +1026,6 @@ fn rules_referenced_by_the_parser_and_serializer_exist() {
         "rule.well-formedness.single-root-element",
     ];
     for rule in rules_referenced {
-        assert!(
-            rules::rule_summary_exists(rule),
-            "the parser/serializer relies on {rule}, but its summary file is missing"
-        );
+        rules::assert_rule_exists(rule);
     }
 }

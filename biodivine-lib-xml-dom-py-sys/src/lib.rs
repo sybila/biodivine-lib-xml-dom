@@ -26,10 +26,10 @@
 //!   through `Node::deep_clone_into`, which snapshots the source, releases it and only then writes
 //!   to the target. The deadlock-freedom argument of the Rust core therefore carries over to
 //!   Python unchanged ("at most one lock is ever held").
-//! * **The GIL is released around the slow operations.** Parsing, serializing, validating and the
-//!   cross-document copies hold the document lock for a time proportional to the document, so they
-//!   run under [`Python::detach`]. Everything else is a lock acquisition and a small read, where
-//!   releasing the GIL would cost more than it saves; see the "GIL policy" section below.
+//! * **The GIL is released around the slow operations, and signals can interrupt them.** The
+//!   operations whose cost is proportional to the document run through the `interrupt` module;
+//!   everything else is a lock acquisition and a small read, where releasing the GIL would cost
+//!   more than it saves.
 //!
 //! # GIL policy
 //!
@@ -37,11 +37,12 @@
 //! | --- | --- | --- |
 //! | `parse_string`, `parse_bytes`, `parse_file` | released | parses a whole document |
 //! | `write_string`, `write_file` | released | serializes a whole document |
-//! | `Document.validate` | released | walks the whole arena |
-//! | `Node.deep_clone_into`, `Element.deep_clone_into` | released | snapshots and rebuilds a subtree |
+//! | `Document.validate`, `is_valid`, `validation_errors` | released | walks the whole arena |
+//! | `Document.collect_garbage` | released | walks the whole arena |
+//! | `deep_clone`, `deep_clone_into` (on `Node` and `Element`) | released | copies a subtree |
 //! | everything else | held | one lock acquisition and a bounded read or write |
 //!
-//! The closures passed to [`Python::detach`] capture only owned Rust values (the Rust types are
+//! The closures that run without the GIL capture only owned Rust values (the Rust types are
 //! `Send + Sync`), never a `Bound`/`Py` reference, which is what PyO3 requires.
 #![deny(rustdoc::broken_intra_doc_links, rustdoc::private_intra_doc_links)]
 
@@ -49,6 +50,7 @@ mod document;
 mod element;
 mod error;
 mod gc;
+mod interrupt;
 mod io;
 mod namespace;
 mod node;
@@ -69,9 +71,9 @@ pub use crate::namespace::PyNamespace;
 pub use crate::node::{PyNode, PyNodeArg};
 pub use crate::node_id::PyNodeId;
 pub use crate::qualified_name::PyQualifiedName;
-pub use crate::validation::{PyNodeKind, PyXmlValidationError, PyXmlValidationErrors};
+pub use crate::validation::{PyNodeKind, PyValidationError};
 pub use crate::write_options::{
-    PyDeclarationStyle, PyEmptyElementStyle, PyWriteOptions,
+    PyDeclarationStyle, PyEmptyElementStyle, PyWriteOptions, PyXmlDeclaration,
 };
 
 /// The native module, imported by the pure-Python package as `biodivine_lib_xml_dom._sys`.
@@ -99,7 +101,7 @@ fn _sys(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyWriteOptions>()?;
     module.add_class::<PyDeclarationStyle>()?;
     module.add_class::<PyEmptyElementStyle>()?;
-    module.add_class::<crate::write_options::PyXmlDeclaration>()?;
+    module.add_class::<PyXmlDeclaration>()?;
 
     error::register(module)?;
     validation::register(module)?;

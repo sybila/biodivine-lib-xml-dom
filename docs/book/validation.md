@@ -103,6 +103,8 @@ deliberate — see [Namespaces](namespaces.md#no-magic):
 :::
 ::::
 
-A document that came from `parse` is validated for free if you like: a well-formed document whose
-names resolve is exactly what validation checks, and the round trip preserves that.
+A document that came from `parse` is well-formed and its names resolve, but parsing does not run the
+whole-document checks: duplicate `xml:id` values or a malformed `xml:lang` parse fine and are
+reported only by validation.
 
+Next: [Thread safety](thread-safety.md) for sharing a document between threads.

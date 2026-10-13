@@ -36,7 +36,7 @@ iterative, so a deeply nested document cannot overflow the stack. Python additio
 
 Inserting, moving, replacing and removing are all one critical section on the document lock, which
 is what makes them atomic: another thread can never observe a half-finished edit, and the
-cycle check cannot be raced against (a bug the previous per-element locking design had).
+cycle check cannot be raced against.
 
 ::::{tab-set}
 :::{tab-item} Rust
@@ -123,3 +123,5 @@ processing instructions interleaved) round-trips exactly. The serialized output 
 a literal carriage return and a `]]>` in text, and whitespace inside attribute values, survive a
 re-parse.
 
+Next: [Namespaces](namespaces.md) explains how names carry their namespace, and what editing does
+(and does not do) to the declarations.

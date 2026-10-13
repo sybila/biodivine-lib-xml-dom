@@ -17,7 +17,7 @@ comments (`<!---->`) and empty CDATA sections (`<![CDATA[]]>`) *can* be expresse
 
 **Comments, CDATA and processing-instruction content are line-end normalised at construction.**
 Their content cannot contain an escape sequence, so a literal carriage return there could not
-survive a round trip; it is stored as a line feed instead (`xml_spec::normalize_line_ends`). Text
+survive a round trip; it is stored as a line feed instead, exactly as a parser would read it. Text
 nodes and attribute values are *not* normalised — their bytes are preserved and escaped on output.
 
 **Attribute order is not preserved.** Attributes are stored in a map keyed by expanded name, so they
@@ -56,12 +56,13 @@ a document assembled through the API can be inconsistent, and until you validate
 you: the document stays as it is and validation reports it.
 
 **Cancellation is cooperative and only where it pays off.** The document-wide operations (parsing,
-serializing, validating, cross-document copies, and the explicit `collect_garbage`) check a
-`cancel-this` trigger at each step, so a long one can be stopped; per-node edits do not. A cancelled
-operation changes nothing — a cancelled copy builds nothing in the target and a cancelled collection
-simply leaves the rest for the next one — and reports `XmlError::Cancelled` (a `KeyboardInterrupt` in
-Python). The collector that the allocator triggers on its own is deliberately *not* cancellable,
-because an allocation has to either succeed or fail, not stop half-way.
+serializing, validating, deep copies, and the explicit `collect_garbage`) periodically consult the
+`cancel_this` triggers of the current thread, so a long one can be stopped; per-node edits,
+shallow copies and `Display` never are. A cancelled operation reports `XmlError::Cancelled` and
+leaves the document unchanged: a cancelled copy builds nothing and a cancelled collection reclaims
+nothing. The one visible effect is output: a cancelled `write_file` or `write_to` has already
+written part of the document. The collector that the allocator triggers on its own is deliberately
+*not* cancellable, because an allocation has to either succeed or fail, not stop half-way.
 
 **Arena slots are reused after collection.** A `NodeId` stays valid only while the node it was
 created for is alive: the collector reclaims unreachable nodes and hands their slots out again, so
@@ -82,8 +83,15 @@ the supported API is the Python package; a test enumerates exactly what is expor
 **`NodeContent` is not mirrored.** Rust's content enum has no Python counterpart: `node.kind` plus the
 typed accessors (`text()`, `comment()`, …) carry the same information without a discriminator dance.
 
+**Interrupting only works through signals, on the main thread.** Ctrl+C (or any signal handler that
+raises) interrupts a long operation started on the main thread, and the handler's exception is
+raised unchanged. There is no cancellation token or `timeout=` argument yet, and an operation
+started on another thread runs to completion.
+
 **No `abi3` wheels yet.** The extension is built for the interpreter maturin finds, so a wheel is
 specific to one CPython version (see the `documentation::bindings` page).
 
 **Compound edits are not transactional.** Each operation is atomic, but a sequence of them is not;
 see [Thread safety](thread-safety.md#what-thread-safe-does-not-mean).
+
+Next: [Design notes](design-notes.md) points to the reasoning behind these decisions.

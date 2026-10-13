@@ -2,6 +2,5 @@
 #
 # The minimum supported Rust version is kept in sync with `[workspace.package] rust-version` in
 # Cargo.toml, so that a lint suggestion never recommends an API that the declared MSRV does not
-# have. `scripts/verify.sh` tests the declared MSRV toolchain itself, which is what keeps this value
-# honest.
+# have. `scripts/verify.sh` tests the declared MSRV toolchain itself.
 msrv = "1.88"

@@ -13,8 +13,8 @@ The package is deliberately three layers, and the import path shows the split:
 | the native extension | `biodivine_lib_xml_dom._sys` | a thin, one-to-one mirror of the Rust API |
 | this package | `biodivine_lib_xml_dom` | argument coercion, Pythonic protocols, conveniences |
 
-Everything documented here is the third layer. The mirror is importable but not part of the
-documented surface.
+Everything documented here is the third layer, and none of its methods returns a native object. The
+mirror is importable but not part of the documented surface.
 
 ## Installation
 
@@ -23,16 +23,13 @@ toolchain and a development version of Python:
 
 ```sh
 python3 -m venv .venv
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install maturin pytest
-cd biodivine-lib-xml-dom-py-sys
-VIRTUAL_ENV="$PWD/../.venv" ../.venv/bin/maturin develop --release
+.venv/bin/pip install maturin
+make python-extension
 ```
 
 Building the extension is a prerequisite for these documents as well, because `autodoc` imports the
-package; if the import fails, the build fails with `ModuleNotFoundError:
-biodivine_lib_xml_dom._sys`, which means the extension was not built. The full setup, including the
-documentation toolchain, is described in the repository's build instructions.
+package. The full setup, including the documentation toolchain, is described in
+`docs/design/build.md` in the repository.
 
 ## Quick start
 
@@ -51,26 +48,29 @@ child.append_child(document.create_text("Hello"))
 document.is_valid()                  # False: nothing declares `ex` yet
 root.declare_namespace(ex)
 document.is_valid()                  # True
-xml.write(document)
+document.write()
 # '<root xmlns:ex="http://example.com"><ex:child>Hello</ex:child></root>'
+
+xml.Document.parse("<a><b/></a>").root.children()   # [Element('b', id=1)]
 ```
 
 ## Thread safety
 
 A document owns exactly one reader-writer lock. Every method acquires and releases it, and no
 operation ever holds two document locks, so a document can be shared freely between threads and no
-sequence of calls can deadlock. Parsing, serializing, validating and cross-document copies release
-the interpreter lock while they work, so a long operation in one thread does not freeze the others.
-A document handle is safe to pass to another thread; nodes and elements refer to their document, so
-they stay valid for as long as the document is alive.
+sequence of calls can deadlock. Parsing, serializing, validating, deep copies and garbage
+collection release the interpreter lock while they work, so a long operation in one thread does not
+freeze the others. Handles are safe to pass to another thread, and a node or element handle keeps
+its document alive.
 
-## Cancellation
+## Interrupting long operations
 
-The operations that walk the whole document — parsing, writing, validating, cross-document copies
-and `Document.collect_garbage()` — can be interrupted. A `Ctrl+C` (`KeyboardInterrupt`) delivered
-while one of them runs cancels it and is re-raised as a `KeyboardInterrupt`, instead of being
-ignored until the call returns. The underlying Rust API can likewise be cancelled by any
-[cancel-this](https://crates.io/crates/cancel-this) trigger registered on the calling thread.
+The operations that walk the whole document (parsing, writing, validating, deep copies and
+`Document.collect_garbage()`) can be interrupted when they run on the main thread. A Ctrl+C, or any
+other Python signal handler that raises, stops the operation, and the handler's exception
+(`KeyboardInterrupt` for Ctrl+C) is raised unchanged. The document is left as it was; only an
+interrupted `write_file` leaves part of the output behind. The handler runs while no document lock
+is held, so it may use the document too.
 
 ## Garbage collection and node ids
 

@@ -83,7 +83,7 @@ pub(crate) struct ElementData {
     /// *URI*) makes two attributes with the same expanded name unrepresentable, and
     /// [`rule.elements-and-tags.unique-attribute-specification`](crate::xml_spec::rule_set::rule_elements_and_tags_unique_attribute_specification) at the storage level. Setting an
     /// attribute that is already present therefore *overwrites* the old value.
-    pub(crate) attributes: BTreeMap<QualifiedName, Arc<str>>,
+    pub(crate) attributes: BTreeMap<QualifiedName, Text>,
     /// Namespace declarations written on *this* element.
     ///
     /// The key is the prefix (`None` for the default namespace) and the value is the binding.

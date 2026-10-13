@@ -5,8 +5,6 @@
 //! again with `Document.node(id)`. An id can also be built from an integer, which mirrors Rust's
 //! `NodeId::from(u32)`; it is then resolved - or rejected - by the document it is used with, and it
 //! stops resolving once the node it referred to has been reclaimed by the collector.
-//!
-//! That mirrors Rust exactly.
 
 use biodivine_lib_xml_dom::NodeId;
 use pyo3::prelude::*;
@@ -73,16 +71,14 @@ impl PyNodeId {
         raw_index(self.inner)
     }
 
-    /// A hash consistent with `__eq__` (the same value Rust's `Hash` produces, so
-    /// equal handles hash equally and can be used as dictionary keys).
+    /// A hash consistent with `__eq__`.
     pub fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.inner.hash(&mut hasher);
         hasher.finish()
     }
 
-    /// Equality with another handle of the same type: the same node/document/value
-    /// (Rust's `PartialEq`). Python object identity is *not* part of it.
+    /// Two ids are equal if they denote the same slot.
     pub fn __eq__(&self, other: &Self) -> bool {
         self.inner == other.inner
     }
@@ -92,8 +88,7 @@ impl PyNodeId {
         format!("NodeId({})", raw_index(self.inner))
     }
 
-    /// The value as a string: a node as XML, a name as `prefix:local`, a namespace as
-    /// `prefix:uri` (or just the URI), a number as its digits.
+    /// The slot number as decimal digits.
     pub fn __str__(&self) -> String {
         self.inner.to_string()
     }

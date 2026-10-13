@@ -12,7 +12,7 @@ use pyo3::prelude::*;
     frozen,
     from_py_object
 )]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PyGcStats {
     pub(crate) inner: GcStats,
 }
@@ -49,7 +49,7 @@ impl PyGcStats {
         self.inner.collected
     }
 
-    /// The fraction of the capacity that is free, in ``[0.0, 1.0]``.
+    /// The fraction of the capacity that is free, in `[0.0, 1.0]`.
     pub fn free_fraction(&self) -> f64 {
         self.inner.free_fraction()
     }

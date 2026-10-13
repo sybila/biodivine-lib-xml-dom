@@ -2,10 +2,10 @@
 //!
 //! Run with `cargo run --example book_threads`.
 
-use biodivine_lib_xml_dom::{Document, QualifiedName};
+use biodivine_lib_xml_dom::{Document, QualifiedName, XmlError, cancel_this};
 
 fn main() {
-    let document = Document::empty();
+    let document = Document::new();
     let root =
         document.create_element(QualifiedName::without_namespace("root").unwrap());
     document.set_root(root.clone());
@@ -54,6 +54,21 @@ fn main() {
         assert!(reader.join().unwrap() > 0);
     }
     // ANCHOR_END: readers
+
+    // ANCHOR: cancel
+    // A long operation consults the cancellation triggers registered on its thread.
+    // Here the trigger has already fired, so validation stops right away.
+    let trigger = cancel_this::CancelAtomic::new();
+    trigger.cancel();
+    let result = cancel_this::on_atomic(trigger, || document.validate());
+    assert!(matches!(result, Err(XmlError::Cancelled(_))));
+
+    // `on_timeout` is the usual way to bound how long an operation may take.
+    let result = cancel_this::on_timeout(std::time::Duration::from_secs(60), || {
+        document.write_string()
+    });
+    assert!(result.is_ok());
+    // ANCHOR_END: cancel
 
     assert_eq!(root.children().len(), 4 * 25);
     assert!(document.is_valid().unwrap());

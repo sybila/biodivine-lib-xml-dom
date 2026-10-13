@@ -22,10 +22,9 @@ fn main() {
 
     // ANCHOR: options
     // Output options.
-    let options = WriteOptions {
-        declaration: DeclarationStyle::Never,
-        empty_elements: EmptyElementStyle::ExplicitEndTag,
-    };
+    let options = WriteOptions::default()
+        .with_declaration(DeclarationStyle::Never)
+        .with_empty_elements(EmptyElementStyle::ExplicitEndTag);
     assert_eq!(
         Document::parse_string("<a><b/></a>")
             .unwrap()
@@ -82,6 +81,6 @@ fn main() {
         text.root().unwrap().children()[0].text().unwrap().as_str(),
         "AT&T A"
     );
-    println!("{}", document.write_string().unwrap());
+    println!("{}", text.write_string().unwrap());
     // ANCHOR_END: entities
 }

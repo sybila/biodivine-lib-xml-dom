@@ -34,48 +34,60 @@ The Python bindings have two layers on top of the Rust library, and the import p
 
 ## 1. What is mirrored, item by item
 
-The wrapper exposes each Rust item where it makes sense to do so. This table is the audit of that
-rule: it names the binding and the Python name for every public Rust item group and gives a verdict,
-so the "does not make sense" set is visible rather than implicit.
+The Python layer exposes each Rust item where it makes sense to do so. The table names the `_sys`
+binding and the Python name for every public Rust item group, so the items that are deliberately
+not mirrored are visible rather than implicit. Two conventions apply throughout:
 
-| Rust item group | `_sys` binding | Python name | verdict |
+* **Methods that read a value become properties** in the Python layer (`root`, `parent`, `kind`,
+  `id`, `document`, `qualified_name`, `local_name`, `namespace`, `attributes`, `node_count`,
+  `capacity`, `xml_declaration`, the sibling and child accessors, ...); methods that compute or
+  change something stay methods. `_sys` keeps the Rust shape (everything is a method).
+* **Panicking/`_checked` pairs are exposed once**, with the `_checked` behaviour under the plain
+  name, because Python has no panics: a failing operation raises.
+
+| Rust item group | `_sys` binding | Python | verdict |
 | --- | --- | --- | --- |
-| `Document` (root, `set_root`, `clear_root`, `create_element`, `create_text`, `create_comment`, `create_cdata`, `create_processing_instruction`, `xml_declaration`, `set_xml_declaration`, `validate`, `is_valid`, `node_count`, `collect_garbage`, `capacity`, `nodes`, `node`, `ptr_eq`) | `Document` | `Document` | **mirrored**, same names (documents are cheap `Send + Sync` handles) |
-| `Document::set_root` vs `set_root_checked` | `Document.set_root` | `Document.set_root` | **mirrored, panicking twin dropped.** Rust's `set_root` panics; Python has no panics, so the binding is the `_checked` behaviour under the plain name and failures raise `XmlDocumentError`. Same rule for every `_checked`/panicking pair below. |
-| `Document::validate` / `is_valid` | `Document.validate` / `is_valid` | same | **mirrored**; `validate` raises `XmlValidationError` carrying all issues, and Python adds `validation_errors()` for the non-raising form (the Rust API returns them as the error value, which Python expresses as an exception) |
-| `Node` (`kind`, `as_element`, `is_attached`, `parent`, `children`, `child_elements`, `first_child`, `last_child`, `next_sibling`, `previous_sibling`, `index_in_parent`, `descendants`, `text`, `comment`, `cdata`, `processing_instruction`, `detach`, `remove`, `append_child`, `insert_child`, `insert_before`, `insert_after`, `replace_with`, `shallow_clone`, `deep_clone`, `shallow_clone_into`, `deep_clone_into`, `is_ancestor`, `ptr_eq`, `belongs_to`, `id`) | `Node` | `Node` | **mirrored**, same names |
-| `Node` Rust `Clone` = handle copy; `deep_clone`/`shallow_clone` = data copy | — | — | **mirrored as documented**: Python has no `Clone`, so `Document.copy()`/`Node`/`Element` equality is by node identity and cloning data is spelled out (`deep_clone`, …) |
-| `Element` (`qualified_name`, `local_name`, `namespace`, `set_qualified_name`, `attributes`, `attribute`, `attribute_local`, `has_attribute`, `set_attribute`, `remove_attribute`, `clear_attributes`, `namespace_declarations`, `namespaces_in_scope`, `declare_namespace`, `declare_namespace_checked`, `undeclare_default_namespace`, `remove_namespace_declaration`, `get_namespace`, `resolve_qualified_name`, `resolve_attribute_name`) | `Element` | `Element` | **mirrored**, same names, except `attribute_local`, which stays on `_sys` only (lookup by local name across namespaces, outside the documented surface) |
-| `Element`'s `Deref<Target = Node>` (so `element.children()` works in Rust) | `Element.node()` | `Element` subclasses `Node` | **mirrored differently in each layer, on purpose**: Rust expresses this with `Deref`, which Python cannot do for a native type, so `_sys` keeps `Element` separate and offers `.node()` (the Rust method), while the pure-Python `Element` inherits from the pure-Python `Node` so a user never has to think about it |
-| `Namespace` (`new`, `without_prefix`, `prefixed`, `uri`, `prefix`, `prefix_str`, `is_equal_ns`) | `Namespace` | `Namespace` | **mirrored**, same names, except `prefix_str`, which stays on `_sys` only (the Python `prefix` property already returns a `str`) |
-| `QualifiedName` (`new`, `without_namespace`, `with_namespace`, `local_name`, `namespace`, `resolve_element`, `resolve_attribute`) | `QualifiedName` | `QualifiedName` | **mirrored**; `resolve_element`/`resolve_attribute` stay on `_sys` only (the documented Python path is `Element.resolve_qualified_name`/`resolve_attribute_name`), and Python additionally accepts a plain URI string wherever a namespace is expected |
-| `NodeId` (`From<u32>`, `index`, `Eq`, `Hash`, `Display`) | `NodeId` (constructible from an `int`) | `NodeId` | **mirrored**; an id can be built from an integer on both sides, and it resolves only through the document that handed it out (`Document::node` / `Document.node`) |
-| `NodeKind` | `NodeKind` | `NodeKind` | **mirrored** |
-| `NodeContent` (enum) | — | — | **not mirrored.** A native enum with five payload variants would force a discriminator dance in Python; `Node.kind()` plus the typed accessors (`as_element`, `text`, `comment`, `cdata`, `processing_instruction`) express exactly the same information and are what Python code wants |
-| `WriteOptions`, `DeclarationStyle`, `EmptyElementStyle` | same | same | **mirrored** (Python adds `options=None` defaults where Rust has `write_*_with`) |
-| `XmlDeclaration` | `XmlDeclaration` | `XmlDeclaration` | **mirrored** |
-| `XmlError` (+ all variants) | `XmlError` and five subclasses | same | **mirrored as an exception hierarchy** (see §2) |
-| `XmlValidationError`, `XmlValidationErrors`, `ValidationErrorKind` | `ValidationError`, `ValidationErrors` | same | **mirrored**; the kind is exposed both as a stable snake_case string (`kind()`) and as the rule file it comes from (`rule()`), and the native `errors()` accessor is not re-exposed because the Python `ValidationErrors` is itself the list |
-| `Document::parse_string`, `Document::parse_bytes`, `Document::parse_reader`, `Document::parse_file`, `Document::write_string`, `Document::write_string_with`, `Document::write_writer`, `Document::write_writer_with`, `Document::write_file`, `Document::write_file_with` | `Document` static/instance methods with the same names | module-level `parse`, `parse_file`, `write`, `write_file` (+ `options=`) | **mirrored**; Python puts the entry points at module level (its idiom) and delegates to the mirrored `Document` methods; `parse` accepts `str` or `bytes` and the file variants accept any `os.PathLike`. The streaming `parse_reader`/`write_writer`/`write_writer_with` variants are not mirrored: Python passes strings, bytes or `os.PathLike` instead |
-| `GcConfig`, `GcStats` | `GcStats` | `GcStats` | **partially mirrored**: `GcStats` is exposed and returned by `Document.collect_garbage`; `GcConfig` is not, because the documented Python API uses the default capacity policy and only reads the statistics |
-| `MAX_NODES` | — | — | **not mirrored**: reachable only with more than four billion nodes in one document; Rust documents it where it is checked |
-| `xml_spec::{NCName, Text, Comment, CData, PiTarget, PiData}` | — | — | **not mirrored.** These types *are* the Rust construction mechanism: validity is enforced by the type. Python's equivalents are the raising constructors (`Document.create_text`, `QualifiedName(...)`, `Namespace(...)`), so mirroring the wrapper types would create a second, parallel way to validate names with no benefit |
-| `xml_spec::{rules, validation, declaration}`, `xml_spec::rule_set`, `documentation` | — | — | **not mirrored**: these are for Rust developers and for the Rust documentation (`rules::assert_rule_exists` anchors the test suite, `NamespaceScope`/`check_*` are the internal shape of validation, `rule_set` reproduces the specification summaries, `documentation` holds the design notes) |
-| `Namespace::shares_data_with`, `Arena`, `Interner`, the whole-document validation traversal | — | — | crate-internal in Rust, so nothing to mirror |
+| `Document` (`new`, `root`, `set_root`, `clear_root`, `create_element`, `create_text`, `create_comment`, `create_cdata`, `create_processing_instruction`, `xml_declaration`, `set_xml_declaration`, `node_count`, `nodes`, `node`, `ptr_eq`) | `Document` | `Document` | **mirrored**; `Document()` is `Document::new`, and the declaration is the assignable `xml_declaration` property |
+| `Document::validate`, `is_valid`, `validation_errors` | same | same | **mirrored**; `validate` raises `XmlValidationError`, whose `errors` attribute is the list of problems |
+| `Document::collect_garbage`, `capacity` | same | same | **mirrored**; `collect_garbage` returns a `GcStats` |
+| `Document::with_gc_config`, `gc_config`, `set_gc_config`, `GcConfig` | — | — | **not mirrored**: the Python API uses the default capacity policy and only reads the statistics |
+| `Document::parse_string`, `parse_bytes`, `parse_file`, `write_string(_with)`, `write_file(_with)` | `Document` static and instance methods | `Document.parse` (`str` or bytes-like), `Document.parse_file`, `Document.write`, `Document.write_file` | **mirrored**; one Python method per Rust pair, with `options=None` instead of a `_with` twin, and any `os.PathLike` for paths |
+| `Document::parse_reader`, `write_to(_with)` | — | — | **not mirrored**: Python passes strings, bytes or paths |
+| `Node` (`document`, `id`, `kind`, `as_element`, `is_attached`, `is_ancestor_of`, `parent`, `children`, `child_elements`, `first_child`, `last_child`, `next_sibling`, `previous_sibling`, `index_in_parent`, `descendants`, `text`, `comment`, `cdata`, `processing_instruction`, `detach`, `append_child`, `insert_child`, `insert_before`, `insert_after`, `replace_with`, `shallow_clone`, `deep_clone`, `shallow_clone_into`, `deep_clone_into`, `ptr_eq`, `belongs_to`) | `Node` | `Node` | **mirrored**, same names |
+| `Node`'s `Clone` (a handle copy) | — | `copy.copy` | **mirrored**: `copy.copy` of a handle returns the same handle; data is copied with `deep_clone`/`shallow_clone` |
+| `Element` (`qualified_name`, `local_name`, `namespace`, `set_qualified_name`, `attributes`, `attribute`, `has_attribute`, `set_attribute`, `remove_attribute`, `clear_attributes`, `namespace_declarations`, `namespaces_in_scope`, `declare_namespace`, `declare_namespace_checked`, `undeclare_default_namespace`, `remove_namespace_declaration`, `lookup_namespace`, `resolve_element_name`, `resolve_attribute_name`) | `Element` | `Element` | **mirrored**, same names; `remove_namespace_declaration` raises `KeyError` for a missing declaration, like `dict.pop` |
+| `Element::attribute_without_namespace` | same | `Element.get(name)` | **mirrored differently**: in Python every name argument accepts a plain `str` meaning "no namespace" |
+| `Element::node`, `into_node`, and `Deref<Target = Node>` | `Element.node()` | `Element` subclasses `Node` | **mirrored differently in each layer, on purpose**: `_sys` cannot express `Deref`, so it offers `.node()`; the Python `Element` inherits from `Node`, so no conversion is ever needed |
+| `Namespace` (`new`, `without_prefix`, `prefixed`, `uri`, `prefix`, `has_same_uri`) | `Namespace` | `Namespace` | **mirrored**; `has_same_uri` also accepts a URI string |
+| `Namespace::prefix_str`, `QualifiedName::local_name_str` | — | — | **not mirrored**: Python strings need no second accessor |
+| `QualifiedName` (`new`, `without_namespace`, `with_namespace`, `local_name`, `namespace`) | `QualifiedName` | `QualifiedName` | **mirrored**; Python also accepts a URI string wherever a namespace is expected |
+| `NodeId` (`From<u32>`, `Eq`, `Hash`, `Display`) | `NodeId` | `NodeId` | **mirrored**; `NodeId(int)` on both sides, resolved only through `Document.node` |
+| `NodeKind` | `NodeKind` | `NodeKind` (an `enum.Enum`) | **mirrored** |
+| `NodeContent` | — | — | **not mirrored**: `kind` plus the typed accessors (`as_element`, `text`, `comment`, `cdata`, `processing_instruction`) carry the same information in the form Python code wants |
+| `WriteOptions`, `DeclarationStyle`, `EmptyElementStyle` | same | a frozen dataclass and two `enum.Enum` classes | **mirrored** |
+| `xml_spec::XmlDeclaration` | `XmlDeclaration` | `XmlDeclaration` | **mirrored**; `version`, `encoding` and `standalone` are properties |
+| `XmlError` | `XmlError` and five subclasses | same | **mirrored as an exception hierarchy** (see §2) |
+| `ValidationError`, `ValidationErrors`, `ValidationErrorKind` | `ValidationError` | `ValidationError` (a frozen dataclass), `ValidationErrors` (a `list`) | **mirrored**; the kind is a stable snake_case string, and `rule` is the identifier of the rule it comes from |
+| `GcStats` | `GcStats` | `GcStats` (a frozen dataclass) | **mirrored** |
+| `cancel_this`, `XmlError::Cancelled` | — | — | **mirrored differently**: Python signal handlers interrupt long operations (see §3) |
+| `MAX_NODES` | — | — | **not mirrored**: reachable only with more than four billion nodes in one document |
+| `xml_spec::{NCName, Text, Comment, CData, PiTarget, PiData}` and the predicates | — | — | **not mirrored**: in Rust these types are how validity is enforced; Python's equivalent is that every constructor and `create_*` method validates and raises |
+| `xml_spec::rule_set`, `documentation` | — | — | **not mirrored**: documentation of the Rust crate |
 
 ### Python-only additions
 
 These exist in the Python layer only, and each one is a convenience rather than behaviour:
 
 * `Node.__iter__`/`__len__`/`__getitem__` over children; `Element.attributes` returns a `dict`;
-  `Element.get(name, default=None)`; `Element.local_name = "x"` as a setter.
-* `Document.create_element_tree(name, *children)`, `Document.copy()`/`__copy__`/`__deepcopy__`.
-* `parse`/`parse_file`/`write`/`write_file` module functions with `options=None` defaults, which
-  delegate to the mirrored `Document.parse_string`/`parse_file`/`write_string`/`write_file` methods.
-* `ValidationErrors` is a `list` subclass, so `if document.validation_errors():` reads naturally.
-* Argument coercion: `str` where a `QualifiedName` is expected (meaning "no namespace"), `Namespace`
-  or URI `str` where a namespace is expected, `Node` or `Element` wherever a node is expected
-  (`append_child`, `insert_before`, …), and any `os.PathLike` for file paths.
+  `Element.get(name, default=None)`; `Element.local_name` and `Element.qualified_name` are
+  assignable.
+* `Document.create_element_tree(name, *children)`; `copy.deepcopy(document)` creates an independent
+  document with a copy of the tree.
+* `ValidationErrors` is a `list` subclass with `kinds()` and `messages()`, so
+  `if document.validation_errors():` reads naturally.
+* Argument coercion: a `str` where a name is expected (meaning "no namespace"), a
+  `(local_name, namespace_or_uri)` tuple as a name, a URI `str` where a namespace is expected, and
+  any `os.PathLike` for file paths.
 
 ## 2. Error mapping
 
@@ -83,49 +95,54 @@ These exist in the Python layer only, and each one is a convenience rather than 
 | --- | --- |
 | `XmlError::Io` | `XmlIoError` |
 | names, text, comments, CDATA, PI, duplicate attributes, malformed markup, UTF-8, encodings, XML version, entity/character references, missing/multiple roots, content outside the root | `XmlSyntaxError` |
-| invalid/reserved/undeclared namespace prefixes, illegal namespace declarations | `XmlNamespaceError` |
+| invalid, reserved or undeclared namespace prefixes | `XmlNamespaceError` |
 | foreign document, cycle, not an element, no parent, not a child, index out of bounds, root has a parent, cannot attach root | `XmlDocumentError` |
-| `Document::validate` failures | `XmlValidationError` (with `args[1]` a `ValidationErrors` sequence) |
-| a `cancel_this` cancellation | `KeyboardInterrupt` (interpreter signal) or `InterruptedError` (any other trigger) |
+| `XmlError::Validation` | `XmlValidationError`, whose `errors` attribute (and `args[1]`) is a `ValidationErrors` list |
 | anything else | `XmlError` |
 
-All of them derive from `XmlError`, so `except XmlError:` catches everything this library raises and
-the message text is the Rust `Display`. The mapping lives in exactly one function
-(`error::to_py_err`), and each subclass is exercised by a pytest case.
+All of these derive from `XmlError`, and the message text is the Rust `Display`. The mapping lives
+in exactly one function (`error::to_py_err`), and each subclass is exercised by a pytest case. An
+interrupted operation is not an error of this library: the exception the signal handler raised
+(`KeyboardInterrupt` for Ctrl+C) is propagated unchanged.
 
-## 3. GIL policy
+## 3. GIL policy and interruption
 
-Every operation acquires one document lock. The four that hold it for a time proportional to the
-document release the GIL, so a long operation in one Python thread does not freeze the others:
+Every operation acquires one document lock. The operations that hold it for a time proportional to
+the document release the GIL, so a long operation in one Python thread does not freeze the others:
 
 | operation | GIL | why |
 | --- | --- | --- |
-| `Document.parse_string`, `Document.parse_bytes`, `Document.parse_file` | released | parses a whole document |
-| `Document.write_string`, `Document.write_file` | released | serializes a whole document |
+| `Document.parse`, `Document.parse_file` | released | parses a whole document |
+| `Document.write`, `Document.write_file` | released | serializes a whole document |
 | `Document.validate`, `is_valid`, `validation_errors` | released | walks the whole arena |
-| `Node.deep_clone_into`, `Element.deep_clone_into` | released | snapshots and rebuilds a subtree |
-| every other binding | held | one lock acquisition and a bounded read or write, where releasing would cost more than it saves |
+| `Document.collect_garbage` | released | walks the whole arena |
+| `deep_clone`, `deep_clone_into` | released | copies a subtree |
+| everything else | held | one lock acquisition and a bounded read or write, where releasing would cost more than it saves |
 
-The closures passed to `Python::detach` capture only owned Rust values (every handle type is
-`Send + Sync`), never a `Bound`/`Py` reference, which is what PyO3 requires. The corresponding
-objects are cloned *before* detaching.
+A Python signal handler only runs when the main thread calls into the interpreter, so a long
+operation without the GIL would postpone Ctrl+C until it returns. Running the handlers from inside
+the operation is not an option either: they would run while the document lock is held, and a
+handler that touches the same document would deadlock.
 
-Each of these operations is also wrapped in `cancel_this::on_python`, which registers the
-interpreter's signal check as a cancellation trigger for the duration of the call. A `Ctrl+C` (a
-`KeyboardInterrupt`) delivered while the GIL is released therefore cancels the operation and is
-re-raised in Python, rather than being ignored until the call returns. Because the trigger is only
-registered around these whole-document operations, the cheap per-node edits are unaffected.
+The binding therefore runs a long operation (one on a large input or document) that is called from
+the main thread on a scoped worker thread, under a `cancel_this` atomic trigger. The calling thread
+waits without the GIL and checks for signals every few milliseconds. A handler therefore runs on a
+thread that holds no document lock; if it raises, the trigger is cancelled, the worker stops at its
+next cancellation check (leaving the document as the Rust core documents for a cancelled
+operation), and the handler's own exception is propagated unchanged. Short operations, and
+operations called from other threads (which never run signal handlers), simply run without the GIL.
 
 ## 4. Deadlock freedom carries over
 
-No binding acquires two document locks at once. The one operation that concerns two documents — the
-cross-document copy — goes through `Node::deep_clone_into`, which snapshots the source under a read
+No binding acquires two document locks at once. The one operation that concerns two documents (the
+cross-document copy) goes through `Node::deep_clone_into`, which snapshots the source under a read
 lock, releases it, and only then writes to the target. That is the same argument the Rust core
-makes, and it means the Python layer inherits it rather than re-establishing it. `tests-python`
-shares one document between four Python threads (reads, writes and validation) under a 30-second
-join timeout, so a hang fails the test instead of blocking the run.
+makes, so the Python layer inherits it rather than re-establishing it, and signal handlers never run
+under a document lock (§3). `tests-python` shares one document between four Python threads (reads,
+writes and validation) under a join timeout, and runs a signal handler that edits the document an
+interrupted operation is working on.
 
-## 5. `#[pyclass]` thread-safety audit
+## 5. Thread safety of the native classes
 
 | class | wraps | `Send`/`Sync` because | `unsendable` needed? |
 | --- | --- | --- | --- |
@@ -133,67 +150,32 @@ join timeout, so a hang fails the test instead of blocking the run.
 | `Node` | `Node` (a `Document` handle + a `u32` index) | both fields are `Send + Sync` | no |
 | `Element` | `Element` (a `Node` + the element invariant) | as above | no |
 | `Namespace`, `QualifiedName` | `Arc`-shared immutable values | immutable data behind `Arc` | no |
-| `NodeId` | `u32` | — | no |
-| `WriteOptions`, `XmlDeclaration`, the style enums, `NodeKind` | plain `Copy`/`Clone` data | — | no |
-| `ValidationError`, `ValidationErrors` | owned strings and ids | — | no |
+| `NodeId`, `NodeKind`, `GcStats`, `WriteOptions`, the style enums | plain `Copy` data | — | no |
+| `XmlDeclaration`, `ValidationError` | owned strings and ids | — | no |
 
 A compile-time assertion for all of them lives in `src/tests.rs::handles_are_send_and_sync`, and
 `tests-python` moves a `Document` and a `Node` between Python threads.
 
 ## 6. Boundary hygiene
 
-* **No panics on input.** `grep -n 'unwrap()\|expect(\|panic!\|unreachable!\|todo!\|unimplemented!'`
-  over `biodivine-lib-xml-dom-py-sys/src/` matches only `src/tests.rs` plus one documented `expect`
-  in `src/node_id.rs` on a conversion that cannot fail; every failure path goes through
-  `error::to_py_err`.
-* **No `panic = "abort"`.** No profile in the workspace sets it (the root `Cargo.toml` says so
-  explicitly), so a panic in the bindings would surface as PyO3's `PanicException` rather than
-  aborting the interpreter — a bug would be reportable instead of fatal.
-* **`_checked` semantics only.** Every Rust operation that has a panicking twin and a `_checked`
-  twin is exposed once, with the `_checked` behaviour, under the plain name.
+* **No panics on input.** Every failure path goes through `error::to_py_err`; the few `expect`
+  calls in `biodivine-lib-xml-dom-py-sys/src/` are on conversions that cannot fail.
+* **No `panic = "abort"`.** No profile in the workspace sets it, so a panic in the bindings surfaces
+  as PyO3's `PanicException` rather than aborting the interpreter.
 * **The mirror is callable from Rust too.** The `#[pymethods]` bodies are `pub`, so this crate's own
   tests (`src/tests.rs`) drive the exact same code paths Python does, without a built wheel.
 
 ## 7. Building and testing
 
-```sh
-python3 -m venv .venv
-.venv/bin/pip install maturin pytest
+See `docs/design/build.md` for the setup. `extension-module` is enabled by maturin through
+`[tool.maturin] features`, not by default, because `cargo test` links the crate into a test binary
+that needs libpython while a wheel must not link it. The crate's `dev-dependencies` enable
+`pyo3/auto-initialize` for the same reason.
 
-cd biodivine-lib-xml-dom-py-sys
-../.venv/bin/maturin develop --release      # builds and installs the extension
-../.venv/bin/python -m pytest tests-python  # runs the Python test-suite
+## 8. Known gaps
 
-cd ..
-cargo test --workspace                      # also runs the in-process binding tests
-```
-
-`extension-module` is enabled by maturin through `[tool.maturin] features`, not by default, because
-`cargo test` links the crate into a test binary that needs libpython while a wheel must not link it.
-The crate's `dev-dependencies` enable `pyo3/auto-initialize` for the same reason.
-
-## 8. What building the Python layer found in the Rust core
-
-Writing the wrapper tests surfaced a real defect in the core, which is worth recording because it
-is exactly the kind of thing a second layer notices and a single layer does not.
-
-The interner deduplicates the qualified names of a document to avoid duplicate allocations. It must
-be keyed by the *structural* name (local name plus namespace including the prefix), not by
-`QualifiedName`'s own equality: that equality deliberately ignores the prefix, because for attribute
-maps only the expanded name matters. Keying the interner by it meant that interning *rewrote* the
-prefix of a name to whatever prefix was stored first: a user could ask for `a` in the default
-namespace and get `ex:a`. Since the prefix is what the serializer writes, the document's output (and
-possibly its validity) changed without any operation reporting anything.
-`src/interner.rs::interning_never_rewrites_a_prefix` pins the behaviour, and
-`tests-python/test_public_surface.py::test_argument_coercion_is_part_of_the_surface` covers it from
-Python.
-
-## 9. Known gaps
-
-* None of the *functional* API is missing: the gaps listed in §1 (`NodeContent`, the `xml_spec`
-  newtypes, `MAX_NODES`) are deliberate and each has a reason.
-* The extension is built for the interpreter that maturin finds; `abi3` is not enabled, so a wheel is
-  specific to one CPython version. Enabling it is a packaging decision for a release rather than a
-  correctness one, and is recorded here instead of being taken silently.
-* The Python API reference and the book are generated from the docstrings and the `py.typed` marker
-  this package provides; `docs/design/build.md` explains how to build them.
+* The gaps listed in §1 are deliberate, and each has a reason.
+* Python can only interrupt long operations through signal handlers; there is no cancellation token
+  and no `timeout=` argument yet, and operations started on a thread other than the main thread
+  cannot be interrupted.
+* `abi3` is not enabled, so a wheel is specific to one CPython version.

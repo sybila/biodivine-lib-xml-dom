@@ -44,15 +44,12 @@ built before the package can be imported or documented. [maturin](https://maturi
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install maturin pytest
-cd biodivine-lib-xml-dom-py-sys
-VIRTUAL_ENV="$PWD/../.venv" ../.venv/bin/maturin develop --release
-cd ..
-.venv/bin/python -m pytest biodivine-lib-xml-dom-py-sys/tests-python
+make python-extension     # maturin develop --release into .venv
+make test-python          # pytest against the built extension
 ```
 
-`make python-extension` and `make test-python` run the same two steps. The extension is installed in
-development mode, so after changing Rust code it has to be rebuilt before the Python tests see the
-change.
+The extension is installed in development mode, so after changing Rust code it has to be rebuilt
+before the Python tests see the change.
 
 ## 4. Documentation
 
@@ -85,53 +82,35 @@ cargo doc --no-deps --workspace --open                     # Rust API
 .venv/bin/python -m sphinx -b html docs/book docs/book/_build
 ```
 
-Building the Python reference imports the package, so the extension has to exist; the book embeds
-files from `examples/` and `docs/book/examples/python/`, which the test suite also executes.
+Building the Python reference imports the package, so the extension has to exist. The book embeds
+files from `examples/` (compiled by `cargo test`, run by `make examples`) and
+`docs/book/examples/python/` (run by the Python test suite).
 
 ## 5. Checks
 
 ```sh
-bash scripts/verify.sh        # every gate, printing each command with its exit code
-make verify                   # the same thing
+make verify        # or: bash scripts/verify.sh
 ```
 
-The script runs, in order: formatting, clippy in both profiles (plus the core crate with all
-features), the test suites in debug and release, the declared minimum Rust version and the
-CI-pinned toolchain, every example, the rustdoc build with warnings denied, the documentation
-checkers (API sections, the book structure, the numbers stated in the documents, the rule set and the
-rule coverage), the three documentation artifacts, and the Python test suite. It is the single
-command to run before handing work over.
+The script runs every check and prints each command with its exit code: formatting, clippy in both
+profiles, the test suites in debug and release, the declared minimum Rust version and the CI-pinned
+toolchain, Miri, every example, the rustdoc build (of each crate on its own and of the workspace)
+with warnings denied, the documentation checkers, the three documentation artifacts, and the Python
+test suite. It is the command to run before opening a pull request.
 
 Narrower targets:
 
 | command | what it checks |
 | --- | --- |
 | `make lint` | formatting, clippy, Python tests |
-| `make examples` | every example the book includes |
+| `make examples` | runs every Rust example |
 | `python3 scripts/gen_rule_set.py --check` | `xml_spec::rule_set` matches `specification/rules/` |
 | `python3 scripts/gen_rule_coverage.py --check` | the rule coverage table is up to date |
-| `python3 docs/audit_docs.py --self-test` | the documentation sweep still detects every category it looks for |
-| `python3 docs/check_facts.py` | the numbers stated in the documents match the artifacts |
+| `python3 scripts/gen_diagrams.py --check` | the diagrams embedded in the documents match `docs/assets/` |
+| `python3 docs/check_doc_sections.py` | every public function that can fail or panic documents it |
+| `python3 docs/check_book.py` | every book example has a Rust and a Python version, included from a real file |
 
-## 6. Verifying a case-sensitive checkout
-
-The filesystems these instructions are usually followed on are **case-insensitive**: `README.md` and
-`readme.md` are the same file there, so a path whose case is wrong compiles and is found anyway. A
-case-sensitive checkout is the only way to catch that class of mistake, and two things help:
-
-* `docs/audit_docs.py` compares every path an `include_str!` directive names against `git ls-files`,
-  so a wrong-case include is reported even on a case-insensitive filesystem;
-* clone the repository onto a case-sensitive filesystem and run the gate there, which exercises every
-  path the build reads:
-
-```sh
-git clone . /tmp/checkout && cd /tmp/checkout
-python3 -m venv .venv && .venv/bin/pip install maturin pytest -r docs/requirements.txt
-( cd biodivine-lib-xml-dom-py-sys && VIRTUAL_ENV="$PWD/../.venv" ../.venv/bin/maturin develop --release )
-VENV="$PWD/.venv" PATH="$HOME/.cargo/bin:$PATH" bash scripts/verify.sh
-```
-
-## 7. Undefined behaviour (Miri)
+## 6. Undefined behaviour (Miri)
 
 The data structures are exercised under [Miri](https://github.com/rust-lang/miri), which needs a
 nightly toolchain with the `miri` component:
@@ -151,15 +130,15 @@ garbage-collection test is excluded from the second command: `parking_lot` abort
 futex shim, so lock contention cannot be checked there. `-Zmiri-disable-isolation` is only needed
 because a test helper reads the rule summaries from the working tree.
 
-## 8. Make targets
+## 7. Make targets
 
 | target | runs |
 | --- | --- |
 | `make build` | `cargo build --workspace` |
 | `make test` | `cargo test --workspace` |
-| `make lint` | `cargo fmt --check`, `cargo clippy`, `pytest` |
+| `make lint` | `cargo fmt --check`, `cargo clippy` with warnings denied, `pytest` |
 | `make python-extension` | `maturin develop --release` into `.venv` |
 | `make test-python` | the Python test suite (depends on the extension) |
-| `make examples` | every `examples/book_*.rs` and `examples/tour.rs` |
+| `make examples` | runs every `examples/*.rs` |
 | `make docs` | rustdoc, the Python reference and the book, plus the checkers |
 | `make verify` | `scripts/verify.sh` |

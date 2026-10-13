@@ -37,7 +37,7 @@ fn main() {
     // Resolution helpers work in the scope of any node.
     assert_eq!(
         child
-            .resolve_qualified_name("item")
+            .resolve_element_name("item")
             .unwrap()
             .namespace()
             .unwrap()

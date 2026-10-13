@@ -11,8 +11,10 @@
 //! | namespace problems | `XmlNamespaceError` |
 //! | API misuse (foreign document, cycle, bad index, …) | `XmlDocumentError` |
 //! | `Document::validate` failures | `XmlValidationError` |
-//! | cancellation (`cancel_this`) | `KeyboardInterrupt` / `InterruptedError` |
 //! | anything else | `XmlError` |
+//!
+//! Interrupting a long operation is not an error of this library: the exception raised by the
+//! Python signal handler is propagated as it is (see [`crate::interrupt`]).
 //!
 //! `XmlSyntaxError` covers every variant that is a property of the input document — the name,
 //! content, markup, encoding and reference variants of
@@ -24,7 +26,7 @@
 
 use biodivine_lib_xml_dom::XmlError as RustXmlError;
 use pyo3::create_exception;
-use pyo3::exceptions::PyException;
+use pyo3::exceptions::{PyException, PyKeyboardInterrupt};
 use pyo3::prelude::*;
 
 create_exception!(
@@ -61,7 +63,7 @@ create_exception!(
     _sys,
     XmlValidationError,
     XmlError,
-    "Whole-document validation found problems; the list is in `args[1]`."
+    "Whole-document validation found problems; the list of them is in `args[1]`."
 );
 
 /// Maps a Rust [`RustXmlError`] onto the Python exception hierarchy.
@@ -70,10 +72,9 @@ pub(crate) fn to_py_err(error: RustXmlError) -> PyErr {
     match error {
         RustXmlError::Io(_) => XmlIoError::new_err(message),
 
-        // `cancel_this` turns its own error into `KeyboardInterrupt` (for an interpreter signal) or
-        // `InterruptedError` (for any other trigger), so a Python `KeyboardInterrupt` during a
-        // long-running call is re-raised as itself.
-        RustXmlError::Cancelled(cancelled) => cancelled.into(),
+        // Only `crate::interrupt` registers a trigger, and it propagates the signal handler's own
+        // exception instead of this one; the mapping is the closest equivalent nonetheless.
+        RustXmlError::Cancelled(_) => PyKeyboardInterrupt::new_err(message),
 
         RustXmlError::Validation(errors) => {
             crate::validation::validation_failure(errors)
@@ -85,7 +86,6 @@ pub(crate) fn to_py_err(error: RustXmlError) -> PyErr {
 
         RustXmlError::ForeignDocument
         | RustXmlError::CycleDetected
-        | RustXmlError::NodeNotFound(_)
         | RustXmlError::NotAnElement(_)
         | RustXmlError::NodeHasNoParent(_)
         | RustXmlError::NotAChild(_, _)
@@ -108,6 +108,9 @@ pub(crate) fn to_py_err(error: RustXmlError) -> PyErr {
         | RustXmlError::MultipleRootElements
         | RustXmlError::ContentOutsideRoot
         | RustXmlError::MissingRoot => XmlSyntaxError::new_err(message),
+
+        // `XmlError` is non-exhaustive: a variant added later is still an `XmlError` in Python.
+        _ => XmlError::new_err(message),
     }
 }
 

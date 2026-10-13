@@ -6,18 +6,21 @@
 //! pure-Python `Node` and therefore does offer both in one object; see
 //! [`documentation::bindings`](biodivine_lib_xml_dom::documentation::bindings).
 
+use biodivine_lib_xml_dom::xml_spec::NCName;
 use biodivine_lib_xml_dom::{Element, Node};
 use pyo3::prelude::*;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
+use crate::document::PyDocument;
 use crate::error::to_py_err;
+use crate::interrupt::run_interruptible;
 use crate::namespace::PyNamespace;
-use crate::node::PyNode;
-use crate::node_id::raw_index;
+use crate::node::{PyNode, PyNodeArg};
+use crate::node_id::{PyNodeId, raw_index};
 use crate::qualified_name::PyQualifiedName;
 
-/// A handle to an element node of a [`PyDocument`](crate::PyDocument).
+/// A handle to an element node of a document.
 #[pyclass(
     name = "Element",
     module = "biodivine_lib_xml_dom._sys",
@@ -34,6 +37,13 @@ impl From<Element> for PyElement {
     }
 }
 
+/// Parses an optional prefix given as a Python string.
+fn optional_prefix(prefix: Option<&str>) -> PyResult<Option<NCName>> {
+    prefix
+        .map(|prefix| NCName::try_from(prefix).map_err(to_py_err))
+        .transpose()
+}
+
 #[pymethods]
 impl PyElement {
     /// This element as a generic `Node` handle, which carries the tree API (`children`,
@@ -43,13 +53,13 @@ impl PyElement {
     }
 
     /// The document this element belongs to.
-    pub fn document(&self) -> crate::document::PyDocument {
-        crate::document::PyDocument::from(self.inner.document())
+    pub fn document(&self) -> PyDocument {
+        PyDocument::from(self.inner.document())
     }
 
-    /// The arena id of this element (see [`PyNode::id`]).
-    pub fn id(&self) -> crate::node_id::PyNodeId {
-        crate::node_id::PyNodeId::from(self.inner.id())
+    /// The arena id of this element.
+    pub fn id(&self) -> PyNodeId {
+        PyNodeId::from(self.inner.id())
     }
 
     /// The expanded name of this element.
@@ -72,12 +82,14 @@ impl PyElement {
         self.inner.set_qualified_name(name.inner.clone());
     }
 
-    /// All attributes of this element, as a `{QualifiedName: value}` dict.
+    /// All attributes of this element, as `(QualifiedName, value)` pairs.
     pub fn attributes(&self) -> Vec<(PyQualifiedName, String)> {
         self.inner
             .attributes()
             .into_iter()
-            .map(|(name, value)| (PyQualifiedName::from(name), value.to_string()))
+            .map(|(name, value)| {
+                (PyQualifiedName::from(name), value.as_str().to_string())
+            })
             .collect()
     }
 
@@ -85,19 +97,22 @@ impl PyElement {
     pub fn attribute(&self, name: &PyQualifiedName) -> Option<String> {
         self.inner
             .attribute(&name.inner)
-            .map(|value| value.to_string())
+            .map(|value| value.as_str().to_string())
     }
 
     /// The value of the attribute with the given local name that is in no namespace, or `None`.
+    ///
     /// Raises:
     ///     XmlSyntaxError: if `local_name` is not a valid XML name.
-    pub fn attribute_local(&self, local_name: &str) -> PyResult<Option<String>> {
-        let local_name = biodivine_lib_xml_dom::xml_spec::NCName::try_from(local_name)
-            .map_err(to_py_err)?;
+    pub fn attribute_without_namespace(
+        &self,
+        local_name: &str,
+    ) -> PyResult<Option<String>> {
+        let local_name = NCName::try_from(local_name).map_err(to_py_err)?;
         Ok(self
             .inner
-            .attribute_local(&local_name)
-            .map(|value| value.to_string()))
+            .attribute_without_namespace(&local_name)
+            .map(|value| value.as_str().to_string()))
     }
 
     /// Whether this element has an attribute with the given expanded name.
@@ -105,9 +120,8 @@ impl PyElement {
         self.inner.has_attribute(&name.inner)
     }
 
-    /// Sets an attribute, overwriting any previous value with the same expanded name.
+    /// Sets an attribute, replacing any previous attribute with the same expanded name.
     ///
-    /// Raises `XmlSyntaxError` if the value contains characters that are not legal in XML.
     /// Raises:
     ///     XmlSyntaxError: if the value contains characters that are not legal in XML.
     pub fn set_attribute(&self, name: &PyQualifiedName, value: &str) -> PyResult<()> {
@@ -120,7 +134,7 @@ impl PyElement {
     pub fn remove_attribute(&self, name: &PyQualifiedName) -> Option<String> {
         self.inner
             .remove_attribute(&name.inner)
-            .map(|value| value.to_string())
+            .map(|value| value.as_str().to_string())
     }
 
     /// Removes all attributes of this element.
@@ -166,7 +180,6 @@ impl PyElement {
 
     /// Declares a namespace, refusing to *change* an existing binding for the same prefix.
     ///
-    /// Raises `XmlNamespaceError` if the prefix is already bound to a different URI.
     /// Raises:
     ///     XmlNamespaceError: if the prefix is already bound to a different URI.
     pub fn declare_namespace_checked(&self, namespace: &PyNamespace) -> PyResult<()> {
@@ -182,61 +195,60 @@ impl PyElement {
 
     /// Removes a namespace declaration from this element.
     ///
-    /// `prefix` is `None` for the default namespace. Returns the previous binding, or `None` if
+    /// `prefix` is `None` for the default namespace. Returns `(True, namespace)` if a declaration
+    /// was removed (with `namespace` `None` for an empty declaration), and `(False, None)` if
     /// this element had no such declaration.
+    ///
     /// Raises:
     ///     XmlSyntaxError: if the prefix is not a valid XML name.
     #[pyo3(signature = (prefix = None))]
     pub fn remove_namespace_declaration(
         &self,
         prefix: Option<&str>,
-    ) -> PyResult<Option<Option<PyNamespace>>> {
-        let prefix = match prefix {
-            Some(prefix) => Some(
-                biodivine_lib_xml_dom::xml_spec::NCName::try_from(prefix)
-                    .map_err(to_py_err)?,
-            ),
-            None => None,
-        };
-        Ok(self
-            .inner
-            .remove_namespace_declaration(prefix.as_ref())
-            .map(|previous| previous.map(PyNamespace::from)))
+    ) -> PyResult<(bool, Option<PyNamespace>)> {
+        let prefix = optional_prefix(prefix)?;
+        Ok(
+            match self.inner.remove_namespace_declaration(prefix.as_ref()) {
+                Some(previous) => (true, previous.map(PyNamespace::from)),
+                None => (false, None),
+            },
+        )
     }
 
     /// The namespace bound to `prefix` in the scope of this element, or `None`.
     ///
     /// `prefix` is `None` for the default namespace. The predefined `xml` prefix is *not* resolved
-    /// here (it needs no declaration); use `resolve_attribute`/`resolve_element` for that.
+    /// here (it needs no declaration); use `resolve_element_name` or `resolve_attribute_name` for
+    /// that.
+    ///
     /// Raises:
     ///     XmlSyntaxError: if the prefix is not a valid XML name.
     #[pyo3(signature = (prefix = None))]
-    pub fn get_namespace(&self, prefix: Option<&str>) -> PyResult<Option<PyNamespace>> {
-        let prefix = match prefix {
-            Some(prefix) => Some(
-                biodivine_lib_xml_dom::xml_spec::NCName::try_from(prefix)
-                    .map_err(to_py_err)?,
-            ),
-            None => None,
-        };
+    pub fn lookup_namespace(
+        &self,
+        prefix: Option<&str>,
+    ) -> PyResult<Option<PyNamespace>> {
+        let prefix = optional_prefix(prefix)?;
         Ok(self
             .inner
-            .get_namespace(prefix.as_ref())
+            .lookup_namespace(prefix.as_ref())
             .map(PyNamespace::from))
     }
 
     /// Resolves an element name written as a string against the declarations in scope.
+    ///
     /// Raises:
     ///     XmlSyntaxError: if the name is malformed.
     ///     XmlNamespaceError: if the prefix is undeclared or reserved.
-    pub fn resolve_qualified_name(&self, name: &str) -> PyResult<PyQualifiedName> {
+    pub fn resolve_element_name(&self, name: &str) -> PyResult<PyQualifiedName> {
         self.inner
-            .resolve_qualified_name(name)
+            .resolve_element_name(name)
             .map(PyQualifiedName::from)
             .map_err(to_py_err)
     }
 
     /// Resolves an attribute name written as a string against the declarations in scope.
+    ///
     /// Raises:
     ///     XmlSyntaxError: if the name is malformed.
     ///     XmlNamespaceError: if the prefix is undeclared or reserved.
@@ -275,12 +287,12 @@ impl PyElement {
             .collect()
     }
 
-    /// Appends `child` as the last child of this element (see [`PyNode::append_child`]).
+    /// Appends `child` as the last child of this element.
+    ///
     /// Raises:
     ///     XmlDocumentError: for a foreign document, a cycle, or an attempt to attach the root.
-    pub fn append_child(&self, child: crate::node::PyNodeArg) -> PyResult<()> {
+    pub fn append_child(&self, child: PyNodeArg) -> PyResult<()> {
         self.inner
-            .node()
             .append_child_checked(Node::from(child))
             .map_err(to_py_err)
     }
@@ -290,92 +302,62 @@ impl PyElement {
         self.inner.detach().map(PyNode::from)
     }
 
-    /// Detaches this element and returns the element itself.
-    pub fn remove(&self) -> PyElement {
-        PyElement::from(self.inner.remove())
-    }
-
     /// Creates a detached, shallow copy of this element in the same document.
-    ///
-    /// # Errors
-    ///
-    /// Returns a cancellation error if a `cancel_this` trigger registered on the current thread
-    /// fires while the copy is being made.
-    pub fn shallow_clone(&self) -> PyResult<PyElement> {
-        self.inner
-            .shallow_clone()
-            .map(PyElement::from)
-            .map_err(to_py_err)
+    pub fn shallow_clone(&self) -> PyElement {
+        PyElement::from(self.inner.shallow_clone())
     }
 
-    /// Creates a detached, deep copy of this subtree in the same document.
-    ///
-    /// # Errors
-    ///
-    /// Returns a cancellation error if a `cancel_this` trigger registered on the current thread
-    /// fires while the subtree is being copied.
-    pub fn deep_clone(&self) -> PyResult<PyElement> {
-        self.inner
-            .deep_clone()
-            .map(PyElement::from)
-            .map_err(to_py_err)
-    }
-
-    /// Creates a detached, deep copy of this subtree in `target`. The GIL is released here.
+    /// Creates a detached, deep copy of this subtree in the same document. The GIL is released.
     ///
     /// Raises:
-    ///     KeyboardInterrupt: if a Python interrupt is delivered while the subtree is being copied.
-    pub fn deep_clone_into(
-        &self,
-        py: Python<'_>,
-        target: &crate::document::PyDocument,
-    ) -> PyResult<PyElement> {
+    ///     BaseException: whatever a Python signal handler raises to interrupt the operation (for
+    ///         example `KeyboardInterrupt`).
+    pub fn deep_clone(&self, py: Python<'_>) -> PyResult<PyElement> {
         let element = self.inner.clone();
-        let target = target.inner.clone();
-        py.detach(move || {
-            cancel_this::on_python(move || element.deep_clone_into(&target))
-        })
-        .map(PyElement::from)
-        .map_err(to_py_err)
+        let size = element.document().node_count();
+        run_interruptible(py, size, move || element.deep_clone()).map(PyElement::from)
     }
 
     /// Creates a detached, shallow copy of this element in `target`.
+    pub fn shallow_clone_into(&self, target: &PyDocument) -> PyElement {
+        PyElement::from(self.inner.shallow_clone_into(&target.inner))
+    }
+
+    /// Creates a detached, deep copy of this subtree in `target`. The GIL is released.
     ///
-    /// # Errors
-    ///
-    /// Returns a cancellation error if a `cancel_this` trigger registered on the current thread
-    /// fires while the copy is being made.
-    pub fn shallow_clone_into(
+    /// Raises:
+    ///     BaseException: whatever a Python signal handler raises to interrupt the operation (for
+    ///         example `KeyboardInterrupt`).
+    pub fn deep_clone_into(
         &self,
-        target: &crate::document::PyDocument,
+        py: Python<'_>,
+        target: &PyDocument,
     ) -> PyResult<PyElement> {
-        self.inner
-            .shallow_clone_into(&target.inner)
+        let element = self.inner.clone();
+        let target = target.inner.clone();
+        let size = element.document().node_count();
+        run_interruptible(py, size, move || element.deep_clone_into(&target))
             .map(PyElement::from)
-            .map_err(to_py_err)
     }
 
     /// Whether this element and `other` refer to the same node.
     pub fn ptr_eq(&self, other: &PyElement) -> bool {
-        self.inner.node().ptr_eq(&other.inner.node())
+        self.inner.ptr_eq(&other.inner)
     }
 
-    /// The value as a string: a node as XML, a name as `prefix:local`, a namespace as
-    /// `prefix:uri` (or just the URI), a number as its digits.
+    /// The element and its subtree as XML.
     pub fn __str__(&self) -> String {
         self.inner.to_string()
     }
 
-    /// A hash consistent with `__eq__` (the same value Rust's `Hash` produces, so
-    /// equal handles hash equally and can be used as dictionary keys).
+    /// A hash consistent with `__eq__`: handles of one node hash equally.
     pub fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.inner.hash(&mut hasher);
         hasher.finish()
     }
 
-    /// Equality with another handle of the same type: the same node/document/value
-    /// (Rust's `PartialEq`). Python object identity is *not* part of it.
+    /// Two handles are equal if they refer to the same node of the same document.
     pub fn __eq__(&self, other: &Self) -> bool {
         self.inner == other.inner
     }

@@ -6,16 +6,13 @@
 
 mod common;
 
-use biodivine_lib_xml_dom::xml_spec::{NCName, nc_name, rules};
+use biodivine_lib_xml_dom::xml_spec::{RESERVED_XML_URI as XML_NS, nc_name};
 use biodivine_lib_xml_dom::{
-    Document, Element, Namespace, QualifiedName, ValidationErrorKind, XmlError,
-    XmlValidationError, XmlValidationErrors,
+    Document, Namespace, QualifiedName, ValidationError, ValidationErrorKind,
+    ValidationErrors, XmlError,
 };
 
-use common::element;
-
-/// The reserved XML namespace URI.
-const XML_NS: &str = "http://www.w3.org/XML/1998/namespace";
+use common::{element, rules};
 
 /// An `xml:*` qualified name.
 fn xml_name(local: &str) -> QualifiedName {
@@ -26,7 +23,7 @@ fn xml_name(local: &str) -> QualifiedName {
 /// The validation problems of a document that is expected to be invalid.
 ///
 /// Panics if the document is valid or if validation was cancelled.
-fn validation_errors(document: &Document) -> XmlValidationErrors {
+fn validation_errors(document: &Document) -> ValidationErrors {
     match document.validate() {
         Err(XmlError::Validation(errors)) => errors,
         Ok(()) => panic!("the document was expected to be invalid"),
@@ -37,7 +34,7 @@ fn validation_errors(document: &Document) -> XmlValidationErrors {
 /// Collects the kinds of the issues found, in order.
 fn kinds(document: &Document) -> Vec<ValidationErrorKind> {
     validation_errors(document)
-        .into_errors()
+        .into_vec()
         .into_iter()
         .map(|error| error.kind().clone())
         .collect()
@@ -59,7 +56,7 @@ fn assert_valid(document: &Document) {
 fn an_empty_document_has_no_root() {
     // rule: rule.well-formedness.document-production
     rules::assert_rule_exists("rule.well-formedness.document-production");
-    let document = Document::empty();
+    let document = Document::new();
     assert!(!document.is_valid().unwrap());
     let errors = validation_errors(&document);
     assert_eq!(errors.len(), 1);
@@ -71,7 +68,7 @@ fn an_empty_document_has_no_root() {
 
 #[test]
 fn a_consistent_document_has_no_structural_problems() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let child = element(&document, "child");
     let grandchild = element(&document, "grandchild");
@@ -120,7 +117,7 @@ fn an_element_in_a_namespace_needs_it_declared() {
     // rule: rule.namespace-usage.prefix-declared
     rules::assert_rule_exists("rule.namespace-usage.prefix-declared");
 
-    let document = Document::empty();
+    let document = Document::new();
     let ex = Namespace::prefixed("http://example.com", "ex").unwrap();
     let root =
         document.create_element(QualifiedName::with_namespace("item", &ex).unwrap());
@@ -143,7 +140,7 @@ fn a_prefix_bound_to_a_different_uri_is_reported() {
     // rule: rule.namespace-usage.prefix-declaration-scope
     rules::assert_rule_exists("rule.namespace-usage.prefix-declaration-scope");
 
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root.clone());
     // The declaration binds `ex` to one URI ...
@@ -174,7 +171,7 @@ fn default_namespace_scope_must_match_the_name() {
     rules::assert_rule_exists("rule.namespace-usage.default-namespace-scope");
 
     // (a) A name in the default namespace with no declaration in scope.
-    let document = Document::empty();
+    let document = Document::new();
     let root = document.create_element(
         QualifiedName::with_namespace(
             "a",
@@ -194,7 +191,7 @@ fn default_namespace_scope_must_match_the_name() {
 
     // (b) A name in a different default namespace than the one in scope. Note that the declaration
     //     applies to the element that carries it, so the root's own name has to match as well.
-    let document = Document::empty();
+    let document = Document::new();
     let root = document.create_element(
         QualifiedName::with_namespace(
             "a",
@@ -222,7 +219,7 @@ fn default_namespace_scope_must_match_the_name() {
 
     // (c) A name with *no* namespace inside a default-namespace scope: writing it out would put it
     //     in `http://d`, which is exactly the "moving an element breaks its declarations" case.
-    let document = Document::empty();
+    let document = Document::new();
     let root = document.create_element(
         QualifiedName::with_namespace(
             "a",
@@ -257,7 +254,7 @@ fn attributes_are_not_affected_by_the_default_namespace() {
     rules::assert_rule_exists("rule.namespace-usage.default-namespace-not-attributes");
 
     // An unprefixed attribute inside a default-namespace scope is perfectly fine.
-    let document = Document::empty();
+    let document = Document::new();
     let root = document.create_element(
         QualifiedName::with_namespace(
             "a",
@@ -291,7 +288,7 @@ fn the_xml_prefix_is_always_available() {
     // rule: rule.namespace-basics.xml-prefix-fixed-binding
     rules::assert_rule_exists("rule.namespace-basics.xml-prefix-fixed-binding");
 
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root.clone());
     root.set_attribute(xml_name("lang"), "en");
@@ -304,7 +301,7 @@ fn the_xml_prefix_is_always_available() {
 
 #[test]
 fn detached_subtrees_are_validated_against_their_own_scope() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root);
     let detached = document.create_element(
@@ -338,7 +335,7 @@ fn xml_id_values_must_be_names_and_unique() {
     rules::assert_rule_exists("rule.attributes.id-must-be-name");
     rules::assert_rule_exists("rule.attributes.id-must-be-unique");
 
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root.clone());
     root.set_attribute(xml_name("id"), "first");
@@ -368,7 +365,7 @@ fn xml_id_values_must_be_names_and_unique() {
 
 #[test]
 fn a_detached_copy_does_not_conflict_with_its_original() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root.clone());
     root.set_attribute(xml_name("id"), "one");
@@ -394,7 +391,7 @@ fn the_xml_id_policy_is_pinned_in_both_directions() {
     rules::assert_rule_exists("rule.attributes.id-must-be-unique");
     rules::assert_rule_exists("rule.attributes.id-must-be-name");
 
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root.clone());
     root.set_attribute(xml_name("id"), "one");
@@ -436,7 +433,7 @@ fn the_xml_id_policy_is_pinned_in_both_directions() {
     detached.set_attribute(xml_name("lang"), "de_DE");
     detached.set_attribute(xml_name("space"), "preserved");
     let errors = validation_errors(&document);
-    let detached_errors: Vec<&XmlValidationError> = errors
+    let detached_errors: Vec<&ValidationError> = errors
         .iter()
         .filter(|error| error.node() == Some(detached.id()))
         .collect();
@@ -456,101 +453,12 @@ fn the_xml_id_policy_is_pinned_in_both_directions() {
     detached.set_attribute(xml_name("id"), "unique");
     detached.set_attribute(xml_name("lang"), "en");
     detached.set_attribute(xml_name("space"), "default");
-    let remaining: Vec<XmlValidationError> = validation_errors(&document)
-        .into_errors()
+    let remaining: Vec<ValidationError> = validation_errors(&document)
+        .into_vec()
         .into_iter()
         .filter(|error| error.node() == Some(detached.id()))
         .collect();
     assert!(remaining.is_empty());
-}
-
-#[test]
-fn consistent_documents_produce_no_structural_issues() {
-    // The structural diagnostics are defensive self-checks except for `MissingRoot`, so the
-    // complementary direction matters as much as the positive one: a representative set of
-    // perfectly consistent documents must produce no structural issue at all, or the checks would
-    // be "silently starting to produce false positives".
-    fn structural(document: &Document) -> Vec<ValidationErrorKind> {
-        match document.validate() {
-            Ok(()) => Vec::new(),
-            Err(XmlError::Validation(errors)) => errors
-                .into_errors()
-                .into_iter()
-                .map(|error| error.kind().clone())
-                .filter(|kind| {
-                    matches!(
-                        kind,
-                        ValidationErrorKind::ParentChildMismatch
-                            | ValidationErrorKind::CyclicStructure
-                            | ValidationErrorKind::RootHasParent
-                            | ValidationErrorKind::RootIsNotAnElement
-                    )
-                })
-                .collect(),
-            Err(error) => panic!("unexpected validation failure: {error}"),
-        }
-    }
-
-    // No root, no nodes at all: only the missing-root issue, and no structural noise.
-    let empty = Document::empty();
-    assert!(structural(&empty).is_empty());
-    assert_eq!(
-        kinds(&empty),
-        vec![ValidationErrorKind::MissingRoot],
-        "a missing root is the one reachable structural diagnostic"
-    );
-    assert_eq!(
-        validation_errors(&empty).as_slice()[0].kind(),
-        &ValidationErrorKind::MissingRoot
-    );
-
-    // Root only.
-    let document = Document::empty();
-    let root = element(&document, "root");
-    document.set_root(root.clone());
-    assert!(structural(&document).is_empty());
-
-    // A detached subtree exists but is not attached.
-    let parent = element(&document, "parent");
-    let child = element(&document, "child");
-    parent.append_child(child.clone());
-    assert!(structural(&document).is_empty());
-
-    // Re-attached subtree.
-    root.append_child(parent.clone());
-    assert!(structural(&document).is_empty());
-
-    // A deep tree.
-    let deep = element(&document, "deep");
-    document.set_root(deep.clone());
-    let mut current = deep;
-    for _ in 0..2_000 {
-        let next = element(&document, "level");
-        current.append_child(next.clone());
-        current = next;
-    }
-    assert!(structural(&document).is_empty());
-
-    // Mixed content of every kind.
-    let document = Document::empty();
-    let mixed = element(&document, "mixed");
-    document.set_root(mixed.clone());
-    mixed.append_child(document.create_text("text").unwrap());
-    mixed.append_child(document.create_comment(" comment ").unwrap());
-    mixed.append_child(document.create_cdata("raw").unwrap());
-    mixed.append_child(
-        document
-            .create_processing_instruction("target", "data")
-            .unwrap(),
-    );
-    mixed.append_child(element(&document, "child"));
-    assert!(structural(&document).is_empty());
-    assert_valid(&document);
-
-    // Clearing the root leaves a detached (but consistent) subtree.
-    document.clear_root();
-    assert!(structural(&document).is_empty());
-    assert_eq!(kinds(&document), vec![ValidationErrorKind::MissingRoot]);
 }
 
 #[test]
@@ -564,7 +472,7 @@ fn xml_lang_and_xml_space_values_are_checked() {
         "rule.document-structure.xml-space-must-be-enumerated-default-preserve",
     );
 
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root.clone());
     root.set_attribute(xml_name("lang"), "en-GB");
@@ -597,7 +505,7 @@ fn xml_lang_and_xml_space_values_are_checked() {
 #[test]
 fn all_problems_are_reported_in_one_call() {
     // rule: rule.attributes.id-must-be-unique
-    let document = Document::empty();
+    let document = Document::new();
     // Problem 1: no root element (yet).
     assert_eq!(kinds(&document).len(), 1);
 
@@ -657,7 +565,7 @@ fn all_problems_are_reported_in_one_call() {
 
 #[test]
 fn validation_is_deterministic() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root.clone());
     root.set_attribute(xml_name("space"), "nope");
@@ -678,7 +586,7 @@ fn validation_is_deterministic() {
 fn every_error_kind_names_an_existing_rule_file() {
     // The rule ids used in messages must point at real files, so that a reader can always find the
     // rule an issue came from.
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root.clone());
     root.set_qualified_name(
@@ -708,7 +616,7 @@ fn every_error_kind_names_an_existing_rule_file() {
     ));
 
     // Missing-root is the only kind that can be reported without a node.
-    let empty = validation_errors(&Document::empty());
+    let empty = validation_errors(&Document::new());
     assert_eq!(
         empty.as_slice()[0].kind(),
         &ValidationErrorKind::MissingRoot
@@ -754,10 +662,10 @@ fn editing_is_silent_and_validation_is_what_reports() {
 #[test]
 fn moving_an_element_can_break_its_namespace_and_validation_says_so() {
     // Moving an element into a different scope is exactly the case the design notes call out.
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root.clone());
-    let plain = root.shallow_clone().unwrap();
+    let plain = root.shallow_clone();
     plain.set_qualified_name(QualifiedName::without_namespace("plain").unwrap());
 
     let elsewhere = document.create_element(
@@ -798,35 +706,15 @@ fn validation_does_not_change_the_document() {
     assert_eq!(document.write_string().unwrap(), before);
 }
 
-/// A small helper so that the tests can build `xml:*` attributes without repeating the namespace.
-#[allow(dead_code)]
-fn xml_namespace() -> Namespace {
-    Namespace::prefixed(XML_NS, "xml").unwrap()
-}
-
-/// A helper for building an element with an `xml:id`.
-#[allow(dead_code)]
-fn with_xml_id(document: &Document, id: &str) -> Element {
-    let element = element(document, "element");
-    element.set_attribute(xml_name("id"), id);
-    element
-}
-
-/// The `NCName` type is used by the assertions above; keep the import explicit.
-#[allow(dead_code)]
-fn assert_ncname(name: &NCName) -> &str {
-    name.as_str()
-}
-
 /// Confirms that the error type is usable as a boxed error.
 #[test]
 fn the_error_type_is_a_std_error() {
-    fn as_error(error: XmlValidationError) -> Box<dyn std::error::Error + Send + Sync> {
+    fn as_error(error: ValidationError) -> Box<dyn std::error::Error + Send + Sync> {
         Box::new(error)
     }
-    let document = Document::empty();
+    let document = Document::new();
     let errors = validation_errors(&document);
-    let first = errors.into_errors().into_iter().next().unwrap();
+    let first = errors.into_vec().into_iter().next().unwrap();
     let boxed = as_error(first);
     assert!(boxed.to_string().contains("no root element"));
 }

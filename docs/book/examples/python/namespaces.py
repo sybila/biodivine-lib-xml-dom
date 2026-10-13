@@ -3,7 +3,7 @@
 import biodivine_lib_xml_dom as xml
 
 # ANCHOR: parse
-document = xml.parse(
+document = xml.Document.parse(
     '<root xmlns:ex="http://example.com" xmlns="http://default">'
     '<child ex:attr="v"/></root>'
 )
@@ -16,8 +16,8 @@ assert child.namespace.uri == "http://default"
 
 # ANCHOR: resolve
 # Resolution helpers work in the scope of any node.
-assert child.resolve_qualified_name("item").namespace.uri == "http://default"
-assert root.resolve_qualified_name("ex:item").namespace.uri == "http://example.com"
+assert child.resolve_element_name("item").namespace.uri == "http://default"
+assert root.resolve_element_name("ex:item").namespace.uri == "http://example.com"
 # ANCHOR_END: resolve
 
 # ANCHOR: attributes
@@ -37,7 +37,9 @@ assert (
 
 # ANCHOR: undeclare
 # `xmlns=""` removes the default namespace from the element it is declared on.
-document = xml.parse('<root xmlns="http://d"><inner xmlns=""><leaf/></inner></root>')
+document = xml.Document.parse(
+    '<root xmlns="http://d"><inner xmlns=""><leaf/></inner></root>'
+)
 inner = document.root.child_elements()[0]
 assert inner.namespace is None
 assert inner.child_elements()[0].namespace is None
@@ -47,7 +49,9 @@ assert inner.namespace_declarations == {None: None}
 # ANCHOR: silent
 # Editing never synchronises declarations: removing one is silent, and
 # `validate` reports.
-document = xml.parse('<ex:root xmlns:ex="http://example.com"><ex:child/></ex:root>')
+document = xml.Document.parse(
+    '<ex:root xmlns:ex="http://example.com"><ex:child/></ex:root>'
+)
 root = document.root
 root.remove_namespace_declaration("ex")
 assert len(document.validation_errors()) == 2
@@ -55,6 +59,6 @@ assert [problem.kind for problem in document.validation_errors()] == [
     "undeclared_prefix",
     "undeclared_prefix",
 ]
-assert xml.write(document) == "<ex:root><ex:child/></ex:root>"
-print(xml.write(document))
+assert document.write() == "<ex:root><ex:child/></ex:root>"
+print(document.write())
 # ANCHOR_END: silent

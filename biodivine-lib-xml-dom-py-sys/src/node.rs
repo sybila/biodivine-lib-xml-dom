@@ -8,6 +8,7 @@ use std::hash::{Hash, Hasher};
 use crate::document::PyDocument;
 use crate::element::PyElement;
 use crate::error::to_py_err;
+use crate::interrupt::run_interruptible;
 use crate::node_id::{PyNodeId, raw_index};
 use crate::validation::PyNodeKind;
 
@@ -83,8 +84,8 @@ impl PyNode {
     }
 
     /// Whether this node is a strict ancestor of `other`.
-    pub fn is_ancestor(&self, other: &PyNode) -> bool {
-        self.inner.is_ancestor(&other.inner)
+    pub fn is_ancestor_of(&self, other: &PyNode) -> bool {
+        self.inner.is_ancestor_of(&other.inner)
     }
 
     /// The children of this node in document order (empty for non-elements).
@@ -170,17 +171,11 @@ impl PyNode {
         self.inner.detach().map(PyNode::from)
     }
 
-    /// Detaches this node and returns the node itself, so it can be re-attached in one expression.
-    pub fn remove(&self) -> PyNode {
-        PyNode::from(self.inner.remove())
-    }
-
     /// Appends `child` as the last child of this node, moving it if it is already attached.
     ///
-    /// Raises `XmlDocumentError` if `child` belongs to another document (`foreign_document`), if it
-    /// is this node or an ancestor of it (`cycle_detected`), or if it is the document root
-    /// (`cannot_attach_root`). No namespace declaration is added, removed or rewritten: run
-    /// `Document.validate` to find the resulting inconsistencies.
+    /// No namespace declaration is added, removed or rewritten: run `Document.validate` to find the
+    /// resulting inconsistencies.
+    ///
     /// Raises:
     ///     XmlDocumentError: for a foreign document, a cycle, or an attempt to attach the root.
     pub fn append_child(&self, child: PyNodeArg) -> PyResult<()> {
@@ -191,8 +186,8 @@ impl PyNode {
 
     /// Inserts `child` as the `index`-th child of this node.
     ///
-    /// `index` is interpreted after `child` has been detached from any previous parent. Raises
-    /// `XmlDocumentError` including `index_out_of_bounds`-style failures.
+    /// `index` is interpreted after `child` has been detached from any previous parent.
+    ///
     /// Raises:
     ///     XmlDocumentError: as `append_child`, or an out-of-range `index`.
     pub fn insert_child(&self, index: usize, child: PyNodeArg) -> PyResult<()> {
@@ -202,6 +197,7 @@ impl PyNode {
     }
 
     /// Inserts `child` directly before the child `sibling` of this node.
+    ///
     /// Raises:
     ///     XmlDocumentError: as `append_child`, or if `sibling` is not a child of this node.
     pub fn insert_before(&self, sibling: PyNodeArg, child: PyNodeArg) -> PyResult<()> {
@@ -211,6 +207,7 @@ impl PyNode {
     }
 
     /// Inserts `child` directly after the child `sibling` of this node.
+    ///
     /// Raises:
     ///     XmlDocumentError: as `append_child`, or if `sibling` is not a child of this node.
     pub fn insert_after(&self, sibling: PyNodeArg, child: PyNodeArg) -> PyResult<()> {
@@ -221,6 +218,7 @@ impl PyNode {
 
     /// Replaces this node with `replacement` in this node's parent, returning this node (now
     /// detached).
+    ///
     /// Raises:
     ///     XmlDocumentError: if this node has no parent, if the replacement belongs to another
     ///     document, or if the replacement would create a cycle.
@@ -232,49 +230,35 @@ impl PyNode {
     }
 
     /// Creates a detached, shallow copy of this node in the same document (no children).
-    ///
-    /// # Errors
-    ///
-    /// Returns a cancellation error if a `cancel_this` trigger registered on the current thread
-    /// fires while the copy is being made.
-    pub fn shallow_clone(&self) -> PyResult<PyNode> {
-        self.inner
-            .shallow_clone()
-            .map(PyNode::from)
-            .map_err(to_py_err)
+    pub fn shallow_clone(&self) -> PyNode {
+        PyNode::from(self.inner.shallow_clone())
     }
 
-    /// Creates a detached, deep copy of this subtree in the same document.
+    /// Creates a detached, deep copy of this subtree in the same document. The GIL is released.
     ///
-    /// # Errors
-    ///
-    /// Returns a cancellation error if a `cancel_this` trigger registered on the current thread
-    /// fires while the subtree is being copied.
-    pub fn deep_clone(&self) -> PyResult<PyNode> {
-        self.inner.deep_clone().map(PyNode::from).map_err(to_py_err)
+    /// Raises:
+    ///     BaseException: whatever a Python signal handler raises to interrupt the operation (for
+    ///         example `KeyboardInterrupt`).
+    pub fn deep_clone(&self, py: Python<'_>) -> PyResult<PyNode> {
+        let node = self.inner.clone();
+        let size = node.document().node_count();
+        run_interruptible(py, size, move || node.deep_clone()).map(PyNode::from)
     }
 
     /// Creates a detached, shallow copy of this node in `target`.
-    ///
-    /// # Errors
-    ///
-    /// Returns a cancellation error if a `cancel_this` trigger registered on the current thread
-    /// fires while the copy is being made.
-    pub fn shallow_clone_into(&self, target: &PyDocument) -> PyResult<PyNode> {
-        self.inner
-            .shallow_clone_into(&target.inner)
-            .map(PyNode::from)
-            .map_err(to_py_err)
+    pub fn shallow_clone_into(&self, target: &PyDocument) -> PyNode {
+        PyNode::from(self.inner.shallow_clone_into(&target.inner))
     }
 
     /// Creates a detached, deep copy of this subtree in `target`.
     ///
     /// This is the sanctioned way to move a tree between documents. The copy is a point-in-time
     /// snapshot: the source lock is taken for the snapshot only and released before the target is
-    /// modified, so the two documents are never locked at the same time. The GIL is released here.
+    /// modified, so the two documents are never locked at the same time. The GIL is released.
     ///
     /// Raises:
-    ///     KeyboardInterrupt: if a Python interrupt is delivered while the subtree is being copied.
+    ///     BaseException: whatever a Python signal handler raises to interrupt the operation (for
+    ///         example `KeyboardInterrupt`).
     pub fn deep_clone_into(
         &self,
         py: Python<'_>,
@@ -282,9 +266,9 @@ impl PyNode {
     ) -> PyResult<PyNode> {
         let node = self.inner.clone();
         let target = target.inner.clone();
-        py.detach(move || cancel_this::on_python(move || node.deep_clone_into(&target)))
+        let size = node.document().node_count();
+        run_interruptible(py, size, move || node.deep_clone_into(&target))
             .map(PyNode::from)
-            .map_err(to_py_err)
     }
 
     /// Whether two handles refer to the same node of the same document.
@@ -302,16 +286,14 @@ impl PyNode {
         self.inner.to_string()
     }
 
-    /// A hash consistent with `__eq__` (the same value Rust's `Hash` produces, so
-    /// equal handles hash equally and can be used as dictionary keys).
+    /// A hash consistent with `__eq__`: handles of one node hash equally.
     pub fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.inner.hash(&mut hasher);
         hasher.finish()
     }
 
-    /// Equality with another handle of the same type: the same node/document/value
-    /// (Rust's `PartialEq`). Python object identity is *not* part of it.
+    /// Two handles are equal if they refer to the same node of the same document.
     pub fn __eq__(&self, other: &Self) -> bool {
         self.inner == other.inner
     }

@@ -4,7 +4,8 @@ use biodivine_lib_xml_dom::{
     DeclarationStyle, EmptyElementStyle, WriteOptions, xml_spec::XmlDeclaration,
 };
 use pyo3::prelude::*;
-use pyo3::types::PyType;
+
+use crate::error::to_py_err;
 
 /// When [`PyWriteOptions`] should write the `<?xml ...?>` declaration.
 #[pyclass(
@@ -35,16 +36,6 @@ impl From<PyDeclarationStyle> for DeclarationStyle {
     }
 }
 
-impl From<DeclarationStyle> for PyDeclarationStyle {
-    fn from(value: DeclarationStyle) -> Self {
-        match value {
-            DeclarationStyle::Never => PyDeclarationStyle::Never,
-            DeclarationStyle::IfPresent => PyDeclarationStyle::IfPresent,
-            DeclarationStyle::Always => PyDeclarationStyle::Always,
-        }
-    }
-}
-
 /// How [`PyWriteOptions`] writes an element that has no children.
 #[pyclass(
     name = "EmptyElementStyle",
@@ -71,16 +62,7 @@ impl From<PyEmptyElementStyle> for EmptyElementStyle {
     }
 }
 
-impl From<EmptyElementStyle> for PyEmptyElementStyle {
-    fn from(value: EmptyElementStyle) -> Self {
-        match value {
-            EmptyElementStyle::SelfClosing => PyEmptyElementStyle::SelfClosing,
-            EmptyElementStyle::ExplicitEndTag => PyEmptyElementStyle::ExplicitEndTag,
-        }
-    }
-}
-
-/// Options for the `write_*_with` functions.
+/// Options for `Document.write_string` and `Document.write_file`.
 ///
 /// The defaults reproduce a parsed document as closely as the data model allows: the declaration is
 /// written when the document has one, and empty elements are written as `<a/>`.
@@ -101,19 +83,9 @@ pub struct PyWriteOptions {
 
 impl From<PyWriteOptions> for WriteOptions {
     fn from(value: PyWriteOptions) -> Self {
-        WriteOptions {
-            declaration: value.declaration.into(),
-            empty_elements: value.empty_elements.into(),
-        }
-    }
-}
-
-impl From<WriteOptions> for PyWriteOptions {
-    fn from(value: WriteOptions) -> Self {
-        PyWriteOptions {
-            declaration: value.declaration.into(),
-            empty_elements: value.empty_elements.into(),
-        }
+        WriteOptions::default()
+            .with_declaration(value.declaration.into())
+            .with_empty_elements(value.empty_elements.into())
     }
 }
 
@@ -121,22 +93,18 @@ impl From<WriteOptions> for PyWriteOptions {
 impl PyWriteOptions {
     /// Creates options; both fields default to the values described on the class.
     #[new]
-    #[pyo3(signature = (declaration = None, empty_elements = None))]
+    #[pyo3(signature = (
+        declaration = PyDeclarationStyle::IfPresent,
+        empty_elements = PyEmptyElementStyle::SelfClosing,
+    ))]
     pub fn new(
-        declaration: Option<PyDeclarationStyle>,
-        empty_elements: Option<PyEmptyElementStyle>,
+        declaration: PyDeclarationStyle,
+        empty_elements: PyEmptyElementStyle,
     ) -> Self {
-        let defaults = WriteOptions::default();
         PyWriteOptions {
-            declaration: declaration.unwrap_or(defaults.declaration.into()),
-            empty_elements: empty_elements.unwrap_or(defaults.empty_elements.into()),
+            declaration,
+            empty_elements,
         }
-    }
-
-    /// The default options.
-    #[classmethod]
-    pub fn default(_cls: &Bound<'_, PyType>) -> Self {
-        WriteOptions::default().into()
     }
 
     /// A debug representation for interactive use, not a serialization of the value.
@@ -147,8 +115,7 @@ impl PyWriteOptions {
         )
     }
 
-    /// Equality with another handle of the same type: the same node/document/value
-    /// (Rust's `PartialEq`). Python object identity is *not* part of it.
+    /// Two option sets are equal if both fields agree.
     pub fn __eq__(&self, other: &Self) -> bool {
         self.declaration == other.declaration
             && self.empty_elements == other.empty_elements
@@ -178,16 +145,20 @@ impl From<XmlDeclaration> for PyXmlDeclaration {
 
 #[pymethods]
 impl PyXmlDeclaration {
-    /// Creates a declaration from its parts, without validating them (validation is the parser's
-    /// job, exactly as in Rust).
+    /// Creates a declaration from its parts.
+    ///
+    /// Raises:
+    ///     XmlSyntaxError: if the version is not 1.0 or the encoding does not name UTF-8.
     #[new]
     #[pyo3(signature = (version = "1.0".to_string(), encoding = None, standalone = None))]
     pub fn new(
         version: String,
         encoding: Option<String>,
         standalone: Option<bool>,
-    ) -> Self {
-        XmlDeclaration::new(version, encoding, standalone).into()
+    ) -> PyResult<Self> {
+        XmlDeclaration::new(version, encoding, standalone)
+            .map(Self::from)
+            .map_err(to_py_err)
     }
 
     /// The declaration this library writes by default: version 1.0, UTF-8.
@@ -221,8 +192,7 @@ impl PyXmlDeclaration {
         format!("XmlDeclaration({:?})", self.inner.to_string())
     }
 
-    /// Equality with another handle of the same type: the same node/document/value
-    /// (Rust's `PartialEq`). Python object identity is *not* part of it.
+    /// Two declarations are equal if version, encoding and `standalone` agree.
     pub fn __eq__(&self, other: &Self) -> bool {
         self.inner == other.inner
     }

@@ -1,5 +1,6 @@
 //! Anchors between the code that enforces an XML rule and the rule summaries shipped in
-//! `specification/rules/`.
+//! `specification/rules/` (test-only; the integration tests have their own copy in
+//! `tests/common`).
 //!
 //! The convention this module supports: every place where the XML 1.0 or Namespaces 1.0
 //! specifications are enforced names the corresponding rule in a comment (`// rule: <identifier>`)
@@ -24,22 +25,20 @@ fn rule_summary_path(identifier: &str) -> PathBuf {
 }
 
 /// Whether a summary file exists for the rule `identifier`.
-pub fn rule_summary_exists(identifier: &str) -> bool {
+pub(crate) fn rule_summary_exists(identifier: &str) -> bool {
     rule_summary_path(identifier).is_file()
 }
 
 /// Asserts that a summary file exists for the rule `identifier`.
 ///
 /// This turns "this code enforces rule X" from a comment into something the test suite checks, so a
-/// renamed or deleted rule summary cannot go unnoticed. The check is public because the convention
-/// it enforces is checked from this crate's integration tests, which only see the public API, and
-/// because a downstream crate that mirrors the convention can reuse it.
+/// renamed or deleted rule summary cannot go unnoticed.
 ///
 /// # Panics
 ///
 /// Panics if `specification/rules/<identifier>.md` does not exist.
 #[track_caller]
-pub fn assert_rule_exists(identifier: &str) {
+pub(crate) fn assert_rule_exists(identifier: &str) {
     assert!(
         rule_summary_exists(identifier),
         "the code claims to implement `{identifier}`, but {} does not exist",

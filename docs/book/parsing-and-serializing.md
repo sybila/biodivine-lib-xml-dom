@@ -85,15 +85,12 @@ error rather than a panic — including input that makes many parsers unhappy:
 :::
 ::::
 
-Note the two that are *not* errors: a comment or a processing instruction outside the root element
-is accepted and discarded (the model has one root and nothing else at the top level), and a
-document whose names are fine but whose *declarations* are missing parses happily — that is what
-[validation](validation.md) is for.
+Note what is *not* an error: a comment or a processing instruction outside the root element is
+accepted and discarded (the model has one root and nothing else at the top level). Everything else
+above is rejected; the whole-document properties that the parser does not check, such as unique
+`xml:id` values, are what [validation](validation.md) is for.
 
 ## Entities
-
-The five predefined entities and character references are expanded while parsing; any other
-entity reference is a typed error, because this library does not process `DOCTYPE` declarations.
 
 ::::{tab-set}
 :::{tab-item} Rust

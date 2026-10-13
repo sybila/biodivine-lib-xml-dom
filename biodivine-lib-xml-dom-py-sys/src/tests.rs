@@ -1,8 +1,7 @@
 //! In-process tests of the binding layer.
 //!
 //! These run inside `cargo test` (the crate's dev-dependency on `pyo3` uses `auto-initialize`), so
-//! the mirroring layer is exercised without building a wheel. They live inside the crate because
-//! `#[pymethods]` bodies are crate-private: their only public surface is the Python module.
+//! the mirroring layer is exercised without building a wheel.
 //!
 //! What is checked here, and why it is not in `tests-python/`:
 //!
@@ -17,8 +16,9 @@ use biodivine_lib_xml_dom::{Document, Element, Node, NodeId, NodeKind};
 use pyo3::prelude::*;
 
 use crate::{
-    PyDocument, PyElement, PyNamespace, PyNode, PyNodeArg, PyNodeId, PyNodeKind,
-    PyQualifiedName, PyWriteOptions,
+    PyDeclarationStyle, PyDocument, PyElement, PyEmptyElementStyle, PyGcStats,
+    PyNamespace, PyNode, PyNodeArg, PyNodeId, PyNodeKind, PyQualifiedName,
+    PyValidationError, PyWriteOptions, PyXmlDeclaration,
 };
 
 #[test]
@@ -33,6 +33,11 @@ fn handles_are_send_and_sync() {
     assert_send_sync::<PyNodeId>();
     assert_send_sync::<PyNodeKind>();
     assert_send_sync::<PyWriteOptions>();
+    assert_send_sync::<PyDeclarationStyle>();
+    assert_send_sync::<PyEmptyElementStyle>();
+    assert_send_sync::<PyXmlDeclaration>();
+    assert_send_sync::<PyValidationError>();
+    assert_send_sync::<PyGcStats>();
     // ... the Rust types behind them ...
     assert_send_sync::<Document>();
     assert_send_sync::<Node>();

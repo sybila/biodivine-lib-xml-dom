@@ -4,8 +4,8 @@ import biodivine_lib_xml_dom as xml
 
 # ANCHOR: mapping
 # Iterating children and reading an attribute by local name are the Pythonic
-# spellings of the Rust `child_elements()` and `attribute_local()`.
-document = xml.parse('<root><child class="a"/><child class="b"/></root>')
+# spellings of the Rust `child_elements()` and `attribute_without_namespace()`.
+document = xml.Document.parse('<root><child class="a"/><child class="b"/></root>')
 root = document.root
 assert [child.local_name for child in root] == ["child", "child"]
 assert root[0].get("class") == "a"
@@ -18,7 +18,7 @@ assert len(root) == 2
 # ANCHOR_END: indexing
 
 # ANCHOR: handles
-# A handle is an identity: it can be used as a dictionary key, and
+# A handle refers to one node: it can be used as a dictionary key, and
 # `document`/`id`/`parent` are properties.
 child = root[0]
 index = {root: "root", child: "child"}

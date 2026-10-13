@@ -8,7 +8,7 @@ fn main() {
     // ANCHOR: silent
     // A document assembled through the API is not validated as you edit: edits are
     // silent, and `validate` is where you ask.
-    let document = Document::empty();
+    let document = Document::new();
     let missing = Namespace::prefixed("http://example.com", "ex").unwrap();
     let root = document
         .create_element(QualifiedName::with_namespace("root", &missing).unwrap());

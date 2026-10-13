@@ -18,12 +18,11 @@ Python (the package is built from this repository):
 ```sh
 python3 -m venv .venv
 .venv/bin/pip install maturin
-cd biodivine-lib-xml-dom-py-sys
-../.venv/bin/maturin develop --release
+make python-extension
 ```
 
-`documentation::build` — the build page of the crate documentation, also available in the repository
-— lists the toolchains, every `make` target and how to build the documentation itself.
+`docs/design/build.md` in the repository lists the toolchains, every `make` target and how to build
+the documentation itself.
 
 ## Build a document
 

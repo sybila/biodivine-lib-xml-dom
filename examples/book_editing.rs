@@ -61,7 +61,7 @@ fn main() {
     // ANCHOR: errors
     // Cycles and foreign documents are errors, not silent corruption.
     assert!(root.append_child_checked(root.clone()).is_err());
-    let other = Document::empty();
+    let other = Document::new();
     let foreign = other.create_element(QualifiedName::without_namespace("f").unwrap());
     assert!(root.append_child_checked(foreign).is_err());
     // ANCHOR_END: errors
@@ -81,14 +81,14 @@ fn main() {
     let deep = root.deep_clone().unwrap();
     assert_eq!(deep.children().len(), root.children().len());
     assert!(!deep.is_attached());
-    let shallow = root.shallow_clone().unwrap();
+    let shallow = root.shallow_clone();
     assert!(shallow.children().is_empty());
     // ANCHOR_END: clones
 
     // ANCHOR: import
     // Copying into another document is the sanctioned way to move a tree between
     // documents.
-    let target = Document::empty();
+    let target = Document::new();
     let imported = root.deep_clone_into(&target).unwrap();
     assert!(imported.belongs_to(&target));
     let new_root =

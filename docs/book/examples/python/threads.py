@@ -6,6 +6,7 @@ operations release the GIL.
 """
 
 import concurrent.futures
+import signal
 
 import biodivine_lib_xml_dom as xml
 
@@ -26,7 +27,7 @@ def reader() -> int:
     total = 0
     for _ in range(50):
         total += len(root)
-        xml.write(document)
+        document.write()
     return total
 
 
@@ -43,3 +44,27 @@ assert len(root) == 4 * 25
 assert document.is_valid()
 print(f"{len(root)} children, document valid")
 # ANCHOR_END: readers
+
+# ANCHOR: cancel
+# Ctrl+C interrupts a long operation started on the main thread, and so does any
+# other signal handler that raises. Here a timer does it (Unix only).
+class TimedOut(Exception):
+    pass
+
+
+def on_timer(signum, frame):
+    raise TimedOut()
+
+
+large = xml.Document.parse("<root>" + "<item/>" * 200_000 + "</root>")
+if hasattr(signal, "setitimer"):
+    previous = signal.signal(signal.SIGALRM, on_timer)
+    signal.setitimer(signal.ITIMER_REAL, 0.01)
+    try:
+        while True:
+            large.validate()
+    except TimedOut:
+        print("validation interrupted")
+    finally:
+        signal.signal(signal.SIGALRM, previous)
+# ANCHOR_END: cancel

@@ -1,38 +1,27 @@
 """The public surface of the pure-Python package.
 
 The point of this module is to make the package's *interface* a checked property rather than an
-accident: a name that stops resolving, a native ``_sys`` type that starts leaking into the
+accident: a name that stops resolving, a native ``_sys`` object that starts leaking into the
 documented surface, or a class that can no longer be produced by the documented factories all make
-this file fail. It is the Python counterpart of the `rule-coverage` and `bindings` audits on the
-Rust side.
+this file fail.
 """
 
 from __future__ import annotations
 
-import inspect
-import types
+import copy
+import enum
+import re
+import tempfile
+from pathlib import Path
 
 import pytest
 
 import biodivine_lib_xml_dom as xml
 from biodivine_lib_xml_dom import _sys
 
-
-#: Python classes that exist only to *name* native enum members, rather than to wrap an object:
-#: `NodeKind` is an ordinary Python class whose attributes are the native `_sys.NodeKind` members,
-#: so `node.kind is NodeKind.Element` holds while `NodeKind` itself is defined by this package. This
-#: is a decision, so it is listed here and asserted below rather than passing by accident.
-COMPANION_NAMESPACES = {"NodeKind"}
-
-#: Native objects that are deliberately re-exported instead of wrapped, with the reason. They are
-#: value types (an enum and two plain data holders) whose native form is already idiomatic in
-#: Python, and the exception hierarchy, which PyO3 has to define as native types. Everything else in
-#: `__all__` must be a Python class or function defined by this package.
-NATIVE_RE_EXPORTS = {
-    "WriteOptions",
-    "DeclarationStyle",
-    "EmptyElementStyle",
-    "XmlDeclaration",
+#: The exception classes are the one kind of native type in the public surface: PyO3 has to define
+#: them, and the package re-exports them under its own module name.
+EXCEPTIONS = {
     "XmlError",
     "XmlSyntaxError",
     "XmlNamespaceError",
@@ -41,26 +30,40 @@ NATIVE_RE_EXPORTS = {
     "XmlValidationError",
 }
 
+#: Every class of the public surface, apart from the exceptions.
+CLASSES = {
+    "DeclarationStyle",
+    "Document",
+    "Element",
+    "EmptyElementStyle",
+    "GcStats",
+    "Namespace",
+    "Node",
+    "NodeId",
+    "NodeKind",
+    "QualifiedName",
+    "ValidationError",
+    "ValidationErrors",
+    "WriteOptions",
+    "XmlDeclaration",
+}
 
-def _is_native(obj: type) -> bool:
-    """Whether ``obj`` comes from the native module.
+ROOT = Path(__file__).resolve().parents[2]
 
-    PyO3 sets ``__module__`` to the name passed to ``create_exception!``/``#[pyclass]``, which for
-    this crate is ``"_sys"`` for the exception types and ``"biodivine_lib_xml_dom._sys"`` for the
-    classes, so both spellings have to be accepted.
-    """
-    module = getattr(obj, "__module__", "")
-    return module == "_sys" or module.startswith("biodivine_lib_xml_dom._sys")
+
+def _is_native(value: object) -> bool:
+    """Whether ``value`` is an instance of a class defined by the native module."""
+    return type(value).__module__.startswith("biodivine_lib_xml_dom._sys")
 
 
 def test_the_version_is_the_same_in_every_layer() -> None:
-    """One number, four places: the workspace manifest, both crates, the extension and the package.
-
-    The crates inherit `version` from `[workspace.package]`, the extension reports
-    `env!("CARGO_PKG_VERSION")` and the package re-exports it, so this assertion is what keeps a
-    release bump from landing in some layers and not others.
-    """
-    assert xml.__version__ == "0.2.0"
+    """The crates inherit `version` from `[workspace.package]`, the extension reports it, and the
+    package re-exports the extension's value."""
+    manifest = (ROOT / "Cargo.toml").read_text()
+    workspace = manifest[manifest.index("[workspace.package]"):]
+    version = re.search(r'^version = "([^"]+)"', workspace, flags=re.MULTILINE)
+    assert version is not None
+    assert xml.__version__ == version.group(1)
     assert _sys.__version__ == xml.__version__
 
 
@@ -72,172 +75,122 @@ def test_every_exported_name_resolves() -> None:
         assert hasattr(xml, name), f"{name} is in __all__ but does not resolve"
 
 
-def test_the_public_surface_is_wrappers_and_functions_only() -> None:
-    """Every exported object is a wrapper class, a function, or an explicitly allow-listed native
-    value type/exception — never an accidental `_sys` leak."""
-    wrappers, functions, companion = [], [], []
-    for name in xml.__all__:
-        obj = getattr(xml, name)
-        if name in NATIVE_RE_EXPORTS:
-            assert isinstance(obj, type), f"{name} should be a native type"
-            assert _is_native(obj), f"{name} is allow-listed as a native re-export but is not one"
-            continue
-        if isinstance(obj, type):
-            assert obj.__module__.startswith("biodivine_lib_xml_dom."), (
-                f"{name} leaks a type from {obj.__module__}"
-            )
-            assert not _is_native(obj), (
-                f"{name} leaks a native type; add it to NATIVE_RE_EXPORTS if that is deliberate"
-            )
-            if name in COMPANION_NAMESPACES:
-                members = [
-                    member for member in vars(obj).values()
-                    if isinstance(member, _sys.NodeKind)
-                ]
-                assert members, f"{name} is a companion namespace but has no native members"
-                assert all(_is_native(type(member)) for member in members), (
-                    f"{name}'s members must be the native enum values"
-                )
-                companion.append(name)
-            else:
-                wrappers.append(name)
-        elif callable(obj) or isinstance(obj, types.FunctionType):
-            functions.append(name)
-        elif isinstance(obj, str):
-            assert name == "__version__"
-        else:  # pragma: no cover - only on an unexpected export
-            pytest.fail(f"{name} is neither a wrapper class, a function nor a string")
-
-    # The audit is only meaningful if it actually classifies things.
-    assert set(wrappers) >= {
-        "Document",
-        "Element",
-        "Namespace",
-        "Node",
-        "NodeId",
-        "QualifiedName",
-        "ValidationError",
-        "ValidationErrors",
-    }
-    assert companion == ["NodeKind"], "the companion namespace is classified separately"
-    assert companion == sorted(COMPANION_NAMESPACES), (
-        "the companion namespaces are a decision; keep the list and this assertion in sync"
-    )
-    assert set(functions) == {"parse", "parse_file", "write", "write_file"}
-    # Nothing that the Rust spec layer or the native module keeps internal may appear here.
-    for leaked in ("NCName", "Text", "Comment", "CData", "PiTarget", "PiData", "NodeContent"):
-        assert leaked not in xml.__all__, f"{leaked} must not be part of the public surface"
-
-
-def test_the_native_value_types_are_exactly_the_ones_we_decided_on() -> None:
-    """The allow-list is a decision, so a change to it must be a change to this test."""
-    native = {
-        name
-        for name in xml.__all__
-        if isinstance(getattr(xml, name), type) and _is_native(getattr(xml, name))
-    }
-    assert native == NATIVE_RE_EXPORTS
-
-    # The exception hierarchy is the documented one.
-    assert issubclass(xml.XmlSyntaxError, xml.XmlError)
-    assert issubclass(xml.XmlNamespaceError, xml.XmlError)
-    assert issubclass(xml.XmlDocumentError, xml.XmlError)
-    assert issubclass(xml.XmlIoError, xml.XmlError)
-    assert issubclass(xml.XmlValidationError, xml.XmlError)
+def test_the_public_surface_is_exactly_classes_and_exceptions() -> None:
+    assert set(xml.__all__) == CLASSES | EXCEPTIONS | {"__version__"}
+    for name in CLASSES:
+        cls = getattr(xml, name)
+        assert isinstance(cls, type)
+        assert cls.__module__.startswith("biodivine_lib_xml_dom."), name
+        assert not cls.__module__.startswith("biodivine_lib_xml_dom._sys"), name
+    for name in EXCEPTIONS:
+        cls = getattr(xml, name)
+        assert issubclass(cls, xml.XmlError)
+        assert cls.__module__ == "biodivine_lib_xml_dom"
     assert issubclass(xml.XmlError, Exception)
+    for enum_class in (xml.NodeKind, xml.DeclarationStyle, xml.EmptyElementStyle):
+        assert issubclass(enum_class, enum.Enum)
 
 
-def test_classes_are_constructible_or_produced_by_a_documented_factory() -> None:
-    # Directly constructible.
+def test_no_native_object_is_ever_returned() -> None:
+    document = xml.Document.parse(
+        '<?xml version="1.0"?><ex:a xmlns:ex="http://example.com" b="1"><c/>t</ex:a>'
+    )
+    root = document.root
+    values = [
+        document,
+        root,
+        root.kind,
+        root.id,
+        root.qualified_name,
+        root.namespace,
+        root.document,
+        root.children()[0],
+        root.children()[1],
+        root.children()[0].parent,
+        document.xml_declaration,
+        document.collect_garbage(),
+        *root.attributes,
+        *root.namespace_declarations.values(),
+        *xml.Document().validation_errors(),
+    ]
+    for value in values:
+        assert not _is_native(value), f"{value!r} is a native object"
+
+    invalid = xml.Document()
+    with pytest.raises(xml.XmlValidationError) as caught:
+        invalid.validate()
+    assert isinstance(caught.value.errors, xml.ValidationErrors)
+    assert caught.value.args[1] is caught.value.errors
+    assert all(not _is_native(problem) for problem in caught.value.errors)
+
+
+def test_handles_have_no_public_constructor() -> None:
+    with pytest.raises(TypeError):
+        xml.Node()
+    with pytest.raises(TypeError):
+        xml.Element()
+
+
+def test_value_classes_are_constructible() -> None:
     assert isinstance(xml.Document(), xml.Document)
-    assert isinstance(xml.Document.empty(), xml.Document)
-    assert isinstance(xml.Namespace("http://example.com"), xml.Namespace)
     assert isinstance(xml.Namespace("http://example.com", "ex"), xml.Namespace)
     assert isinstance(xml.QualifiedName("child"), xml.QualifiedName)
-    assert isinstance(xml.WriteOptions(), xml.WriteOptions)
-    assert isinstance(xml.XmlDeclaration.utf8(), xml.XmlDeclaration)
-    # `NodeKind` names the native enum members, so identity works and the value is native.
-    document_for_kinds = xml.Document()
-    text = document_for_kinds.create_text("x")
-    assert text.kind is xml.NodeKind.Text
-    assert isinstance(text.kind, _sys.NodeKind)
-    assert text.kind is not None and text.kind == _sys.NodeKind.Text
-    assert xml.DeclarationStyle.Never is not None
-    assert xml.EmptyElementStyle.SelfClosing is not None
-    assert [member for member in ("Element", "Text", "Comment", "CData", "ProcessingInstruction")
-            if hasattr(xml.NodeKind, member)] == [
-        "Element", "Text", "Comment", "CData", "ProcessingInstruction"
-    ]
-
-    # Produced by the documented factories: these have no public constructor, exactly like their
-    # Rust counterparts (an `Element` cannot exist without a document).
-    document = xml.Document()
-    root = document.create_element("root")
-    document.set_root(root)
-    assert isinstance(root, xml.Element)
-    assert isinstance(root.node, xml.Node)
-    assert isinstance(root.id, xml.NodeId)
-    assert isinstance(root.document, xml.Document)
-    text = document.create_text("text")
-    root.append_child(text)
-    assert isinstance(root.children()[0], xml.Node)
-    assert isinstance(document.root, xml.Element)
-    assert isinstance(text, xml.Node)
-    assert not isinstance(text, xml.Element)
-
-    # Validation results appear on both paths: as a list, and inside the raised exception.
-    invalid = xml.Document()
-    problem_list = invalid.validation_errors()
-    assert isinstance(problem_list, xml.ValidationErrors)
-    assert isinstance(problem_list, list)
-    assert isinstance(problem_list[0], xml.ValidationError)
-    with pytest.raises(xml.XmlValidationError):
-        invalid.validate()
-    assert set(problem_list.kinds()) == {"missing_root"}
+    assert isinstance(xml.NodeId(3), xml.NodeId)
+    assert xml.WriteOptions() == xml.WriteOptions(
+        xml.DeclarationStyle.IF_PRESENT, xml.EmptyElementStyle.SELF_CLOSING
+    )
+    assert hash(xml.WriteOptions()) == hash(xml.WriteOptions())
+    assert xml.XmlDeclaration() == xml.XmlDeclaration("1.0")
+    with pytest.raises(xml.XmlSyntaxError):
+        xml.XmlDeclaration("1.1")
+    with pytest.raises(xml.XmlSyntaxError):
+        xml.XmlDeclaration(encoding="UTF-16")
+    with pytest.raises(ValueError):
+        xml.NodeId(-1)
 
 
 def test_isinstance_works_for_the_wrapper_hierarchy() -> None:
     document = xml.Document()
     root = document.create_element("root")
     document.set_root(root)
+    text = document.create_text("x")
 
     assert isinstance(root, xml.Element)
     assert isinstance(root, xml.Node)  # Element subclasses Node in the Python layer
-    # `Element.node` returns the element itself (an element *is* a node), so this holds too; a text
-    # node is the case where the two classes differ.
-    assert isinstance(root.node, xml.Node)
-    assert root.node is root
-    text = document.create_text("x")
     assert isinstance(text, xml.Node)
     assert not isinstance(text, xml.Element)
-    assert isinstance(document.root, xml.Element)
-    assert isinstance(document, xml.Document)
-    assert isinstance(xml.Namespace("u"), xml.Namespace)
-    assert isinstance(xml.QualifiedName("n"), xml.QualifiedName)
-    assert isinstance(root.qualified_name, xml.QualifiedName)
-    assert isinstance(root.namespace, type(None))  # no namespace on a plain name
-    assert isinstance(xml.parse("<a/>"), xml.Document)
-    assert isinstance(xml.write(document), str)
+    root.append_child(text)
+    assert isinstance(root.children()[0], xml.Node)
+    assert isinstance(root.children()[0].parent, xml.Element)
+    assert root.kind is xml.NodeKind.ELEMENT
+    assert text.kind is xml.NodeKind.TEXT
 
 
-def test_exported_functions_have_the_documented_signatures() -> None:
-    assert list(inspect.signature(xml.parse).parameters) == ["source"]
-    assert list(inspect.signature(xml.parse_file).parameters) == ["path"]
-    assert list(inspect.signature(xml.write).parameters) == ["document", "options"]
-    assert list(inspect.signature(xml.write_file).parameters) == ["document", "path", "options"]
-    # And they are all actually usable.
-    import tempfile
-    from pathlib import Path
-
+def test_parsing_and_writing_are_document_methods() -> None:
+    assert xml.Document.parse("<a/>").write() == "<a/>"
+    assert xml.Document.parse(b"<a/>").write() == "<a/>"
+    assert xml.Document.parse(bytearray(b"<a/>")).write() == "<a/>"
+    assert xml.Document.parse(memoryview(b"<a/>")).write() == "<a/>"
+    with pytest.raises(TypeError):
+        xml.Document.parse(3)  # type: ignore[arg-type]
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "doc.xml"
-        xml.write_file(xml.parse("<a/>"), path)
-        assert xml.write(xml.parse_file(path)) == "<a/>"
+        xml.Document.parse("<a/>").write_file(path)
+        assert xml.Document.parse_file(path).write() == "<a/>"
+
+
+def test_copy_shares_and_deepcopy_copies() -> None:
+    document = xml.Document.parse('<?xml version="1.0"?><a><b/></a>')
+    assert copy.copy(document) is document
+    duplicate = copy.deepcopy(document)
+    assert duplicate != document
+    assert duplicate.write() == document.write()
+    duplicate.root.append_child(duplicate.create_element("c"))
+    assert document.write() == '<?xml version="1.0"?><a><b/></a>'
 
 
 def test_argument_coercion_is_part_of_the_surface() -> None:
-    """The three name spellings promised by the documentation all work, everywhere a name is
-    taken."""
+    """The name spellings promised by the documentation all work, everywhere a name is taken."""
     document = xml.Document()
     namespace = xml.Namespace("http://example.com", "ex")
     for name in ("child", ("child", None), ("child", "http://example.com"), ("child", namespace),
@@ -259,3 +212,5 @@ def test_argument_coercion_is_part_of_the_surface() -> None:
         assert root.get(name) == "value"
     with pytest.raises(TypeError):
         document.create_element(("too", "many", "parts"))
+    with pytest.raises(TypeError):
+        document.create_element(3)  # type: ignore[arg-type]

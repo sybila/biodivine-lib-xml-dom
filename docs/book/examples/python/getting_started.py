@@ -22,7 +22,7 @@ root.append_child(child)
 # ANCHOR_END: document
 
 # ANCHOR: serialize
-assert xml.write(document) == (
+assert document.write() == (
     '<ex:root xmlns:ex="http://example.com">'
     '<ex:child id="first">Hello, World!</ex:child></ex:root>'
 )
@@ -36,5 +36,5 @@ child = root.child_elements()[0]
 assert child.local_name == "child"
 assert child.namespace.uri == "http://example.com"
 assert child.qualified_name == xml.QualifiedName("child", ex)
-print(xml.write(document))
+print(document.write())
 # ANCHOR_END: names

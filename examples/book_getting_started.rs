@@ -8,7 +8,7 @@ use biodivine_lib_xml_dom::{Document, Namespace, QualifiedName};
 
 fn main() {
     // ANCHOR: document
-    let document = Document::empty();
+    let document = Document::new();
     assert!(document.root().is_none());
 
     let ex = Namespace::prefixed("http://example.com", "ex").unwrap();

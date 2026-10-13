@@ -45,7 +45,7 @@ fn tree_with(count: usize, config: GcConfig) -> Document {
 
 #[test]
 fn an_id_is_a_raw_integer_that_only_the_arena_can_resolve() {
-    let document = Document::empty();
+    let document = Document::new();
     let node = document.create_text("kept").unwrap();
 
     let id = node.id();
@@ -62,7 +62,7 @@ fn an_id_is_a_raw_integer_that_only_the_arena_can_resolve() {
 
 #[test]
 fn a_collected_slot_is_reused_by_the_next_allocation() {
-    let document = Document::empty();
+    let document = Document::new();
     let first = document.create_text("first").unwrap();
     let first_id = first.id();
 
@@ -97,7 +97,7 @@ fn the_document_root_keeps_its_tree_alive_without_any_handle() {
 
 #[test]
 fn a_handle_keeps_a_detached_subtree_alive() {
-    let document = Document::empty();
+    let document = Document::new();
     let kept = element(&document, "kept");
     let discarded = element(&document, "discarded");
     let discarded_id = discarded.id();
@@ -117,7 +117,7 @@ fn a_handle_keeps_a_detached_subtree_alive() {
 
 #[test]
 fn a_handle_keeps_its_ancestors_reachable() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     document.set_root(root.clone());
     let mut deepest = root.clone().into_node();

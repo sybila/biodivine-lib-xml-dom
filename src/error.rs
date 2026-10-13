@@ -15,11 +15,15 @@
 //! [`XmlError::Cancelled`].
 
 use crate::node_id::NodeId;
-use crate::validation::XmlValidationErrors;
+use crate::validation::ValidationErrors;
 use thiserror::Error;
 
 /// The error type returned by fallible operations of this crate.
+///
+/// The enum is `#[non_exhaustive]`: a future version may report a new kind of failure, so a
+/// `match` on it needs a wildcard arm.
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum XmlError {
     // ---------------------------------------------------------------------------------------
     // Locally decidable specification violations.
@@ -50,7 +54,7 @@ pub enum XmlError {
     ReservedPrefix(String),
     /// Two attributes of one element share the same expanded name
     /// ([`rule.elements-and-tags.unique-attribute-specification`](crate::xml_spec::rule_set::rule_elements_and_tags_unique_attribute_specification)).
-    #[error("duplicate attribute `{0}`")]
+    #[error("duplicate attribute: {0}")]
     DuplicateAttribute(String),
 
     // ---------------------------------------------------------------------------------------
@@ -105,9 +109,6 @@ pub enum XmlError {
     /// The operation would create a cycle in the document tree.
     #[error("the operation would create a cycle in the document tree")]
     CycleDetected,
-    /// The referenced node does not exist in this document.
-    #[error("no node with id {0} in this document")]
-    NodeNotFound(NodeId),
     /// The operation requires an element, but the node has a different kind.
     #[error("node {0} is not an element")]
     NotAnElement(NodeId),
@@ -137,22 +138,21 @@ pub enum XmlError {
     // ---------------------------------------------------------------------------------------
     /// The operation was cancelled by a [`cancel_this`] cancellation trigger.
     ///
-    /// The long-running operations of this crate — parsing, serialization, validation,
-    /// cross-document copies and explicit garbage collection — periodically check the cancellation
-    /// triggers registered on the current thread and return this error instead of running to
-    /// completion. Register a trigger around a call with [`cancel_this::on_trigger`] (or one of its
-    /// helpers, such as [`cancel_this::on_timeout`], [`cancel_this::on_atomic`] or, for the Python
-    /// interpreter, [`cancel_this::on_python`]); with no trigger registered the checks are nearly
-    /// free and never fire.
+    /// The long-running operations of this crate (parsing, serialization, validation, deep
+    /// copies and explicit garbage collection) periodically check the cancellation triggers
+    /// registered on the current thread and return this error instead of running to completion.
+    /// Register a trigger around a call with [`cancel_this::on_trigger`] or one of its helpers,
+    /// such as [`cancel_this::on_timeout`] or [`cancel_this::on_atomic`]. See the
+    /// [crate documentation](crate#cancellation) for what a cancelled operation leaves behind.
     #[error(transparent)]
     Cancelled(#[from] cancel_this::Cancelled),
 
     /// Whole-document validation found one or more problems.
     ///
     /// This is what [`crate::Document::validate`] returns; the individual findings are in the
-    /// [`XmlValidationErrors`].
+    /// [`ValidationErrors`], which always holds at least one.
     #[error(transparent)]
-    Validation(#[from] XmlValidationErrors),
+    Validation(#[from] ValidationErrors),
 
     // ---------------------------------------------------------------------------------------
     // I/O.

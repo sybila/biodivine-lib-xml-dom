@@ -39,7 +39,7 @@ fn namespaced_tree(document: &Document) -> (Element, Element) {
 
 #[test]
 fn cloning_a_handle_refers_to_the_same_node() {
-    let document = Document::empty();
+    let document = Document::new();
     let node = element(&document, "node");
     let handle = node.clone();
 
@@ -51,12 +51,12 @@ fn cloning_a_handle_refers_to_the_same_node() {
 
 #[test]
 fn shallow_clone_copies_the_payload_but_not_the_children() {
-    let document = Document::empty();
+    let document = Document::new();
     let (_root, child) = namespaced_tree(&document);
     child.detach();
     let before = document.node_count();
 
-    let clone = child.shallow_clone().unwrap();
+    let clone = child.shallow_clone();
     assert!(!clone.is_attached());
     assert!(!clone.ptr_eq(&child));
     assert_eq!(clone.qualified_name(), child.qualified_name());
@@ -73,16 +73,16 @@ fn shallow_clone_copies_the_payload_but_not_the_children() {
 
 #[test]
 fn shallow_clone_of_a_text_node_copies_the_content() {
-    let document = Document::empty();
+    let document = Document::new();
     let text = document.create_text("hello").unwrap();
-    let clone = text.shallow_clone().unwrap();
+    let clone = text.shallow_clone();
     assert!(!clone.ptr_eq(&text));
     assert_eq!(clone.text().unwrap().as_str(), "hello");
 }
 
 #[test]
 fn deep_clone_copies_the_whole_subtree() {
-    let document = Document::empty();
+    let document = Document::new();
     let (root, _) = namespaced_tree(&document);
     document.set_root(root.clone());
 
@@ -117,8 +117,8 @@ fn deep_clone_copies_the_whole_subtree() {
 
 #[test]
 fn deep_clone_into_another_document_rebuilds_the_tree_there() {
-    let source = Document::empty();
-    let target = Document::empty();
+    let source = Document::new();
+    let target = Document::new();
     let (root, _) = namespaced_tree(&source);
     source.set_root(root.clone());
     let source_nodes = source.node_count();
@@ -163,7 +163,7 @@ fn deep_clone_into_another_document_rebuilds_the_tree_there() {
 
 #[test]
 fn deep_clone_into_the_same_document_behaves_like_deep_clone() {
-    let document = Document::empty();
+    let document = Document::new();
     let (root, _) = namespaced_tree(&document);
 
     let via_clone = root.deep_clone().unwrap();
@@ -176,11 +176,11 @@ fn deep_clone_into_the_same_document_behaves_like_deep_clone() {
 
 #[test]
 fn shallow_clone_into_another_document_keeps_only_the_node() {
-    let source = Document::empty();
-    let target = Document::empty();
+    let source = Document::new();
+    let target = Document::new();
     let (root, _) = namespaced_tree(&source);
 
-    let copy = root.shallow_clone_into(&target).unwrap();
+    let copy = root.shallow_clone_into(&target);
     assert!(copy.belongs_to(&target));
     assert!(copy.children().is_empty());
     assert_eq!(copy.qualified_name(), root.qualified_name());
@@ -189,8 +189,8 @@ fn shallow_clone_into_another_document_keeps_only_the_node() {
 
 #[test]
 fn a_copied_subtree_can_be_attached_in_the_target_document() {
-    let source = Document::empty();
-    let target = Document::empty();
+    let source = Document::new();
+    let target = Document::new();
     let (root, _) = namespaced_tree(&source);
 
     let target_root = element(&target, "wrapper");
@@ -212,8 +212,8 @@ fn a_copied_subtree_can_be_attached_in_the_target_document() {
 
 #[test]
 fn non_element_nodes_can_be_copied_between_documents() {
-    let source = Document::empty();
-    let target = Document::empty();
+    let source = Document::new();
+    let target = Document::new();
 
     let text = source.create_text("hello").unwrap();
     let comment = source.create_comment(" note ").unwrap();
@@ -232,7 +232,7 @@ fn non_element_nodes_can_be_copied_between_documents() {
 
 #[test]
 fn a_deep_copy_can_be_edited_independently_of_its_source() {
-    let document = Document::empty();
+    let document = Document::new();
     let (root, child) = namespaced_tree(&document);
     document.set_root(root.clone());
 
@@ -261,7 +261,7 @@ fn a_deep_clone_is_cheap_because_names_are_shared() {
     // Not a timing test: this checks that copying reuses the shared `Arc` payloads by comparing
     // the values, which is what makes the copy cheap (the allocation identity is asserted by the
     // crate-internal `re_interns_names_in_the_target_document` test).
-    let document = Document::empty();
+    let document = Document::new();
     let (root, _) = namespaced_tree(&document);
     let clone = root.deep_clone().unwrap();
 
@@ -276,7 +276,7 @@ fn a_deep_clone_is_cheap_because_names_are_shared() {
 
 #[test]
 fn display_renders_the_subtree_as_xml() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     root.append_child(document.create_text("hello").unwrap());
     root.append_child(document.create_comment(" note ").unwrap());
@@ -293,7 +293,7 @@ fn display_renders_the_subtree_as_xml() {
 
 #[test]
 fn display_of_non_element_nodes() {
-    let document = Document::empty();
+    let document = Document::new();
     assert_eq!(document.create_text("hi").unwrap().to_string(), "hi");
     assert_eq!(
         document.create_comment(" c ").unwrap().to_string(),
@@ -325,7 +325,7 @@ fn display_of_non_element_nodes() {
 
 #[test]
 fn node_content_exposes_every_kind() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let text = document.create_text("hi").unwrap();
     root.append_child(text.clone());
@@ -346,8 +346,8 @@ fn node_content_exposes_every_kind() {
 /// into the target, so the source can change in between without affecting the copy's consistency.
 #[test]
 fn copying_while_the_source_is_mutated_produces_consistent_copies() {
-    let source = Document::empty();
-    let target = Document::empty();
+    let source = Document::new();
+    let target = Document::new();
 
     let root = element(&source, "root");
     source.set_root(root.clone());

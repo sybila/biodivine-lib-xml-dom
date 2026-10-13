@@ -66,6 +66,7 @@ mod snapshot;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use crate::cancellation::CancellationCheck;
 use crate::error::{XmlError, XmlResult};
 use crate::interner::Interner;
 use crate::namespace::Namespace;
@@ -279,7 +280,7 @@ impl Arena {
 
     /// Interns everything inside `element` that is stored in the arena.
     ///
-    /// Attribute *values* are `Arc<str>` and are intentionally not deduplicated by value: they are
+    /// Attribute *values* are [`Text`](crate::xml_spec::Text) and are intentionally not deduplicated by value: they are
     /// frequently unique, so a per-document map of all values would be pure overhead. They are still
     /// shared whenever a node is cloned.
     fn intern_element(&mut self, element: ElementData) -> ElementData {
@@ -697,25 +698,31 @@ impl Arena {
     ///
     /// When `with_children` is `false` the copy contains no children (a shallow clone). The copy is
     /// detached and is not the document root. Shared `Arc` payloads ([`QualifiedName`],
-    /// [`Namespace`](crate::Namespace), `Arc<str>`) are reused as-is, which is what makes cloning
-    /// cheap.
+    /// [`Namespace`], [`Text`](crate::xml_spec::Text)) are reused as-is, which is what makes
+    /// cloning cheap.
     ///
     /// The traversal is iterative (see [`Snapshot`]), so a deeply nested document cannot overflow
-    /// the stack, and it honours cancellation: a trigger registered on this thread aborts the copy
-    /// with [`crate::XmlError::Cancelled`] instead of walking the whole subtree.
+    /// the stack. A deep snapshot honours cancellation: a trigger registered on this thread aborts
+    /// the copy with [`crate::XmlError::Cancelled`] instead of walking the whole subtree. A shallow
+    /// snapshot copies one node and is never cancelled.
     pub(crate) fn snapshot(
         &self,
         id: NodeId,
         with_children: bool,
     ) -> XmlResult<Snapshot> {
-        cancel_this::is_cancelled!()?;
+        let mut check = if with_children {
+            CancellationCheck::new()
+        } else {
+            CancellationCheck::disabled()
+        };
+        check.tick()?;
         let mut snapshot = Snapshot::default();
         snapshot.nodes.push(self.snapshot_payload(id));
         snapshot.children.push(Vec::new());
         let mut work: Vec<(NodeId, usize)> = vec![(id, 0)];
         if with_children {
             while let Some((source, index)) = work.pop() {
-                cancel_this::is_cancelled!()?;
+                check.tick()?;
                 for &child in self.children(source) {
                     let child_index = snapshot.nodes.len();
                     snapshot.nodes.push(self.snapshot_payload(child));
@@ -759,16 +766,39 @@ impl Arena {
     /// half-built subtree cannot be reclaimed by a collection in the middle of the loop; the caller
     /// is responsible for turning the returned id into a handle inside the same critical section.
     ///
+    /// The allocation pass consults `check`. When it is cancelled, the nodes it allocated so far are
+    /// freed again before the error is returned, so a cancelled rebuild leaves the arena as it was
+    /// (apart from capacity it may have grown and names it may have interned). The linking pass is
+    /// a cheap loop over the new nodes and always completes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::XmlError::Cancelled`] if `check` fires during the allocation pass.
+    ///
     /// # Panics
     ///
     /// Panics if the arena cannot hold `snapshot.nodes.len()` more nodes (see
     /// [`Arena::reserve_slots`]).
-    pub(crate) fn insert_snapshot(&mut self, snapshot: Snapshot) -> NodeId {
+    pub(crate) fn insert_snapshot(
+        &mut self,
+        snapshot: Snapshot,
+        check: &mut CancellationCheck,
+    ) -> XmlResult<NodeId> {
         let count = snapshot.nodes.len();
         self.reserve_slots(count);
         let live_before = self.live;
         let mut ids: Vec<NodeId> = vec![NodeId::from_index(0); count];
         for index in (0..count).rev() {
+            if let Err(error) = check.tick() {
+                // Nothing refers to the nodes allocated so far: they have no handle, no parent
+                // and no children yet, so they can be freed directly.
+                for &id in &ids[index + 1..] {
+                    self.slots[id.index()] = Slot::Free;
+                    self.free.push(id);
+                    self.live -= 1;
+                }
+                return Err(error);
+            }
             ids[index] = match &snapshot.nodes[index] {
                 SnapshotNode::Element {
                     name,
@@ -815,7 +845,7 @@ impl Arena {
                 self.slot_mut(child).parent = Some(ids[index]);
             }
         }
-        ids[snapshot.root]
+        Ok(ids[snapshot.root])
     }
 
     /// Creates a copy of the subtree rooted at `id` inside this same arena.
@@ -825,7 +855,12 @@ impl Arena {
         with_children: bool,
     ) -> XmlResult<NodeId> {
         let snapshot = self.snapshot(id, with_children)?;
-        Ok(self.insert_snapshot(snapshot))
+        let mut check = if with_children {
+            CancellationCheck::new()
+        } else {
+            CancellationCheck::disabled()
+        };
+        self.insert_snapshot(snapshot, &mut check)
     }
 
     /// The XML declaration stored for this document, if any.
@@ -842,7 +877,7 @@ impl Arena {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::xml_spec::nc_name;
+    use crate::xml_spec::{Text, nc_name};
 
     /// Creates a detached element with no children.
     fn element(arena: &mut Arena, name: &str) -> NodeId {
@@ -1137,7 +1172,7 @@ mod tests {
         arena.append(parent, child).unwrap();
         arena.element_mut(child).attributes.insert(
             QualifiedName::without_namespace("a").unwrap(),
-            Arc::from("v"),
+            Text::try_from("v").unwrap(),
         );
 
         let shallow = arena.copy_within(parent, false).unwrap();

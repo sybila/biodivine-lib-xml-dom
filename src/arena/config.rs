@@ -156,14 +156,15 @@ pub(crate) fn free_fraction(free: usize, capacity: usize) -> f64 {
 /// ```rust
 /// use biodivine_lib_xml_dom::Document;
 ///
-/// let document = Document::empty();
+/// let document = Document::new();
 /// let stats = document.collect_garbage().unwrap();
 /// assert_eq!(stats.collected, 0);
 /// assert_eq!(stats.live, 0);
 /// assert_eq!(stats.free, stats.capacity);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[must_use]
+#[non_exhaustive]
 pub struct GcStats {
     /// The capacity of the arena after the collection, in slots.
     pub capacity: usize,

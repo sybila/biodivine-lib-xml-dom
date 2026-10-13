@@ -10,12 +10,17 @@ repository.workspace = true
 readme = "README.md"
 keywords = ["xml", "dom", "namespace", "parser", "serialization"]
 categories = ["parser-implementations", "text-processing"]
-# Keep the published crate to the files the build actually needs: the rule summaries and the design
-# documents are `include_str!`-ed, but the bundled W3C specification HTML, the book sources and the
-# verification scripts are not, so they stay out of the crate archive.
+# Keep the published crate to the files the build needs: the rule summaries, three design documents
+# and the model diagram are `include_str!`-ed; the W3C specification HTML, the book sources and the
+# development tooling are not.
 exclude = [
+    ".rustfmt.toml",
+    "AGENTS.md",
+    "clippy.toml",
     "specification/*.html",
     "docs/book",
+    "docs/design/build.md",
+    "docs/assets/layers.svg",
     "docs/*.py",
     "docs/build_docs.sh",
     "docs/requirements.txt",
@@ -25,8 +30,6 @@ exclude = [
 ]
 
 # The Python bindings live in a separate crate, so the core crate contains no PyO3 code at all.
-# The core crate stays the workspace *root package*, so `src/` and every existing path and test are
-# untouched by the split.
 [workspace]
 members = ["biodivine-lib-xml-dom-py-sys"]
 
@@ -34,9 +37,9 @@ members = ["biodivine-lib-xml-dom-py-sys"]
 # reads its version from the built extension (`biodivine_lib_xml_dom.__version__`) and maturin takes
 # the wheel version from `[package] version` via `dynamic = ["version"]`.
 [workspace.package]
-version = "0.2.0"
-# Verified, not aspirational: `cargo +1.88.0 test --workspace` is part of `make verify`, and the CI
-# workflow's `min-rust-version` matches this value.
+version = "0.1.0"
+# `cargo +1.88.0 test --workspace` is part of `make verify`, and the CI workflow's
+# `min-rust-version` matches this value.
 rust-version = "1.88"
 license = "MIT"
 authors = ["Sybila"]
@@ -54,7 +57,7 @@ uninlined_format_args = "warn"
 # sign, and it hides the fact that the conversion may not be representable. The four lints below
 # deny exactly those casts, and `clippy::checked_conversions` additionally reports a manual range
 # check that a `TryFrom` expresses better. Where a conversion is genuinely infallible it is written
-# as `From`/`u32::try_from(..)` with an explicit expectation, which documents why it cannot fail.
+# as `From`/`u32::try_from(...)` with an explicit expectation, which documents why it cannot fail.
 cast_possible_truncation = "warn"
 cast_possible_wrap = "warn"
 cast_sign_loss = "warn"

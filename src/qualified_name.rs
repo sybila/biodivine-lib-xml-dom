@@ -27,7 +27,7 @@ use std::sync::{Arc, OnceLock};
 /// # Equality and Ordering
 ///
 /// Two [`QualifiedName`] objects are considered equal if their local names are equal and their
-/// namespaces are semantically equal (i.e., their URIs are equal, see [`Namespace::is_equal_ns`]).
+/// namespaces are semantically equal (i.e., their URIs are equal, see [`Namespace::has_same_uri`]).
 /// Ordering is lexicographic by namespace URI (names with no namespace are placed first),
 /// then by local name.
 ///
@@ -146,72 +146,6 @@ impl QualifiedName {
         Arc::ptr_eq(&self.data, &other.data)
     }
 
-    /// Resolve a qualified name for an **element** in the context of an [`Element`] and its
-    /// namespace declarations.
-    ///
-    /// The namespace prefix must be declared on the element or one of its parents, unless it
-    /// is the predefined `xml` prefix which is automatically bound to
-    /// `http://www.w3.org/XML/1998/namespace`.
-    ///
-    /// Unprefixed element names are bound to the default namespace if one is in scope.
-    /// For attribute resolution (where the default namespace does not apply), use
-    /// [`QualifiedName::resolve_attribute`].
-    ///
-    /// # Errors
-    /// Returns [`XmlError::InvalidName`] if the QName is invalid,
-    /// [`XmlError::UndeclaredPrefix`] if a prefix is not declared, or
-    /// [`XmlError::ReservedPrefix`] if the reserved `xmlns` prefix is used.
-    ///
-    /// # Examples
-    /// ```rust
-    /// use biodivine_lib_xml_dom::{Document, QualifiedName, Namespace};
-    /// let doc = Document::empty();
-    /// let el = doc.create_element(QualifiedName::without_namespace("foo").unwrap());
-    /// el.declare_namespace(Namespace::without_prefix("http://default.com").unwrap());
-    /// let qn = QualifiedName::resolve_element(&el, "bar").unwrap();
-    /// assert_eq!(qn.local_name(), "bar");
-    /// assert_eq!(qn.namespace().unwrap().uri(), "http://default.com");
-    /// ```
-    pub fn resolve_element(element: &Element, qualified_name: &str) -> XmlResult<Self> {
-        Self::resolve_qname(element, qualified_name, true)
-    }
-
-    /// Resolve a qualified name for an **attribute** in the context of an [`Element`] and its
-    /// namespace declarations.
-    ///
-    /// The namespace prefix must be declared on the element or one of its parents, unless it
-    /// is the predefined `xml` prefix which is automatically bound to
-    /// `http://www.w3.org/XML/1998/namespace`.
-    ///
-    /// Per the XML Namespaces specification (§6.2), default namespace declarations do not
-    /// apply to attribute names. An unprefixed attribute always has no namespace, regardless
-    /// of any default namespace declaration in scope.
-    /// For element resolution (where the default namespace does apply), use
-    /// [`QualifiedName::resolve_element`].
-    ///
-    /// # Errors
-    /// Returns [`XmlError::InvalidName`] if the QName is invalid,
-    /// [`XmlError::UndeclaredPrefix`] if a prefix is not declared, or
-    /// [`XmlError::ReservedPrefix`] if the reserved `xmlns` prefix is used.
-    ///
-    /// # Examples
-    /// ```rust
-    /// use biodivine_lib_xml_dom::{Document, QualifiedName, Namespace};
-    /// let doc = Document::empty();
-    /// let el = doc.create_element(QualifiedName::without_namespace("foo").unwrap());
-    /// el.declare_namespace(Namespace::without_prefix("http://default.com").unwrap());
-    /// // Unprefixed attributes ignore the default namespace
-    /// let qn = QualifiedName::resolve_attribute(&el, "bar").unwrap();
-    /// assert_eq!(qn.local_name(), "bar");
-    /// assert!(qn.namespace().is_none());
-    /// ```
-    pub fn resolve_attribute(
-        element: &Element,
-        qualified_name: &str,
-    ) -> XmlResult<Self> {
-        Self::resolve_qname(element, qualified_name, false)
-    }
-
     /// Returns the cached namespace for the predefined `xml` prefix.
     fn xml_namespace() -> &'static Namespace {
         static XML_NS: OnceLock<Namespace> = OnceLock::new();
@@ -226,13 +160,17 @@ impl QualifiedName {
         Ok(Self::new(local_name, Some(Self::xml_namespace().clone())))
     }
 
-    /// Internal resolver shared by [`QualifiedName::resolve_element`] and
-    /// [`QualifiedName::resolve_attribute`].
+    /// Resolves a name written as a string against the scope of `element`; the implementation of
+    /// [`Element::resolve_element_name`] and [`Element::resolve_attribute_name`].
     ///
     /// When `apply_default_namespace` is `true`, unprefixed names are bound to the default
     /// namespace if one is in scope (element behavior). When `false`, unprefixed names
     /// always have no namespace (attribute behavior).
-    fn resolve_qname(
+    ///
+    /// # Errors
+    ///
+    /// As [`Element::resolve_element_name`].
+    pub(crate) fn resolve_with_element(
         element: &Element,
         qualified_name: &str,
         apply_default_namespace: bool,
@@ -240,8 +178,8 @@ impl QualifiedName {
         Self::resolve_with_lookup(
             qualified_name,
             apply_default_namespace,
-            |prefix| element.get_namespace(Some(prefix)),
-            || element.get_namespace(None),
+            |prefix| element.lookup_namespace(Some(prefix)),
+            || element.lookup_namespace(None),
         )
     }
 
@@ -314,25 +252,14 @@ impl QualifiedName {
     ///
     /// Unprefixed names are bound to the default namespace (`None` key) if present.
     /// The `xml` prefix is automatically recognized and bound to its reserved URI.
-    /// For attribute resolution, use [`QualifiedName::resolve_attribute_with_namespace_map`].
+    /// For attribute resolution, use `resolve_attribute_with_namespace_map`.
     ///
     /// # Errors
     /// Returns [`XmlError::InvalidName`] if the QName is invalid,
     /// [`XmlError::UndeclaredPrefix`] if a prefix is not found in the map, or
     /// [`XmlError::ReservedPrefix`] if the reserved `xmlns` prefix is used.
     ///
-    /// # Examples
-    /// ```rust
-    /// use std::collections::HashMap;
-    /// use biodivine_lib_xml_dom::QualifiedName;
-    /// use biodivine_lib_xml_dom::xml_spec::NCName;
-    /// let mut ns_map: HashMap<Option<NCName>, String> = HashMap::new();
-    /// ns_map.insert(Some("ex".try_into().unwrap()), "http://example.com".to_string());
-    /// let qn = QualifiedName::resolve_element_with_namespace_map("ex:foo", &ns_map).unwrap();
-    /// assert_eq!(qn.local_name(), "foo");
-    /// assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
-    /// ```
-    pub fn resolve_element_with_namespace_map(
+    pub(crate) fn resolve_element_with_namespace_map(
         qualified_name: &str,
         ns_map: &HashMap<Option<NCName>, String>,
     ) -> XmlResult<Self> {
@@ -343,26 +270,14 @@ impl QualifiedName {
     ///
     /// Unprefixed names always have no namespace, per XML Namespaces §6.2.
     /// The `xml` prefix is automatically recognized and bound to its reserved URI.
-    /// For element resolution, use [`QualifiedName::resolve_element_with_namespace_map`].
+    /// For element resolution, use `resolve_element_with_namespace_map`.
     ///
     /// # Errors
     /// Returns [`XmlError::InvalidName`] if the QName is invalid,
     /// [`XmlError::UndeclaredPrefix`] if a prefix is not found in the map, or
     /// [`XmlError::ReservedPrefix`] if the reserved `xmlns` prefix is used.
     ///
-    /// # Examples
-    /// ```rust
-    /// use std::collections::HashMap;
-    /// use biodivine_lib_xml_dom::QualifiedName;
-    /// use biodivine_lib_xml_dom::xml_spec::NCName;
-    /// let mut ns_map: HashMap<Option<NCName>, String> = HashMap::new();
-    /// ns_map.insert(None, "http://default.com".to_string());
-    /// // Unprefixed attributes ignore the default namespace
-    /// let qn = QualifiedName::resolve_attribute_with_namespace_map("foo", &ns_map).unwrap();
-    /// assert_eq!(qn.local_name(), "foo");
-    /// assert!(qn.namespace().is_none());
-    /// ```
-    pub fn resolve_attribute_with_namespace_map(
+    pub(crate) fn resolve_attribute_with_namespace_map(
         qualified_name: &str,
         ns_map: &HashMap<Option<NCName>, String>,
     ) -> XmlResult<Self> {
@@ -384,7 +299,7 @@ impl PartialEq for QualifiedName {
     fn eq(&self, other: &Self) -> bool {
         self.data.local_name == other.data.local_name
             && match (&self.data.namespace, &other.data.namespace) {
-                (Some(a), Some(b)) => a.is_equal_ns(b),
+                (Some(a), Some(b)) => a.has_same_uri(b),
                 (None, None) => true,
                 _ => false,
             }
@@ -497,20 +412,20 @@ mod tests {
 
     #[test]
     fn test_resolve_no_prefix() {
-        let doc = Document::empty();
+        let doc = Document::new();
         let el = doc.create_element(q_name("foo").unwrap());
         el.declare_namespace(Namespace::without_prefix("http://default.com").unwrap());
-        let qn = QualifiedName::resolve_element(&el, "bar").unwrap();
+        let qn = el.resolve_element_name("bar").unwrap();
         assert_eq!(qn.local_name(), "bar");
         assert_eq!(qn.namespace().unwrap().uri(), "http://default.com");
     }
 
     #[test]
     fn test_resolve_with_prefix() {
-        let doc = Document::empty();
+        let doc = Document::new();
         let el = doc.create_element(q_name("foo").unwrap());
         el.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
-        let qn = QualifiedName::resolve_element(&el, "ex:bar").unwrap();
+        let qn = el.resolve_element_name("ex:bar").unwrap();
         assert_eq!(qn.local_name(), "bar");
         assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
         assert_eq!(qn.namespace().unwrap().prefix_str(), Some("ex"));
@@ -519,7 +434,7 @@ mod tests {
     #[test]
     fn test_resolve_with_parent_ns() {
         // Test that a namespace declared on a parent element is used for resolution.
-        let doc = Document::empty();
+        let doc = Document::new();
         let parent = doc.create_element(q_name("parent").unwrap());
         parent
             .declare_namespace(Namespace::prefixed("http://parent.com", "ex").unwrap());
@@ -527,25 +442,25 @@ mod tests {
         // Attach child to parent
         parent.append_child(child.clone());
         // Now resolve a qualified name on the child, should use parent's namespace
-        let qn = QualifiedName::resolve_element(&child, "ex:bar").unwrap();
+        let qn = child.resolve_element_name("ex:bar").unwrap();
         assert_eq!(qn.local_name(), "bar");
         assert_eq!(qn.namespace().unwrap().uri(), "http://parent.com");
     }
 
     #[test]
     fn test_resolve_undefined_prefix() {
-        let doc = Document::empty();
+        let doc = Document::new();
         let el = doc.create_element(q_name("foo").unwrap());
-        let err = QualifiedName::resolve_element(&el, "ex:bar").unwrap_err();
+        let err = el.resolve_element_name("ex:bar").unwrap_err();
         assert!(matches!(err, XmlError::UndeclaredPrefix(_)));
     }
 
     #[test]
     fn test_resolve_xml_prefix_auto() {
         // xml prefix should resolve without being declared
-        let doc = Document::empty();
+        let doc = Document::new();
         let el = doc.create_element(q_name("foo").unwrap());
-        let qn = QualifiedName::resolve_element(&el, "xml:lang").unwrap();
+        let qn = el.resolve_element_name("xml:lang").unwrap();
         assert_eq!(qn.local_name(), "lang");
         assert_eq!(
             qn.namespace().unwrap().uri(),
@@ -556,9 +471,9 @@ mod tests {
     #[test]
     fn test_resolve_xmlns_prefix_rejected() {
         // xmlns prefix should be rejected
-        let doc = Document::empty();
+        let doc = Document::new();
         let el = doc.create_element(q_name("foo").unwrap());
-        let err = QualifiedName::resolve_element(&el, "xmlns:bar").unwrap_err();
+        let err = el.resolve_element_name("xmlns:bar").unwrap_err();
         assert!(matches!(err, XmlError::ReservedPrefix(_)));
     }
 
@@ -573,10 +488,10 @@ mod tests {
     #[test]
     fn test_resolve_attribute_ignores_default_ns() {
         // Unprefixed attributes should not inherit the default namespace
-        let doc = Document::empty();
+        let doc = Document::new();
         let el = doc.create_element(q_name("foo").unwrap());
         el.declare_namespace(Namespace::without_prefix("http://default.com").unwrap());
-        let qn = QualifiedName::resolve_attribute(&el, "bar").unwrap();
+        let qn = el.resolve_attribute_name("bar").unwrap();
         assert_eq!(qn.local_name(), "bar");
         assert!(qn.namespace().is_none());
     }
@@ -584,10 +499,10 @@ mod tests {
     #[test]
     fn test_resolve_attribute_with_prefix() {
         // Prefixed attributes should resolve normally
-        let doc = Document::empty();
+        let doc = Document::new();
         let el = doc.create_element(q_name("foo").unwrap());
         el.declare_namespace(Namespace::prefixed("http://example.com", "ex").unwrap());
-        let qn = QualifiedName::resolve_attribute(&el, "ex:bar").unwrap();
+        let qn = el.resolve_attribute_name("ex:bar").unwrap();
         assert_eq!(qn.local_name(), "bar");
         assert_eq!(qn.namespace().unwrap().uri(), "http://example.com");
     }
@@ -595,9 +510,9 @@ mod tests {
     #[test]
     fn test_resolve_attribute_xml_prefix_auto() {
         // xml prefix should resolve without being declared for attributes too
-        let doc = Document::empty();
+        let doc = Document::new();
         let el = doc.create_element(q_name("foo").unwrap());
-        let qn = QualifiedName::resolve_attribute(&el, "xml:lang").unwrap();
+        let qn = el.resolve_attribute_name("xml:lang").unwrap();
         assert_eq!(qn.local_name(), "lang");
         assert_eq!(
             qn.namespace().unwrap().uri(),

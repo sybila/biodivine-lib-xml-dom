@@ -13,14 +13,12 @@ touch two documents, which snapshot one document before locking the other. That 
 deadlock argument: there is only one lock, and it is never re-entered or held while another is
 taken.
 
-In debug builds a re-entrancy guard turns that claim into a panic rather than a hang if it is ever
+In debug builds a re-entrancy guard checks this and panics, rather than hanging, if it is ever
 violated.
 
 ## Sharing a document
 
 Handles are cheap and thread-safe: pass the document, or a node, to another thread and work there.
-Reads run concurrently with each other; a read never sees a half-finished edit, because each
-operation is a single critical section.
 
 ::::{tab-set}
 :::{tab-item} Rust
@@ -72,12 +70,41 @@ one critical section, so a read never sees a half-finished edit.
 ## The GIL, for Python users
 
 Python's global interpreter lock is released around the operations that hold the document lock for a
-while — parsing, serializing, validating and cross-document copies — so one thread parsing a large
-document does not freeze the others. Everything else holds the GIL, because those operations are a
-lock acquisition plus a small read.
+while (parsing, serializing, validating, deep copies and garbage collection), so one thread parsing a
+large document does not freeze the others. Everything else holds the GIL, because those operations
+are a lock acquisition plus a small read.
 
 Both facts are checked by tests: the Rust suite has a multi-threaded stress test with a watchdog,
 and the Python suite shares one document between four threads with a join timeout.
+
+## Stopping a long operation
+
+The same long operations can be stopped part-way. In Rust they consult the
+[`cancel_this`](https://crates.io/crates/cancel-this) triggers registered on the current thread and
+return `XmlError::Cancelled`; in Python, Ctrl+C (or any signal handler that raises) interrupts them
+on the main thread and the handler's exception is raised. Either way the document is left as it was;
+only a cancelled write to a file or writer leaves the part of the output written so far.
+
+::::{tab-set}
+:::{tab-item} Rust
+:sync: rust
+```{literalinclude} ../../examples/book_threads.rs
+:language: rust
+:start-after: ANCHOR: cancel
+:end-before: ANCHOR_END: cancel
+:dedent:
+```
+:::
+:::{tab-item} Python
+:sync: python
+```{literalinclude} examples/python/threads.py
+:language: python
+:start-after: ANCHOR: cancel
+:end-before: ANCHOR_END: cancel
+:dedent:
+```
+:::
+::::
 
 ## What "thread-safe" does not mean
 

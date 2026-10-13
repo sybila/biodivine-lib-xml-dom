@@ -16,6 +16,7 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
+use crate::cancellation::CancellationCheck;
 use crate::document::Document;
 use crate::element::Element;
 use crate::error::{XmlError, XmlResult};
@@ -27,6 +28,9 @@ use crate::xml_spec::{CData, Comment, PiData, PiTarget, Text};
 ///
 /// This is the cheap discriminant counterpart of [`NodeContent`]: it is `Copy` and does not clone
 /// anything.
+///
+/// Unlike the error and option types, this enum is exhaustive: the node kinds are fixed by the XML
+/// data model, so a `match` over them needs no wildcard arm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum NodeKind {
     /// An element node.
@@ -42,6 +46,8 @@ pub enum NodeKind {
 }
 
 /// The payload of a node, obtained with [`Node::content`].
+///
+/// Exhaustive for the same reason as [`NodeKind`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NodeContent {
     /// An element node, as a strongly typed [`Element`] handle.
@@ -70,7 +76,7 @@ pub enum NodeContent {
 /// ```rust
 /// use biodivine_lib_xml_dom::{Document, QualifiedName};
 ///
-/// let document = Document::empty();
+/// let document = Document::new();
 /// let parent = document.create_element(QualifiedName::without_namespace("parent").unwrap());
 /// let child = document.create_element(QualifiedName::without_namespace("child").unwrap());
 /// document.set_root(parent.clone());
@@ -236,11 +242,11 @@ impl Node {
     /// Whether this node is a strict ancestor of `other`.
     ///
     /// Always `false` if the two nodes belong to different documents.
-    pub fn is_ancestor(&self, other: &Node) -> bool {
+    pub fn is_ancestor_of(&self, other: &Node) -> bool {
         if !self.document.ptr_eq(&other.document) {
             return false;
         }
-        self.document.read_arena("Node::is_ancestor", |arena| {
+        self.document.read_arena("Node::is_ancestor_of", |arena| {
             arena.is_ancestor(self.id, other.id)
         })
     }
@@ -348,16 +354,6 @@ impl Node {
     pub fn detach(&self) -> Option<Node> {
         self.document
             .write_one("Node::detach", |arena| arena.detach(self.id))
-    }
-
-    /// Detaches this node and returns the node itself, so that it can be re-attached in one
-    /// expression.
-    ///
-    /// This is [`Node::detach`] with a different, chainable result. See [`Node::detach`] for the
-    /// semantics.
-    pub fn remove(&self) -> Node {
-        self.detach();
-        self.clone()
     }
 
     /// Appends `child` as the last child of this node.
@@ -572,14 +568,15 @@ impl Node {
     /// Creates a detached, shallow copy of this node in the same document.
     ///
     /// The copy has the same name/attributes/namespace declarations (elements) or the same
-    /// content (other kinds), but no children. `Arc`-shared payloads are reused, so this is cheap.
+    /// content (other kinds), but no children. The payload is shared rather than copied, so this
+    /// is cheap, and it is never cancelled.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
-    /// while the copy is being made.
-    pub fn shallow_clone(&self) -> XmlResult<Node> {
+    /// Panics if the copy would take its document past [`MAX_NODES`](crate::MAX_NODES) nodes.
+    pub fn shallow_clone(&self) -> Node {
         self.copy_within(false)
+            .expect("a shallow copy is never cancelled")
     }
 
     /// Creates a detached, deep copy of this subtree in the same document.
@@ -587,7 +584,11 @@ impl Node {
     /// # Errors
     ///
     /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
-    /// while the subtree is being copied.
+    /// while the subtree is being copied. A cancelled copy creates nothing.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the copy would take its document past [`MAX_NODES`](crate::MAX_NODES) nodes.
     pub fn deep_clone(&self) -> XmlResult<Node> {
         self.copy_within(true)
     }
@@ -597,12 +598,12 @@ impl Node {
     /// Target and source may be the same document, in which case this behaves exactly like
     /// [`Node::shallow_clone`]. No namespace declarations are added or removed.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
-    /// while the copy is being made.
-    pub fn shallow_clone_into(&self, target: &Document) -> XmlResult<Node> {
+    /// Panics if the copy would take its document past [`MAX_NODES`](crate::MAX_NODES) nodes.
+    pub fn shallow_clone_into(&self, target: &Document) -> Node {
         self.copy_into(target, false)
+            .expect("a shallow copy is never cancelled")
     }
 
     /// Creates a detached, deep copy of this subtree in `target`.
@@ -622,13 +623,18 @@ impl Node {
     /// because of lock contention, and (b) concurrent mutations of the source after the snapshot
     /// has been taken are simply not part of the copy — they can never corrupt the target.
     ///
-    /// Names and namespaces of the copy are interned into `target`, so the copy shares no
-    /// arena-internal structure with the source.
+    /// Names and namespaces of the copy are interned into `target`, so the copy is independent of
+    /// the source document; only immutable payloads (names, text) may still share an allocation
+    /// with it.
     ///
     /// # Errors
     ///
     /// Returns [`XmlError::Cancelled`] if a cancellation trigger registered on this thread fires
-    /// while the subtree is being copied.
+    /// while the subtree is being copied. A cancelled copy creates nothing in `target`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the copy would take its document past [`MAX_NODES`](crate::MAX_NODES) nodes.
     pub fn deep_clone_into(&self, target: &Document) -> XmlResult<Node> {
         self.copy_into(target, true)
     }
@@ -653,12 +659,14 @@ impl Node {
                 arena.snapshot(self.id, with_children)
             })?;
         // ... release it, and only then take the target lock.
-        let node = target
-            .write_one("Node::copy_into (insert)", |arena| {
-                Some(arena.insert_snapshot(snapshot))
-            })
-            .expect("the copy was just created");
-        Ok(node)
+        let mut check = if with_children {
+            CancellationCheck::new()
+        } else {
+            CancellationCheck::disabled()
+        };
+        target.write_one_result("Node::copy_into (insert)", |arena| {
+            arena.insert_snapshot(snapshot, &mut check)
+        })
     }
 }
 
@@ -675,26 +683,13 @@ impl fmt::Debug for Node {
 }
 
 impl fmt::Display for Node {
-    /// Renders this node as an XML fragment.
+    /// Renders this node as an XML fragment, exactly as the serializer writes it inside a
+    /// document: elements with their subtree, text escaped, and comments, CDATA sections and
+    /// processing instructions with their delimiters. Rendering is never cancelled.
     ///
-    /// Elements are serialized with the crate serializer; comments, CDATA sections and processing
-    /// instructions are written with their delimiters. Text is written *verbatim* and is not
-    /// escaped, so a text node containing `&` or `<` does not form well-formed XML — use
-    /// [`Document::write_string`] to serialize a whole document.
+    /// Use [`Node::text`] for the unescaped content of a text node.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.content() {
-            NodeContent::Element(element) => write!(f, "{element}"),
-            NodeContent::Text(text) => f.write_str(text.as_str()),
-            NodeContent::Comment(comment) => write!(f, "<!--{}-->", comment.as_str()),
-            NodeContent::CData(cdata) => write!(f, "<![CDATA[{}]]>", cdata.as_str()),
-            NodeContent::ProcessingInstruction(target, data) => {
-                if data.as_str().is_empty() {
-                    write!(f, "<?{}?>", target.as_str())
-                } else {
-                    write!(f, "<?{} {}?>", target.as_str(), data.as_str())
-                }
-            }
-        }
+        f.write_str(&crate::io::write_node_to_string(self))
     }
 }
 
@@ -742,10 +737,10 @@ mod tests {
     /// second half of this test checks: the source is dropped before the copy is used.
     #[test]
     fn re_interns_names_in_the_target_document() {
-        let target = Document::empty();
+        let target = Document::new();
 
         let (copy, source_name, source_namespace) = {
-            let source = Document::empty();
+            let source = Document::new();
             let ex = crate::Namespace::prefixed("http://example.com", "ex").unwrap();
             let name = QualifiedName::with_namespace("item", &ex).unwrap();
 
@@ -795,7 +790,7 @@ mod tests {
     /// document's interner keeps exactly one canonical allocation per distinct value.
     #[test]
     fn repeated_names_share_one_allocation() {
-        let document = Document::empty();
+        let document = Document::new();
         let first =
             document.create_element(QualifiedName::without_namespace("item").unwrap());
         for _ in 0..1000 {
@@ -813,7 +808,7 @@ mod tests {
     /// Interned values are value-equal, so nothing in the API depends on which allocation won.
     #[test]
     fn interning_does_not_change_equality() {
-        let document = Document::empty();
+        let document = Document::new();
         let first =
             document.create_element(QualifiedName::without_namespace("x").unwrap());
         let second =

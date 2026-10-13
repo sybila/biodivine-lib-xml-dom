@@ -1,22 +1,19 @@
 # Design notes
 
 This chapter is a pointer rather than a tutorial: the design decisions, the alternatives that were
-rejected and the reasoning live in the repository's design documents, which are kept up to date as
-the implementation changes.
-
-The reasoning lives in the crate documentation, in the `documentation` module, next to the API it
-describes:
+rejected and the reasoning live in the crate documentation, in the `documentation` module, next to
+the API it describes:
 
 | page | what is in it |
 | --- | --- |
-| `documentation::architecture` | the model and its trade-offs, the concurrency and panic-safety arguments, the error model, the namespace contract, module layout and the testing strategy |
-| `documentation::bindings` | the item-by-item mapping of the Python bindings: what is mirrored, what is deliberately not and why, the error mapping and the GIL policy |
+| `documentation::architecture` | the model and its trade-offs, the concurrency and cancellation arguments, the error model, the namespace contract, module layout and the testing strategy |
+| `documentation::bindings` | the item-by-item mapping of the Python bindings: what is mirrored, what is deliberately not and why, the error mapping, the GIL policy and how signals interrupt long operations |
 | `documentation::rule_coverage` | every XML rule, the layer that acts on it, and what is deliberately out of scope |
-| `documentation::build` | how to set the project up, run the checks and build the documentation |
 | `xml_spec::rule_set` | one module per XML rule, documented with the rule summary itself |
 
 Run `cargo doc --open` in the repository and follow those links; the same pages are the design
-documents of the repository.
+documents in `docs/design/`, next to `build.md`, which explains how to set the project up and run the
+checks.
 
 Two decisions are worth summarising here because they shape everything a user sees:
 
@@ -28,8 +25,8 @@ held until a collection reclaims it — a documented trade-off, not an oversight
 
 **"Parse, don't validate" at the boundaries, one validation pass for the whole document.** Names,
 text and namespace URIs cannot be constructed invalid, so the type system carries the local
-guarantees; the whole-document properties (namespace scope, unique ids, structural invariants) are
-collected by `validate` in one pass, reporting every problem at once. Edits stay silent so they stay
+guarantees; the whole-document properties (namespace scope, unique ids, the value shapes of
+`xml:lang` and `xml:space`) are collected by `validate` in one pass, reporting every problem at once. Edits stay silent so they stay
 fast and predictable.
 
 The XML-specification logic itself lives in the `xml_spec` module, one function per rule, annotated

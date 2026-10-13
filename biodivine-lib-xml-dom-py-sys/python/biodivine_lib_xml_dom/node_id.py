@@ -1,10 +1,11 @@
-"""Pythonic wrapper for a node id."""
+"""The identifier of a node's arena slot."""
 
 from __future__ import annotations
 
-from typing import Union
-
 from . import _sys
+
+#: The largest slot number a document can use (ids are unsigned 32-bit numbers).
+_MAX_INDEX = 2**32 - 1
 
 
 class NodeId:
@@ -18,21 +19,24 @@ class NodeId:
     An id can also be built from an integer, mirroring Rust's ``NodeId::from(u32)``::
 
         document.node(NodeId(7))   # the node in slot 7, if there is one
+
+    Raises ``ValueError`` for an integer outside ``0 <= index < 2**32``.
     """
 
-    __slots__ = ("_id",)
+    __slots__ = ("_index",)
 
-    def __init__(self, id: Union[int, "_sys.NodeId"]) -> None:
-        if isinstance(id, _sys.NodeId):
-            self._id = id
-        else:
-            self._id = _sys.NodeId(int(id))
+    def __init__(self, index: int) -> None:
+        index = int(index)
+        if not 0 <= index <= _MAX_INDEX:
+            raise ValueError(f"a node id is between 0 and {_MAX_INDEX}, got {index}")
+        self._index = index
 
     @classmethod
     def _wrap(cls, id: "_sys.NodeId") -> "NodeId":
-        wrapper = cls.__new__(cls)
-        wrapper._id = id
-        return wrapper
+        return cls(id.index())
+
+    def _unwrap(self) -> "_sys.NodeId":
+        return _sys.NodeId(self._index)
 
     @property
     def index(self) -> int:
@@ -41,24 +45,24 @@ class NodeId:
         Useful for logging and for round-tripping through :class:`NodeId`; it does not by itself
         guarantee that the slot still holds the same node.
         """
-        return self._id.index()
+        return self._index
 
     def __index__(self) -> int:
-        return self.index
+        return self._index
 
     def __int__(self) -> int:
-        return self.index
+        return self._index
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, NodeId):
             return NotImplemented
-        return self._id == other._id
+        return self._index == other._index
 
     def __hash__(self) -> int:
-        return hash(self._id)
+        return hash(self._index)
 
     def __str__(self) -> str:
-        return str(self.index)
+        return str(self._index)
 
     def __repr__(self) -> str:
-        return f"NodeId({self.index})"
+        return f"NodeId({self._index})"

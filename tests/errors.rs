@@ -106,57 +106,36 @@ fn qualified_name_construction_errors() {
 
 #[test]
 fn qualified_name_resolution_errors() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = bare(&document);
 
     assert_variant(
-        "QualifiedName::resolve_element(&root",
-        QualifiedName::resolve_element(&root, "nope:item"),
+        "root.resolve_element_name(",
+        root.resolve_element_name("nope:item"),
         "UndeclaredPrefix",
         |error| matches!(error, XmlError::UndeclaredPrefix(prefix) if prefix == "nope"),
     );
     assert_variant(
-        "QualifiedName::resolve_attribute(&root",
-        QualifiedName::resolve_attribute(&root, "nope:item"),
+        "root.resolve_attribute_name(",
+        root.resolve_attribute_name("nope:item"),
         "UndeclaredPrefix",
         |error| matches!(error, XmlError::UndeclaredPrefix(_)),
     );
     assert_variant(
-        "QualifiedName::resolve_element(&root",
-        QualifiedName::resolve_element(&root, "xmlns:item"),
+        "root.resolve_element_name(",
+        root.resolve_element_name("xmlns:item"),
         "ReservedPrefix",
         |error| matches!(error, XmlError::ReservedPrefix(_)),
     );
     assert_variant(
-        "QualifiedName::resolve_element(&root",
-        QualifiedName::resolve_element(&root, "a:b:c"),
+        "root.resolve_element_name(",
+        root.resolve_element_name("a:b:c"),
         "InvalidName",
         |error| matches!(error, XmlError::InvalidName(_)),
     );
     assert_variant(
-        "QualifiedName::resolve_element(&root",
-        QualifiedName::resolve_element(&root, "1bad"),
-        "InvalidName",
-        |error| matches!(error, XmlError::InvalidName(_)),
-    );
-
-    // The map-based helpers report the same variants.
-    let empty = std::collections::HashMap::new();
-    assert_variant(
-        "QualifiedName::resolve_element_with_namespace_map('nope:item",
-        QualifiedName::resolve_element_with_namespace_map("nope:item", &empty),
-        "UndeclaredPrefix",
-        |error| matches!(error, XmlError::UndeclaredPrefix(_)),
-    );
-    assert_variant(
-        "QualifiedName::resolve_attribute_with_namespace_map('xmlns:i",
-        QualifiedName::resolve_attribute_with_namespace_map("xmlns:item", &empty),
-        "ReservedPrefix",
-        |error| matches!(error, XmlError::ReservedPrefix(_)),
-    );
-    assert_variant(
-        "QualifiedName::resolve_element_with_namespace_map('a:b:c'",
-        QualifiedName::resolve_element_with_namespace_map("a:b:c", &empty),
+        "root.resolve_element_name(",
+        root.resolve_element_name("1bad"),
         "InvalidName",
         |error| matches!(error, XmlError::InvalidName(_)),
     );
@@ -168,7 +147,7 @@ fn qualified_name_resolution_errors() {
 
 #[test]
 fn node_construction_errors() {
-    let document = Document::empty();
+    let document = Document::new();
 
     assert_variant(
         "document.create_text('bad \u{1}')",
@@ -206,8 +185,8 @@ fn node_construction_errors() {
 
 #[test]
 fn set_root_errors() {
-    let first = Document::empty();
-    let second = Document::empty();
+    let first = Document::new();
+    let second = Document::new();
     let foreign = element(&second, "foreign");
     assert_variant(
         "first.set_root_checked(foreign)",
@@ -234,7 +213,7 @@ fn set_root_errors() {
 
 #[test]
 fn element_errors() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
 
     assert_variant(
@@ -259,11 +238,11 @@ fn element_errors() {
         |error| matches!(error, XmlError::InvalidNamespace(_)),
     );
     // The original binding is untouched.
-    assert_eq!(root.get_namespace(Some(&nc_name("ex"))), Some(ex));
+    assert_eq!(root.lookup_namespace(Some(&nc_name("ex"))), Some(ex));
 
     assert_variant(
-        "root.resolve_qualified_name('nope:item')",
-        root.resolve_qualified_name("nope:item"),
+        "root.resolve_element_name('nope:item')",
+        root.resolve_element_name("nope:item"),
         "UndeclaredPrefix",
         |error| matches!(error, XmlError::UndeclaredPrefix(_)),
     );
@@ -281,8 +260,8 @@ fn element_errors() {
 
 #[test]
 fn append_child_errors() {
-    let first = Document::empty();
-    let second = Document::empty();
+    let first = Document::new();
+    let second = Document::new();
     let root = element(&first, "root");
     let child = element(&first, "child");
     let grandchild = element(&first, "grandchild");
@@ -327,7 +306,7 @@ fn append_child_errors() {
 
 #[test]
 fn insert_child_errors() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let child = element(&document, "child");
     root.append_child(child.clone());
@@ -347,7 +326,7 @@ fn insert_child_errors() {
 
 #[test]
 fn relative_insertion_errors() {
-    let document = Document::empty();
+    let document = Document::new();
     let root = element(&document, "root");
     let child = element(&document, "child");
     let unrelated = element(&document, "unrelated");
@@ -368,8 +347,8 @@ fn relative_insertion_errors() {
 
 #[test]
 fn replace_with_errors() {
-    let first = Document::empty();
-    let second = Document::empty();
+    let first = Document::new();
+    let second = Document::new();
     let root = element(&first, "root");
     let parent = element(&first, "parent");
     let child = element(&first, "child");
@@ -484,17 +463,14 @@ fn parse_file_reports_io_errors() {
         |error| matches!(error, XmlError::Io(_)),
     );
     assert_variant(
-        "biodivine_lib_xml_dom::Document::empty().write_file(",
-        Document::empty().write_file("/nonexistent/dir/file.xml"),
+        "biodivine_lib_xml_dom::Document::new().write_file(",
+        Document::new().write_file("/nonexistent/dir/file.xml"),
         "Io",
         |error| matches!(error, XmlError::Io(_)),
     );
 }
 
 /// Unclosed elements and `xml`-target processing instructions are both rejected.
-///
-/// The test was originally a characterisation test that pinned the *wrong* behaviour, precisely so
-/// that a fix could not happen silently; it is now the positive counterpart of that behaviour.
 #[test]
 fn unclosed_elements_and_xml_target_pis_are_rejected() {
     assert_variant(

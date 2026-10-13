@@ -3,6 +3,7 @@
 //! Everything in this module is a *rule* that needs the namespace scope of a node but not the tree
 //! itself, so it can live with the rest of the specification logic. The traversal that feeds these
 //! results is [`crate::Document::validate`], which produces [`crate::ValidationErrorKind`] values.
+//! The module is crate-internal: its findings reach users as those values.
 //!
 //! Two rules are worth calling out because they are the ones that a "no magic" editing API needs
 //! validation to catch (which is what keeps the editing API out of the way):
@@ -29,7 +30,7 @@ use crate::xml_spec::{NCName, RESERVED_XML_URI};
 /// should be fed the innermost-first list a node sees, so that a shadowed outer declaration never
 /// overwrites the inner one.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct NamespaceScope {
+pub(crate) struct NamespaceScope {
     /// Prefix (`None` = default namespace) to URI; `None` means "declared as empty"
     /// (`xmlns=""` or, for a prefixed name, "not bound").
     bindings: BTreeMap<Option<NCName>, Option<String>>,
@@ -37,7 +38,7 @@ pub struct NamespaceScope {
 
 impl NamespaceScope {
     /// An empty scope.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
@@ -45,7 +46,7 @@ impl NamespaceScope {
     ///
     /// The first declaration of a prefix wins, which is how shadowing works: the caller passes the
     /// declarations of the node itself first, then those of its ancestors.
-    pub fn from_declarations(
+    pub(crate) fn from_declarations(
         declarations: impl IntoIterator<Item = (Option<NCName>, Option<Namespace>)>,
     ) -> Self {
         let mut scope = Self::new();
@@ -58,13 +59,18 @@ impl NamespaceScope {
     }
 
     /// Declares `prefix` explicitly. Overwrites an existing binding.
-    pub fn insert(&mut self, prefix: Option<NCName>, uri: Option<impl Into<String>>) {
+    #[cfg(test)]
+    pub(crate) fn insert(
+        &mut self,
+        prefix: Option<NCName>,
+        uri: Option<impl Into<String>>,
+    ) {
         self.bindings.insert(prefix, uri.map(Into::into));
     }
 
     /// The raw binding of `prefix`: `None` if the prefix is not declared at all, `Some(None)` if it
     /// is declared as empty, `Some(Some(uri))` if it is bound to `uri`.
-    pub fn get(&self, prefix: Option<&NCName>) -> Option<Option<&str>> {
+    pub(crate) fn get(&self, prefix: Option<&NCName>) -> Option<Option<&str>> {
         self.bindings
             .get(&prefix.cloned())
             .map(|binding| binding.as_deref())
@@ -75,7 +81,7 @@ impl NamespaceScope {
     /// [`rule.namespace-basics.xml-prefix-fixed-binding`](crate::xml_spec::rule_set::rule_namespace_basics_xml_prefix_fixed_binding): `xml` is bound to
     /// `http://www.w3.org/XML/1998/namespace` whether or not it is declared, and it must not be
     /// bound to anything else (which [`Namespace`] already refuses to construct).
-    pub fn resolve(&self, prefix: Option<&NCName>) -> Option<Option<&str>> {
+    pub(crate) fn resolve(&self, prefix: Option<&NCName>) -> Option<Option<&str>> {
         if let Some(prefix) = prefix
             && prefix == "xml"
         {
@@ -83,16 +89,11 @@ impl NamespaceScope {
         }
         self.get(prefix)
     }
-
-    /// Whether the scope is empty (no declarations at all).
-    pub fn is_empty(&self) -> bool {
-        self.bindings.is_empty()
-    }
 }
 
 /// Why a name cannot be resolved from a namespace scope.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ScopeViolation {
+pub(crate) enum ScopeViolation {
     /// The name uses a prefix that is not declared in scope.
     ///
     /// [`rule.namespace-usage.prefix-declared`](crate::xml_spec::rule_set::rule_namespace_usage_prefix_declared).
@@ -153,7 +154,7 @@ pub enum ScopeViolation {
 /// # Errors
 ///
 /// Returns the [`ScopeViolation`] describing why the name is not resolvable.
-pub fn check_element_name(
+pub(crate) fn check_element_name(
     name: &QualifiedName,
     scope: &NamespaceScope,
 ) -> Result<(), ScopeViolation> {
@@ -193,7 +194,7 @@ pub fn check_element_name(
 /// # Errors
 ///
 /// Returns the [`ScopeViolation`] describing why the name is not resolvable.
-pub fn check_attribute_name(
+pub(crate) fn check_attribute_name(
     name: &QualifiedName,
     scope: &NamespaceScope,
 ) -> Result<(), ScopeViolation> {
@@ -279,26 +280,6 @@ fn attribute_in_xml_namespace<'a>(
         ),
     );
     element.attributes.get(&name).map(|value| value.as_ref())
-}
-
-/// Whether a namespace declaration is one the specifications forbid.
-///
-/// [`Namespace`] already refuses to construct such a declaration, so this can only fail for a value
-/// that did not come from [`Namespace`]; it is checked anyway so that the validation pass is
-/// self-contained (and because the rule is a document-level one:
-/// [`rule.namespace-basics.xml-prefix-fixed-binding`](crate::xml_spec::rule_set::rule_namespace_basics_xml_prefix_fixed_binding), `xmlns-prefix-not-declared`,
-/// `xml-namespace-not-default`, `xmlns-namespace-not-default`,
-/// `no-other-prefix-to-xml-namespace`, `no-other-prefix-to-xmlns-namespace`).
-///
-/// # Errors
-///
-/// Returns the reason as a [`String`] if the declaration is one the specification forbids; the
-/// caller turns it into a structured validation issue.
-pub fn check_namespace_declaration(
-    prefix: Option<&NCName>,
-    uri: &str,
-) -> Result<(), String> {
-    crate::xml_spec::validate_namespace(uri, prefix).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

@@ -1,56 +1,45 @@
-"""Pythonic wrappers for validation results."""
+"""Validation results."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import List, Optional
 
 from . import _sys
 from .node_id import NodeId
 
 
+@dataclass(frozen=True)
 class ValidationError:
-    """One problem found by :meth:`Document.validate`."""
+    """One problem found by :meth:`Document.validate`.
 
-    __slots__ = ("_error",)
+    The fields are plain values, so a problem can be compared, hashed and kept after the document
+    is gone. ``node`` can be turned back into a node with :meth:`Document.node`.
+    """
 
-    def __init__(self, error: "_sys.ValidationError") -> None:
-        self._error = error
+    kind: str
+    """A stable snake_case name for the kind of problem, e.g. ``"undeclared_prefix"``."""
+    rule: str
+    """The identifier of the specification rule this problem comes from."""
+    node: Optional[NodeId]
+    """The node the problem is attached to, or ``None`` for a document-wide problem."""
+    message: str
+    """A human-readable description."""
 
-    @property
-    def kind(self) -> str:
-        """A stable snake_case name for the kind of problem, e.g. ``"undeclared_prefix"``."""
-        return self._error.kind()
-
-    @property
-    def rule(self) -> str:
-        """The rule file in ``specification/rules/`` this problem comes from."""
-        return self._error.rule()
-
-    @property
-    def node(self) -> Optional[NodeId]:
-        """The node the problem is attached to, or ``None`` for a document-wide problem."""
-        inner = self._error.node()
-        return None if inner is None else NodeId._wrap(inner)
-
-    @property
-    def message(self) -> str:
-        """A human-readable description."""
-        return self._error.message()
+    @classmethod
+    def _wrap(cls, error: "_sys.ValidationError") -> "ValidationError":
+        node = error.node()
+        return cls(
+            kind=error.kind(),
+            rule=error.rule(),
+            node=None if node is None else NodeId._wrap(node),
+            message=error.message(),
+        )
 
     def __str__(self) -> str:
-        return str(self._error)
-
-    def __repr__(self) -> str:
-        node = self.node
-        return f"ValidationError(kind={self.kind!r}, node={None if node is None else int(node)}, message={self.message!r})"
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ValidationError):
-            return NotImplemented
-        return self._error == other._error
-
-    def __hash__(self) -> int:
-        return hash((self.kind, self.message, None if self.node is None else int(self.node)))
+        if self.node is None:
+            return f"{self.message} [{self.rule}]"
+        return f"node {self.node}: {self.message} [{self.rule}]"
 
 
 class ValidationErrors(list):
@@ -64,9 +53,6 @@ class ValidationErrors(list):
             for problem in errors:
                 print(problem.kind, problem.message)
     """
-
-    def __init__(self, errors: List[ValidationError]) -> None:
-        super().__init__(errors)
 
     def kinds(self) -> List[str]:
         """The kinds of all problems, in order."""

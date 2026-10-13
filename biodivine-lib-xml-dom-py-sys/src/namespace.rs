@@ -15,7 +15,7 @@ use crate::error::to_py_err;
 /// `XmlNamespaceError` (or `XmlSyntaxError` for a bad prefix).
 ///
 /// Equality is structural (URI **and** prefix, as Rust's `PartialEq`); use
-/// [`PyNamespace::is_equal_ns`] for the namespace-level comparison that ignores the prefix.
+/// [`PyNamespace::has_same_uri`] for the namespace-level comparison that ignores the prefix.
 #[pyclass(
     name = "Namespace",
     module = "biodivine_lib_xml_dom._sys",
@@ -37,7 +37,6 @@ impl From<Namespace> for PyNamespace {
 impl PyNamespace {
     /// Creates a namespace, with a prefix if one is given.
     ///
-    /// Raises `XmlNamespaceError`/`XmlSyntaxError` if the pair is not a legal namespace.
     /// Raises:
     ///     XmlNamespaceError: if the URI is empty or is one of the reserved URIs.
     ///     XmlSyntaxError: if the prefix is not a valid XML name.
@@ -52,6 +51,7 @@ impl PyNamespace {
     }
 
     /// Creates a namespace without a prefix (a default namespace).
+    ///
     /// Raises:
     ///     XmlNamespaceError: if the URI is empty or is one of the reserved URIs.
     #[staticmethod]
@@ -62,6 +62,7 @@ impl PyNamespace {
     }
 
     /// Creates a namespace with a prefix.
+    ///
     /// Raises:
     ///     XmlSyntaxError: if the prefix is not a valid XML name.
     ///     XmlNamespaceError: if the URI/prefix pair is not a legal namespace.
@@ -82,27 +83,20 @@ impl PyNamespace {
         self.inner.prefix_str().map(|prefix| prefix.to_string())
     }
 
-    /// The namespace prefix as a string, or `None`.
-    pub fn prefix_str(&self) -> Option<String> {
-        self.inner.prefix_str().map(|prefix| prefix.to_string())
-    }
-
     /// Whether this namespace and `other` have the same URI (the specification's notion of
     /// namespace equality; the prefix is irrelevant).
-    pub fn is_equal_ns(&self, other: &PyNamespace) -> bool {
-        self.inner.is_equal_ns(&other.inner)
+    pub fn has_same_uri(&self, other: &PyNamespace) -> bool {
+        self.inner.has_same_uri(&other.inner)
     }
 
-    /// A hash consistent with `__eq__` (the same value Rust's `Hash` produces, so
-    /// equal handles hash equally and can be used as dictionary keys).
+    /// A hash consistent with `__eq__`.
     pub fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.inner.hash(&mut hasher);
         hasher.finish()
     }
 
-    /// Equality with another handle of the same type: the same node/document/value
-    /// (Rust's `PartialEq`). Python object identity is *not* part of it.
+    /// Two namespaces are equal if their URI and their prefix agree.
     pub fn __eq__(&self, other: &Self) -> bool {
         self.inner == other.inner
     }
@@ -117,8 +111,7 @@ impl PyNamespace {
         }
     }
 
-    /// The value as a string: a node as XML, a name as `prefix:local`, a namespace as
-    /// `prefix:uri` (or just the URI), a number as its digits.
+    /// The namespace as `prefix:uri`, or just the URI for a default namespace.
     pub fn __str__(&self) -> String {
         match self.inner.prefix_str() {
             Some(prefix) => format!("{prefix}:{}", self.inner.uri()),

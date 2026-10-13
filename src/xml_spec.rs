@@ -2,12 +2,15 @@ use crate::error::XmlError;
 use std::borrow::Cow;
 use std::sync::Arc;
 
-pub mod declaration;
+mod declaration;
 pub mod rule_set;
-pub mod rules;
-pub mod validation;
+#[cfg(test)]
+pub(crate) mod rules;
+pub(crate) mod validation;
 
-pub use declaration::{UTF8_ENCODING_NAME, XML_VERSION, XmlDeclaration};
+pub use declaration::{
+    UTF8_ENCODING_NAME, XML_VERSION, XmlDeclaration, encoding_is_utf8,
+};
 
 /// Validates `s` and returns it as an `Arc<str>`, or a validation error naming the expected
 /// content type.
@@ -74,7 +77,7 @@ pub(crate) fn normalize_line_ends(input: &str) -> Cow<'_, str> {
 /// repetitive content such as an attribute value or a fully qualified name.
 ///
 /// `validate` is called with the raw string; a failing argument produces `error(...)` with the
-/// message `'<value>' is not a valid <display_name>`.
+/// message `"<value>" is not a valid <display_name>`, with the value in `Debug` form.
 ///
 /// The type is deliberately only constructible through [`TryFrom`], so a value of this type is
 /// always valid: low-level integrity is enforced by construction.
@@ -171,12 +174,12 @@ macro_rules! validated_string_newtype {
 /// The `xml` prefix is by definition bound to this namespace.
 /// It may, but need not, be declared, and must not be undeclared or bound to any other namespace.
 /// Other prefixes must not be bound to this namespace, and it must not be declared as the default namespace.
-pub(crate) const RESERVED_XML_URI: &str = "http://www.w3.org/XML/1998/namespace";
+pub const RESERVED_XML_URI: &str = "http://www.w3.org/XML/1998/namespace";
 
 /// The `xmlns` prefix is used only to declare namespace bindings and is by definition bound
 /// to this namespace. It must not be declared or undeclared. Other prefixes must not be bound
 /// to this namespace, and it must not be declared as the default namespace.
-pub(crate) const RESERVED_XMLNS_URI: &str = "http://www.w3.org/2000/xmlns/";
+pub const RESERVED_XMLNS_URI: &str = "http://www.w3.org/2000/xmlns/";
 
 validated_string_newtype! {
     /// Represents a valid XML NCName (Name without colons).
@@ -265,7 +268,7 @@ fn is_valid_text(s: &str) -> bool {
 /// Check if a char is a legal XML character per the Char production.
 /// Char ::= #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
 pub(crate) fn is_legal_char(c: char) -> bool {
-    let cp = c as u32;
+    let cp = u32::from(c);
     matches!(cp, 0x9 | 0xA | 0xD | 0x20..=0xD7FF | 0xE000..=0xFFFD | 0x10000..=0x10FFFF)
 }
 
@@ -446,7 +449,7 @@ fn is_valid_name_with_colon(s: &str, allow_colon: bool) -> bool {
 ///
 /// When `allow_colon` is `true`, `:` is permitted (Name). When `false`, it is not (NCName).
 fn is_name_start_char(c: char, allow_colon: bool) -> bool {
-    let cp = c as u32;
+    let cp = u32::from(c);
     (allow_colon && c == ':')
         || c == '_'
         || matches!(cp, 65..=90 | 97..=122)
@@ -462,7 +465,7 @@ fn is_name_start_char(c: char, allow_colon: bool) -> bool {
 ///
 /// When `allow_colon` is `true`, `:` is permitted (Name). When `false`, it is not (NCName).
 fn is_name_char(c: char, allow_colon: bool) -> bool {
-    let cp = c as u32;
+    let cp = u32::from(c);
     is_name_start_char(c, allow_colon)
         || c == '-'
         || c == '.'
@@ -489,7 +492,7 @@ pub fn is_valid_xml_space_value(value: &str) -> bool {
 /// a primary subtag of 1-8 ASCII alphanumerics **starting with a letter**, followed by any number
 /// of `-`-separated subtags of 1-8 ASCII alphanumerics. That accepts `en`, `en-GB`, `de-CH-1901`,
 /// `zh-Hant-TW`, `x-private` and `i-klingon`, and rejects what the rule's violating example
-/// rejects (`en_US_very_long_invalid`: underscores, an empty-free but over-long subtag set and a
+/// rejects (`en_US_very_long_invalid`: underscores, subtags longer than eight characters and a
 /// non-letter start are all refused).
 pub fn is_valid_language_tag(value: &str) -> bool {
     if value.is_empty() {
@@ -1054,7 +1057,7 @@ mod tests {
 }
 
 #[cfg(test)]
-mod g3_tests {
+mod normalisation_and_value_tests {
     use super::*;
 
     #[test]

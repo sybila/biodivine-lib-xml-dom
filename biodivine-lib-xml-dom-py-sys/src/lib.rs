@@ -2,15 +2,26 @@
 //!
 //! # Where this layer sits
 //!
-//! The project ships three layers, and this is the middle one:
+//! The XML library reaches Python through four layers, and this crate is the second one:
 //!
 //! ```text
 //! biodivine-lib-xml-dom         the Rust library (no PyO3 anywhere, by design)
 //! biodivine-lib-xml-dom-py-sys  this crate: one Python class/function per Rust item, delegating
 //!                               without adding behaviour
-//! biodivine_lib_xml_dom         the pure-Python package (see `python/`): argument coercion,
-//!                               Pythonic protocols, conveniences - and nothing else
+//! biodivine-sys                 the native extension of the Biodivine Python bindings: links
+//!                               every `_sys` crate into one module and calls [`register`] to fill
+//!                               its `biodivine_sys.xml_dom` submodule
+//! biodivine                     the pure-Python package; `biodivine.xml_dom` adds argument
+//!                               coercion, Pythonic protocols and conveniences - and nothing else
 //! ```
+//!
+//! The last two layers live in the `biodivine-py` repository. This crate is not a Python extension
+//! on its own: it is a library of `#[pyclass]` types that the aggregate extension links in. Because
+//! every Biodivine `_sys` crate ends up in the same native module, a binding crate of another
+//! library can depend on this one and accept or return [`PyDocument`], [`PyElement`] and the other
+//! types directly, and Python sees one class for each of them rather than one per extension. That
+//! is also why the crate is never published: it is only ever consumed by the aggregate extension
+//! (and by binding crates that build on it), pinned to a matching revision of the core crate.
 //!
 //! The rules this layer follows:
 //!
@@ -76,18 +87,23 @@ pub use crate::write_options::{
     PyDeclarationStyle, PyEmptyElementStyle, PyWriteOptions, PyXmlDeclaration,
 };
 
-/// The native module, imported by the pure-Python package as `biodivine_lib_xml_dom._sys`.
+/// Adds every class, exception and constant of the XML bindings to `module`.
 ///
-/// Everything it exposes is documented on the Rust side; the Python package mirrors the names so
-/// that `biodivine_lib_xml_dom.Document` is the Pythonic wrapper of `_sys.Document`.
-#[pymodule]
-fn _sys(module: &Bound<'_, PyModule>) -> PyResult<()> {
+/// The aggregate extension (`biodivine-sys`) creates the `biodivine_sys.xml_dom` submodule and
+/// calls this function on it; the module path is also the one every class of this crate declares,
+/// so the classes and the module agree on where they live.
+///
+/// # Errors
+///
+/// Fails with the Python exception raised by the interpreter when an attribute cannot be added to
+/// `module`.
+pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add(
         "__doc__",
         "Native bindings of biodivine-lib-xml-dom (the `_sys` layer).",
     )?;
     // The version comes from this crate's manifest, which inherits it from `[workspace.package]`,
-    // so the Python package can report the same number without a literal of its own.
+    // so the Python package can report the version of the XML library it wraps.
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
 
     module.add_class::<PyNodeId>()?;

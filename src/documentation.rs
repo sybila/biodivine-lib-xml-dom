@@ -16,8 +16,8 @@
 //! in a plain editor or on a code host.
 //!
 //! The XML rules themselves live next to the specification types in
-//! [`xml_spec::rule_set`](crate::xml_spec::rule_set), and the documentation book that teaches the
-//! library ships with the repository next to them.
+//! [`xml_spec::rule_set`](crate::xml_spec::rule_set). The Biodivine book, which teaches the library
+//! with examples in Rust and Python, is maintained in the `biodivine` workspace repository.
 
 /// How the library is built and why, including the trade-offs each decision accepts.
 #[doc = include_str!("../docs/design/architecture.md")]

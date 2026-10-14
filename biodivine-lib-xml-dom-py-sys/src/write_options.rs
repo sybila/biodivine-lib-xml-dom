@@ -10,7 +10,7 @@ use crate::error::to_py_err;
 /// When [`PyWriteOptions`] should write the `<?xml ...?>` declaration.
 #[pyclass(
     name = "DeclarationStyle",
-    module = "biodivine_lib_xml_dom._sys",
+    module = "biodivine_sys.xml_dom",
     frozen,
     eq,
     eq_int,
@@ -39,7 +39,7 @@ impl From<PyDeclarationStyle> for DeclarationStyle {
 /// How [`PyWriteOptions`] writes an element that has no children.
 #[pyclass(
     name = "EmptyElementStyle",
-    module = "biodivine_lib_xml_dom._sys",
+    module = "biodivine_sys.xml_dom",
     frozen,
     eq,
     eq_int,
@@ -68,7 +68,7 @@ impl From<PyEmptyElementStyle> for EmptyElementStyle {
 /// written when the document has one, and empty elements are written as `<a/>`.
 #[pyclass(
     name = "WriteOptions",
-    module = "biodivine_lib_xml_dom._sys",
+    module = "biodivine_sys.xml_dom",
     from_py_object
 )]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -128,7 +128,7 @@ impl PyWriteOptions {
 /// to [`PyWriteOptions::declaration`].
 #[pyclass(
     name = "XmlDeclaration",
-    module = "biodivine_lib_xml_dom._sys",
+    module = "biodivine_sys.xml_dom",
     frozen,
     from_py_object
 )]

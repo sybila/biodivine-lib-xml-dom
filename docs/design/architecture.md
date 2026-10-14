@@ -30,8 +30,8 @@ and the public handles (`Node`, `Element`) are a document handle, an index and a
 to that slot.
 
 The model diagram shows this relationship; it is the same picture in the crate documentation and in
-the book (the drawing is kept in `docs/assets/model.svg` and copied into both by
-`scripts/gen_diagrams.py`):
+the Biodivine book (the drawing is kept in `docs/assets/model.svg`, copied into this document by
+`scripts/gen_diagrams.py` and into the book by the book's own copy of that script):
 
 <!-- diagram: model.svg -->
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="300" viewBox="0 0 720 300" role="img" aria-label="A document handle owns a reference to the shared document state; node and element handles are a document handle plus a counted reference to one arena slot.">
@@ -250,9 +250,12 @@ module, which is why the documentation never names one.
   parsing and serialization round trips, validation, cloning, concurrency, garbage collection.
 * **Property tests** (`proptest`) for the invariants that should hold for *every* input: serializing
   and re-parsing, editing sequences, and round trips through mutated input.
-* **Examples** in `examples/` are real programs. `cargo test` compiles them, `make examples` and
-  `scripts/verify.sh` run them, and the Python examples of the book are run by the Python test
-  suite, so no chapter can show code that no longer compiles or runs.
+* **Examples** in `examples/` are real programs. `cargo test` compiles them, and `make examples` and
+  `scripts/verify.sh` run them. The examples of the Biodivine book are programs too, in both Rust
+  and Python, and the book's checks run every one of them.
+* **Binding tests**: `biodivine-lib-xml-dom-py-sys/src/tests.rs` drives the PyO3 wrappers
+  in-process, and the Python test suite of `biodivine.xml_dom` (in `biodivine-py`) tests the Python
+  interface end to end.
 * **Documentation tests**: every rustdoc example is compiled and executed by `cargo test`.
 
 `scripts/verify.sh` runs all of it, plus formatting, clippy in both profiles, the declared minimum
@@ -265,8 +268,8 @@ Rust version, the documentation build and the repository checkers.
 | rustdoc (crate, `xml_spec`, `documentation`) | Rust users and contributors | the code |
 | `xml_spec::rule_set` | anyone checking a rule against the specification | `specification/rules/*.md` |
 | rule coverage (section 10.1) | anyone asking what the library deliberately does not do | `scripts/gen_rule_coverage.py` |
-| the documentation book (`docs/book/`) | people learning the library, in Rust or Python | its own chapters plus the executed examples |
-| the Python API reference | Python users | the docstrings in the bindings and the Python package |
+| the Biodivine book (the `biodivine` workspace) | people learning the library, in Rust or Python | its own chapters plus the executed examples |
+| the Python API reference (`biodivine-py`) | Python users | the docstrings in the bindings and the Python package |
 | `docs/design/` | contributors | this file, `build.md`, `bindings.md`, `rule-coverage.md` |
 
 ### 10.1 Rule summaries and coverage

@@ -10,7 +10,9 @@
 //! * operations that need no interpreter token (creating, attaching, reading, cloning) really can
 //!   be called from a plain Rust thread, which is what "one document, several threads" means;
 //! * a round trip through the bindings goes through every layer (document → element → attribute →
-//!   serialize), and a validation failure carries every problem.
+//!   serialize), and a validation failure carries every problem;
+//! * [`register`](crate::register) fills a module with every class and exception under the names
+//!   the pure-Python layer imports, and the classes report the module they are registered in.
 
 use biodivine_lib_xml_dom::{Document, Element, Node, NodeId, NodeKind};
 use pyo3::prelude::*;
@@ -192,4 +194,50 @@ fn a_document_can_be_shared_by_several_threads() {
     }
     assert!(root.children().is_empty());
     assert_eq!(document.node_count(), 1 + 4 * 100);
+}
+
+#[test]
+fn register_fills_a_module_with_every_public_name() {
+    Python::attach(|py| {
+        let module = PyModule::new(py, "xml_dom").unwrap();
+        crate::register(&module).unwrap();
+        for name in [
+            "__version__",
+            "DeclarationStyle",
+            "Document",
+            "Element",
+            "EmptyElementStyle",
+            "GcStats",
+            "Namespace",
+            "Node",
+            "NodeId",
+            "NodeKind",
+            "QualifiedName",
+            "ValidationError",
+            "WriteOptions",
+            "XmlDeclaration",
+            "XmlError",
+            "XmlSyntaxError",
+            "XmlNamespaceError",
+            "XmlDocumentError",
+            "XmlIoError",
+            "XmlValidationError",
+        ] {
+            assert!(module.hasattr(name).unwrap(), "`{name}` is not registered");
+        }
+        let version: String = module.getattr("__version__").unwrap().extract().unwrap();
+        assert_eq!(version, env!("CARGO_PKG_VERSION"));
+
+        // Classes and exceptions both claim the submodule of the aggregate extension.
+        for name in ["Document", "XmlError"] {
+            let owner: String = module
+                .getattr(name)
+                .unwrap()
+                .getattr("__module__")
+                .unwrap()
+                .extract()
+                .unwrap();
+            assert_eq!(owner, "biodivine_sys.xml_dom", "{name}");
+        }
+    });
 }

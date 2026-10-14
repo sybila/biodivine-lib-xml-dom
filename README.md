@@ -1,9 +1,11 @@
 # Biodivine XML DOM
 
-Biodivine XML DOM is an XML DOM library for Rust with an idiomatic Python package on top, built for
-**document manipulation**: build, edit, traverse, validate and serialize XML trees.
+Biodivine XML DOM is an XML DOM library for Rust with an idiomatic Python interface on top, built
+for **document manipulation**: build, edit, traverse, validate and serialize XML trees.
 
-The Rust crate is called `biodivine-lib-xml-dom`, the Python package `biodivine_lib_xml_dom`.
+The Rust crate is called `biodivine-lib-xml-dom`. In Python, the library is the `biodivine.xml_dom`
+module of the [`biodivine`](https://github.com/sybila/biodivine-py) package, which contains the
+Python interface of every Biodivine library.
 
 The parts that are usually awkward are the parts this library gets right:
 
@@ -31,12 +33,10 @@ Rust:
 cargo add biodivine-lib-xml-dom
 ```
 
-Python (built from this repository, see [`docs/design/build.md`](docs/design/build.md)):
+Python:
 
 ```sh
-python3 -m venv .venv
-.venv/bin/pip install maturin
-make python-extension
+pip install biodivine
 ```
 
 ## Examples
@@ -67,7 +67,7 @@ assert_eq!(
 Python:
 
 ```python
-import biodivine_lib_xml_dom as xml
+import biodivine.xml_dom as xml
 
 document = xml.Document()
 ex = xml.Namespace("http://example.com", "ex")
@@ -86,16 +86,16 @@ assert document.write() == (
 )
 ```
 
-Both examples are tested: the Rust one as a documentation test, the Python one by the Python test
-suite.
+Both examples are tested: the Rust one as a documentation test, the Python one by the checks of the
+Biodivine book.
 
 ## Documentation
 
 | where | what |
 | --- | --- |
 | `cargo doc --open` | the Rust API, including the `documentation` module with the design notes |
-| `docs/book` | the book: tutorials with Rust and Python examples you can switch between (`make docs` builds it) |
-| `biodivine-lib-xml-dom-py-sys/docs` | the Python API reference (`make docs` builds it) |
+| the [Biodivine book](https://github.com/sybila/biodivine) | tutorials with Rust and Python examples you can switch between; this library is its "XML DOM" part |
+| [`biodivine-py`](https://github.com/sybila/biodivine-py) | the Python package and its API reference (`biodivine.xml_dom`) |
 | [`docs/design/architecture.md`](docs/design/architecture.md) | how the library is built and why: the arena model, the collector, the concurrency argument, the trade-offs |
 | [`docs/design/bindings.md`](docs/design/bindings.md) | the Rust ↔ Python mapping, item by item |
 | [`docs/design/rule-coverage.md`](docs/design/rule-coverage.md) | which XML rules this library acts on, in which layer, and what is out of scope |
@@ -106,8 +106,8 @@ suite.
 XML 1.0 (fifth edition) and Namespaces in XML 1.0 (third edition), UTF-8 only. `DOCTYPE`
 declarations are read and ignored, so there is no DTD processing: no DTD-defined entities, attribute
 types or content models, and no validity checking. The book's "Known limitations and gotchas"
-chapter (`docs/book/limitations.md`) lists every deliberate limitation, from top-level comments
-being discarded to the name interner never shrinking.
+chapter lists every deliberate limitation, from top-level comments being discarded to the name
+interner never shrinking.
 
 ## License
 

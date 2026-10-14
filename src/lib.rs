@@ -264,9 +264,9 @@
 //! | [`Document::validate`] and [`ValidationErrorKind`] | whole-document validation and its findings |
 //! | [`xml_spec`] | the specification types, the predicates, and [`xml_spec::rule_set`] with one module per XML rule |
 //! | [`documentation`] | the design notes, the Rust/Python mapping and the [rule coverage](documentation::rule_coverage) |
-//! | the documentation book that ships with the repository | tutorials with Rust and Python examples side by side |
-//! | the `biodivine_lib_xml_dom` Python package | the same API with Pythonic wrappers; see [the bindings map](documentation::bindings) |
-//! | the `examples` directory | runnable programs, including the ones the book embeds |
+//! | the Biodivine book | tutorials with Rust and Python examples side by side |
+//! | the `biodivine.xml_dom` Python module (the `biodivine` package) | the same API with Pythonic wrappers; see [the bindings map](documentation::bindings) |
+//! | the `examples` directory | runnable programs |
 
 mod arena;
 mod cancellation;

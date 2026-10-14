@@ -15,7 +15,7 @@ use crate::node_id::{PyNodeId, raw_index};
 /// typed accessors (`as_element`, `text`, `comment`, `cdata`, `processing_instruction`).
 #[pyclass(
     name = "NodeKind",
-    module = "biodivine_lib_xml_dom._sys",
+    module = "biodivine_sys.xml_dom",
     frozen,
     eq,
     eq_int,
@@ -50,7 +50,7 @@ impl From<NodeKind> for PyNodeKind {
 /// One problem found by whole-document validation.
 #[pyclass(
     name = "ValidationError",
-    module = "biodivine_lib_xml_dom._sys",
+    module = "biodivine_sys.xml_dom",
     frozen,
     from_py_object
 )]

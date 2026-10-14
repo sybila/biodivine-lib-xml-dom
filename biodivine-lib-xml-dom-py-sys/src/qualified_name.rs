@@ -15,7 +15,7 @@ use crate::namespace::PyNamespace;
 /// what makes the attribute maps in the core work.
 #[pyclass(
     name = "QualifiedName",
-    module = "biodivine_lib_xml_dom._sys",
+    module = "biodivine_sys.xml_dom",
     frozen,
     from_py_object
 )]

@@ -36,8 +36,10 @@
 - Public enums and structs with public fields that may grow are `#[non_exhaustive]` (errors,
   validation kinds, options, statistics); the node-kind enums are exhaustive because the XML data
   model fixes them.
-- The Python package never returns a `_sys` object: every value is a Python class of the package (the exception classes
-  are the one exception, re-exported under the package's module name).
+- `biodivine-lib-xml-dom-py-sys` is the thin PyO3 layer only: one wrapper per Rust item, no policy, exposed through
+  `register(module)` and linked into the `biodivine-sys` extension of the `biodivine-py` repository, where the idiomatic
+  Python module (`biodivine.xml_dom`) lives. A change to the public Rust API usually needs a matching change to the
+  wrappers here and to `biodivine.xml_dom` (and the book) in the workspace.
 - Internal modules are organized by feature: one file per type or per independent step of an
   algorithm, named after what it does, with the crate using the modern `foo.rs` + `foo/` layout.
 - Integer conversions are explicit: `as` casts that can truncate, wrap or flip a sign are lint

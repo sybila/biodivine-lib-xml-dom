@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="220" viewBox="0 0 720 220" role="img" aria-label="Three layers: the Rust library, the native PyO3 mirror imported as _sys, and the pure Python package that wraps it.">
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="220" viewBox="0 0 720 220" role="img" aria-label="Three layers: the Rust library, its native PyO3 mirror in the biodivine_sys extension, and the biodivine.xml_dom Python module that wraps it.">
   <style>
     .box { fill: #f8fafc; stroke: #475569; stroke-width: 1.2; }
     .label { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 13px; fill: #0f172a; }
@@ -8,10 +8,10 @@
   </style>
   <text class="title" x="24" y="26">Your program</text>
   <rect class="box" x="24" y="40" width="320" height="70" rx="8"/>
-  <text class="label" x="40" y="66">biodivine_lib_xml_dom</text>
-  <text class="small" x="40" y="86">the Python package: coercion, protocols, conveniences</text>
+  <text class="label" x="40" y="66">biodivine.xml_dom</text>
+  <text class="small" x="40" y="86">the Python module: coercion, protocols, conveniences</text>
   <rect class="box" x="24" y="130" width="320" height="70" rx="8"/>
-  <text class="label" x="40" y="156">biodivine_lib_xml_dom._sys</text>
+  <text class="label" x="40" y="156">biodivine_sys.xml_dom</text>
   <text class="small" x="40" y="176">the native extension: a one-to-one mirror of the Rust API</text>
   <rect class="box" x="380" y="85" width="316" height="70" rx="8"/>
   <text class="label" x="396" y="111">biodivine-lib-xml-dom</text>

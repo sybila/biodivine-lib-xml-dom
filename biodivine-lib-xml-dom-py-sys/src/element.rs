@@ -2,8 +2,8 @@
 //!
 //! Rust's `Element` derefs to `Node`, so an element has both APIs. Python has no equivalent of
 //! `Deref`, so this class exposes the element-specific API plus [`PyElement::node`] for the tree
-//! API. The pure-Python `Element` (in `python/biodivine_lib_xml_dom/element.py`) inherits from the
-//! pure-Python `Node` and therefore does offer both in one object; see
+//! API. The pure-Python `Element` (`biodivine.xml_dom.Element`, in the `biodivine-py` repository)
+//! inherits from the pure-Python `Node` and therefore does offer both in one object; see
 //! [`documentation::bindings`](biodivine_lib_xml_dom::documentation::bindings).
 
 use biodivine_lib_xml_dom::xml_spec::NCName;
@@ -21,11 +21,7 @@ use crate::node_id::{PyNodeId, raw_index};
 use crate::qualified_name::PyQualifiedName;
 
 /// A handle to an element node of a document.
-#[pyclass(
-    name = "Element",
-    module = "biodivine_lib_xml_dom._sys",
-    from_py_object
-)]
+#[pyclass(name = "Element", module = "biodivine_sys.xml_dom", from_py_object)]
 #[derive(Debug, Clone)]
 pub struct PyElement {
     pub(crate) inner: Element,

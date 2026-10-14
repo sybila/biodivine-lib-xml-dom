@@ -7,9 +7,8 @@ Run from the repository root:
     python3 scripts/gen_diagrams.py --check    # fail if a document is out of date
 
 The diagrams are SVG files under `docs/assets/`. They have to appear *inline* in the documents that
-show them, because those documents are rendered twice: as markdown by the documentation book and,
-verbatim, as rustdoc by the `documentation` module of the crate. A markdown image reference works in
-the book (Sphinx copies the file) but silently becomes a dead image in rustdoc, so the documents
+show them, because those documents are rendered verbatim as rustdoc by the `documentation` module of
+the crate, where a markdown image reference silently becomes a dead image. The documents therefore
 carry the SVG itself and this script keeps the copy in step with the file:
 
     <!-- diagram: model.svg -->
@@ -17,7 +16,8 @@ carry the SVG itself and this script keeps the copy in step with the file:
     <!-- /diagram -->
 
 The file under `docs/assets/` stays the single source of truth; the script reports a document that
-has drifted from it, which is what `--check` is for.
+has drifted from it, which is what `--check` is for. The Biodivine book shows some of the same
+diagrams and keeps its copies in step with these files in the same way.
 """
 
 import argparse
@@ -33,8 +33,6 @@ ASSETS = ROOT / "docs" / "assets"
 DOCUMENTS = {
     "docs/design/architecture.md": ["model.svg"],
     "docs/design/bindings.md": ["layers.svg"],
-    "docs/book/building-documents.md": ["model.svg"],
-    "docs/book/python-usage.md": ["layers.svg"],
 }
 
 BEGIN = "<!-- diagram: {name} -->"

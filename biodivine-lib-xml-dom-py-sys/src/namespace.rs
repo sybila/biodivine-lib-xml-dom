@@ -18,7 +18,7 @@ use crate::error::to_py_err;
 /// [`PyNamespace::has_same_uri`] for the namespace-level comparison that ignores the prefix.
 #[pyclass(
     name = "Namespace",
-    module = "biodivine_lib_xml_dom._sys",
+    module = "biodivine_sys.xml_dom",
     frozen,
     from_py_object
 )]

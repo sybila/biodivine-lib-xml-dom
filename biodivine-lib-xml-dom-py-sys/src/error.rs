@@ -30,37 +30,37 @@ use pyo3::exceptions::{PyException, PyKeyboardInterrupt};
 use pyo3::prelude::*;
 
 create_exception!(
-    _sys,
+    biodivine_sys.xml_dom,
     XmlError,
     PyException,
     "Base class of every error this library raises."
 );
 create_exception!(
-    _sys,
+    biodivine_sys.xml_dom,
     XmlSyntaxError,
     XmlError,
     "The input document is not well-formed XML."
 );
 create_exception!(
-    _sys,
+    biodivine_sys.xml_dom,
     XmlNamespaceError,
     XmlError,
     "A namespace is used in a way the specification forbids."
 );
 create_exception!(
-    _sys,
+    biodivine_sys.xml_dom,
     XmlDocumentError,
     XmlError,
     "A document operation is not allowed (foreign document, cycle, bad index, ...)."
 );
 create_exception!(
-    _sys,
+    biodivine_sys.xml_dom,
     XmlIoError,
     XmlError,
     "An underlying I/O operation failed."
 );
 create_exception!(
-    _sys,
+    biodivine_sys.xml_dom,
     XmlValidationError,
     XmlError,
     "Whole-document validation found problems; the list of them is in `args[1]`."

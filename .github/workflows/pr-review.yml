@@ -1,0 +1,78 @@
+name: pr-review
+
+# PR-Agent (https://docs.pr-agent.ai) reviews pull requests whenever one is opened or marked
+# ready for review, and answers the `/review`, `/describe`, `/improve` and `/ask` commands that
+# are posted as pull request comments.
+#
+# The model is served by OpenRouter, so the same workflow can reach any of the models it hosts.
+# The model and the key are per-repository settings:
+#
+#   repository variable  PR_REVIEW_MODEL       OpenRouter model slug, e.g. anthropic/claude-sonnet-5
+#                                              (or one of the routers, e.g. openrouter/auto)
+#   repository variable  PR_REVIEW_MAX_TOKENS  optional context window in tokens (default: 32000)
+#   repository secret    OPENROUTER_API_KEY    OpenRouter API key
+#
+# `pull_request_target` (rather than `pull_request`) is used so that pull requests coming from
+# forks can read these credentials. PR-Agent fetches the diff through the GitHub API and never
+# checks out or executes the pull request code, so no untrusted code runs with these values.
+# For the same reason, do not add a checkout or build step for the pull request head to this job.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review]
+  issue_comment:
+    types: [created, edited]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Ignore bot activity and comments that are not attached to a pull request.
+    if: >-
+      github.event.sender.type != 'Bot' &&
+      (github.event_name == 'pull_request_target' || github.event.issue.pull_request)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Verify the model configuration
+        env:
+          MODEL: ${{ vars.PR_REVIEW_MODEL }}
+          API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          missing=""
+          [ -n "$MODEL" ]   || missing="$missing PR_REVIEW_MODEL (repository variable)"
+          [ -n "$API_KEY" ] || missing="$missing OPENROUTER_API_KEY (repository secret)"
+          if [ -n "$missing" ]; then
+            echo "::error::PR-Agent is not configured; missing:$missing"
+            exit 1
+          fi
+
+      - name: Run PR-Agent
+        # Pinned to a released image; see the PR-Agent documentation for digests and newer
+        # versions (https://docs.pr-agent.ai/installation/github/#using-a-specific-release).
+        uses: docker://pragent/pr-agent:0.47.0-github_action
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The `openrouter/` prefix routes the request through OpenRouter, so keep it on the
+          # model slug. A prefixed slug is not in PR-Agent's known-model table, so it needs an
+          # explicit token limit (PR_REVIEW_MAX_TOKENS).
+          config.model: "openrouter/${{ vars.PR_REVIEW_MODEL }}"
+          # Override PR-Agent's built-in fallback (`gpt-5.6-terra` on OpenAI) with no fallback.
+          config.fallback_models: '[]'
+          config.custom_model_max_tokens: ${{ vars.PR_REVIEW_MAX_TOKENS || '32000' }}
+          config.max_model_tokens: ${{ vars.PR_REVIEW_MAX_TOKENS || '32000' }}
+          OPENROUTER.KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # Run the tools automatically when a pull request is opened. Add "synchronize" to
+          # `pr_actions` (and to the `pull_request_target` types above) to also review new pushes.
+          github_action_config.auto_review: "true"
+          github_action_config.auto_describe: "true"
+          github_action_config.auto_improve: "true"
+          github_action_config.pr_actions: '["opened", "reopened", "ready_for_review"]'
+          # Fail the job (instead of finishing green) when a tool reports an error.
+          github_action_config.fail_on_tool_errors: "true"

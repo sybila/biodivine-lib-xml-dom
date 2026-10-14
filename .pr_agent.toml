@@ -1,0 +1,21 @@
+# Repository-level configuration for PR-Agent (https://docs.pr-agent.ai).
+#
+# Endpoint, model and credentials are deliberately not configured here: those are
+# host-controlled settings supplied through the GitHub Actions variables and secrets that are
+# documented in `.github/workflows/pr-review.yml`.
+
+[ignore]
+# The W3C specification snapshots are third-party reference material, not code to review.
+glob = ["specification/**"]
+
+[pr_reviewer]
+# AGENTS.md is included as context by default, and remains the source of truth for conventions.
+# These instructions only add the review focus that is specific to this repository.
+extra_instructions = """
+Project-specific review focus:
+
+- XML semantics: when a change affects how documents are parsed, validated or serialized, check it
+  against the specifications under specification/ and the rule coverage notes in docs/design/.
+- Bindings parity: a change to the public Rust API should be mirrored in biodivine-lib-xml-dom-py-sys
+  and in the downstream biodivine.xml_dom Python module.
+"""

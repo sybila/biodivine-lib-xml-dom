@@ -9,7 +9,7 @@ jobs:
   deploy:
     uses: sybila/github-workflows/.github/workflows/rust-release-and-publish.yml@main
     with:
-      min-rust-version: "1.88.0"
+      min-rust-version: "1.95.0"
       repository-url: "https://github.com/sybila/biodivine-lib-xml-dom.git"
     secrets:
       LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}

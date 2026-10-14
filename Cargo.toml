@@ -1,22 +1,21 @@
 [package]
 name = "biodivine-lib-xml-dom"
-version.workspace = true
 edition = "2024"
-rust-version.workspace = true
 description = "An XML DOM library with safe namespace handling and thread-safe documents."
-license.workspace = true
-authors.workspace = true
-repository.workspace = true
 readme = "README.md"
 keywords = ["xml", "dom", "namespace", "parser", "serialization"]
 categories = ["parser-implementations", "text-processing"]
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 # Keep the published crate to the files the build needs: the rule summaries, three design documents
 # and the model diagram are `include_str!`-ed; the W3C specification HTML and the development tooling
 # are not.
 exclude = [
     ".rustfmt.toml",
     "AGENTS.md",
-    "clippy.toml",
     "specification/*.html",
     "docs/design/build.md",
     "docs/assets/layers.svg",
@@ -38,11 +37,14 @@ members = ["biodivine-lib-xml-dom-py-sys"]
 # `biodivine.xml_dom` reports the same number as its `__version__`.
 [workspace.package]
 version = "0.1.0"
-# `cargo +1.88.0 test --workspace` is part of `make verify`, and the CI workflow's
-# `min-rust-version` matches this value.
-rust-version = "1.88"
+# `cargo +1.95.0 test --workspace` is part of `make verify`, and the CI workflow's
+# `min-rust-version` matches this value. Clippy reads it as its `msrv` as well, so a lint
+# suggestion never recommends an API this version does not have; there is deliberately no
+# `clippy.toml`, whose per-lint options cannot be expressed in `Cargo.toml` but whose only entry
+# here would just repeat this field.
+rust-version = "1.95"
 license = "MIT"
-authors = ["Sybila"]
+authors = ["Samuel Pastva <sam.pastva@gmail.com>", "Sybila Laboratory <sybila@fi.muni.cz>"]
 repository = "https://github.com/sybila/biodivine-lib-xml-dom"
 
 # Every public item is documented: `missing_docs` makes that a lint instead of a habit, and the

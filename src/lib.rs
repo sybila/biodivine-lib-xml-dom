@@ -1,6 +1,9 @@
 #![deny(rustdoc::broken_intra_doc_links, rustdoc::private_intra_doc_links)]
 //! # Biodivine XML DOM
 //!
+//! > Notice: This project is being maintained with extensive use of large language models.
+//!   However, all major features and releases have been audited by a human contributor.
+//!
 //! Biodivine XML DOM is a Rust library for building, parsing, editing, validating and serializing
 //! XML documents through a familiar Document Object Model (DOM) API, with full namespace awareness
 //! and documents that can be shared between threads.

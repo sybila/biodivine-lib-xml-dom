@@ -18,8 +18,8 @@ cd "$ROOT"
 [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
 
 PYTHON="${PYTHON:-python3}"
-MSRV="1.88.0"
-PINNED="1.95.0"
+MSRV="1.95.0"
+PINNED="1.99.0"
 
 failures=0
 run() {

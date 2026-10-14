@@ -43,7 +43,7 @@ impl CancellationTrigger for CancelAfter {
     fn is_cancelled(&self) -> bool {
         // Saturating: once the countdown reaches zero, the trigger stays cancelled.
         self.remaining
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |value| {
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |value| {
                 Some(value.saturating_sub(1))
             })
             .map(|previous| previous <= 1)

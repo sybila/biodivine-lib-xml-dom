@@ -1,4 +1,17 @@
+[![Crates.io](https://img.shields.io/crates/v/biodivine-lib-xml-dom?style=flat-square)](https://crates.io/crates/biodivine-lib-xml-dom)
+[![PyPI](https://img.shields.io/pypi/v/biodivine?style=flat-square)](https://pypi.org/project/biodivine/)
+[![Api Docs](https://img.shields.io/badge/docs-api-yellowgreen?style=flat-square)](https://docs.rs/biodivine-lib-xml-dom/)
+[![Continuous integration](https://img.shields.io/github/actions/workflow/status/sybila/biodivine-lib-xml-dom/build.yml?branch=master&style=flat-square)](https://github.com/sybila/biodivine-lib-xml-dom/actions?query=workflow%3Abuild)
+[![Coverage](https://img.shields.io/codecov/c/github/sybila/biodivine-lib-xml-dom?style=flat-square)](https://codecov.io/gh/sybila/biodivine-lib-xml-dom)
+[![MSRV](https://img.shields.io/badge/MSRV-1.95-blue?style=flat-square)](https://github.com/sybila/biodivine-lib-xml-dom/blob/master/Cargo.toml)
+[![GitHub issues](https://img.shields.io/github/issues/sybila/biodivine-lib-xml-dom?style=flat-square)](https://github.com/sybila/biodivine-lib-xml-dom/issues)
+[![GitHub last commit](https://img.shields.io/github/last-commit/sybila/biodivine-lib-xml-dom?style=flat-square)](https://github.com/sybila/biodivine-lib-xml-dom/commits/master)
+[![License](https://img.shields.io/crates/l/biodivine-lib-xml-dom?style=flat-square)](https://github.com/sybila/biodivine-lib-xml-dom/blob/master/LICENSE)
+
 # Biodivine XML DOM
+
+ > Notice: This project is being maintained with extensive use of large language models. However, all major features 
+ > and releases have been audited by a human contributor.
 
 Biodivine XML DOM is an XML DOM library for Rust with an idiomatic Python interface on top, built
 for **document manipulation**: build, edit, traverse, validate and serialize XML trees.
@@ -22,8 +35,8 @@ The parts that are usually awkward are the parts this library gets right:
 * **No namespace magic.** Editing never adds, removes or rewrites a namespace declaration; edits are
   silent and fast, and `validate()` is where you ask.
 * **Cancellable long operations.** Parsing, serialization, validation, deep copies and explicit
-  garbage collection honour [cancel-this](https://crates.io/crates/cancel-this) triggers, and a
-  cancelled operation leaves the document unchanged. In Python, Ctrl+C interrupts them.
+  garbage collection honor [cancel-this](https://crates.io/crates/cancel-this) triggers, and a
+  canceled operation leaves the document unchanged. In Python, Ctrl+C interrupts them.
 
 ## Installation
 

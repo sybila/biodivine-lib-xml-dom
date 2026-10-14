@@ -26,11 +26,7 @@ use crate::write_options::{PyWriteOptions, PyXmlDeclaration};
 /// thread does not copy the tree. All node data lives behind a single reader-writer lock, and every
 /// method acquires and releases it. Because there is exactly one lock and it is never re-acquired
 /// while held, no operation can deadlock - and that property holds from Python as well.
-#[pyclass(
-    name = "Document",
-    module = "biodivine_lib_xml_dom._sys",
-    from_py_object
-)]
+#[pyclass(name = "Document", module = "biodivine_sys.xml_dom", from_py_object)]
 #[derive(Debug, Clone)]
 pub struct PyDocument {
     pub(crate) inner: Document,

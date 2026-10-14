@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 /// The object is a snapshot: it describes the arena at the moment the collection finished.
 #[pyclass(
     name = "GcStats",
-    module = "biodivine_lib_xml_dom._sys",
+    module = "biodivine_sys.xml_dom",
     frozen,
     from_py_object
 )]

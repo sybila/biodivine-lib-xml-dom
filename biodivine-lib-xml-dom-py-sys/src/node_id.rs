@@ -27,7 +27,7 @@ pub(crate) fn raw_index(id: NodeId) -> usize {
 /// [`PyNode::ptr_eq`](crate::PyNode::ptr_eq) to compare nodes from possibly different documents.
 #[pyclass(
     name = "NodeId",
-    module = "biodivine_lib_xml_dom._sys",
+    module = "biodivine_sys.xml_dom",
     frozen,
     from_py_object
 )]

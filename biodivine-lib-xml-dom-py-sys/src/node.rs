@@ -39,7 +39,7 @@ impl From<PyNodeArg> for Node {
 /// The handle is cheap to copy, stays valid even if the node is detached, and can be passed between
 /// threads. Cloning the handle refers to the same node; use `deep_clone`/`shallow_clone` to
 /// duplicate the node itself.
-#[pyclass(name = "Node", module = "biodivine_lib_xml_dom._sys", from_py_object)]
+#[pyclass(name = "Node", module = "biodivine_sys.xml_dom", from_py_object)]
 #[derive(Debug, Clone)]
 pub struct PyNode {
     pub(crate) inner: Node,

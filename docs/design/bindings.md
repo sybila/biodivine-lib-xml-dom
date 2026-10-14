@@ -1,9 +1,14 @@
 # The Rust and Python bindings
 
-The Python bindings have two layers on top of the Rust library, and the import path shows the split:
+The Python bindings have two layers on top of the Rust library, and the import path shows the split.
+The native layer is the `biodivine-lib-xml-dom-py-sys` crate of this repository; it is compiled
+into the `biodivine-sys` extension (the `biodivine-py` repository) together with the native layers
+of the other Biodivine libraries, which is what lets their bindings share the XML types. The Python
+layer is the `biodivine.xml_dom` module of the `biodivine` package, in the same repository as the
+extension:
 
 <!-- diagram: layers.svg -->
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="220" viewBox="0 0 720 220" role="img" aria-label="Three layers: the Rust library, the native PyO3 mirror imported as _sys, and the pure Python package that wraps it.">
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="220" viewBox="0 0 720 220" role="img" aria-label="Three layers: the Rust library, its native PyO3 mirror in the biodivine_sys extension, and the biodivine.xml_dom Python module that wraps it.">
   <style>
     .box { fill: #f8fafc; stroke: #475569; stroke-width: 1.2; }
     .label { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 13px; fill: #0f172a; }
@@ -13,10 +18,10 @@ The Python bindings have two layers on top of the Rust library, and the import p
   </style>
   <text class="title" x="24" y="26">Your program</text>
   <rect class="box" x="24" y="40" width="320" height="70" rx="8"/>
-  <text class="label" x="40" y="66">biodivine_lib_xml_dom</text>
-  <text class="small" x="40" y="86">the Python package: coercion, protocols, conveniences</text>
+  <text class="label" x="40" y="66">biodivine.xml_dom</text>
+  <text class="small" x="40" y="86">the Python module: coercion, protocols, conveniences</text>
   <rect class="box" x="24" y="130" width="320" height="70" rx="8"/>
-  <text class="label" x="40" y="156">biodivine_lib_xml_dom._sys</text>
+  <text class="label" x="40" y="156">biodivine_sys.xml_dom</text>
   <text class="small" x="40" y="176">the native extension: a one-to-one mirror of the Rust API</text>
   <rect class="box" x="380" y="85" width="316" height="70" rx="8"/>
   <text class="label" x="396" y="111">biodivine-lib-xml-dom</text>
@@ -29,8 +34,7 @@ The Python bindings have two layers on top of the Rust library, and the import p
 </svg>
 <!-- /diagram -->
 
-`biodivine_lib_xml_dom._sys` is the native module; everything documented lives in
-`biodivine_lib_xml_dom`.
+`biodivine_sys.xml_dom` is the native module; everything documented lives in `biodivine.xml_dom`.
 
 ## 1. What is mirrored, item by item
 
@@ -138,7 +142,7 @@ No binding acquires two document locks at once. The one operation that concerns 
 cross-document copy) goes through `Node::deep_clone_into`, which snapshots the source under a read
 lock, releases it, and only then writes to the target. That is the same argument the Rust core
 makes, so the Python layer inherits it rather than re-establishing it, and signal handlers never run
-under a document lock (§3). `tests-python` shares one document between four Python threads (reads,
+under a document lock (§3). The Python test suite of `biodivine.xml_dom` shares one document between four Python threads (reads,
 writes and validation) under a join timeout, and runs a signal handler that edits the document an
 interrupted operation is working on.
 
@@ -154,7 +158,7 @@ interrupted operation is working on.
 | `XmlDeclaration`, `ValidationError` | owned strings and ids | — | no |
 
 A compile-time assertion for all of them lives in `src/tests.rs::handles_are_send_and_sync`, and
-`tests-python` moves a `Document` and a `Node` between Python threads.
+the Python test suite moves a `Document` and a `Node` between Python threads.
 
 ## 6. Boundary hygiene
 
@@ -167,10 +171,13 @@ A compile-time assertion for all of them lives in `src/tests.rs::handles_are_sen
 
 ## 7. Building and testing
 
-See `docs/design/build.md` for the setup. `extension-module` is enabled by maturin through
-`[tool.maturin] features`, not by default, because `cargo test` links the crate into a test binary
-that needs libpython while a wheel must not link it. The crate's `dev-dependencies` enable
-`pyo3/auto-initialize` for the same reason.
+The binding crate is a plain Rust library: its classes declare `module = "biodivine_sys.xml_dom"`,
+and its `register` function adds them (and the exception classes) to a module created by the
+`biodivine-sys` extension. It is never built as an extension on its own, so it has no
+`extension-module` feature and no Python packaging; `cargo test` links it into a test binary that
+starts an interpreter in-process (the `pyo3/auto-initialize` dev-dependency), which is how
+`src/tests.rs` exercises it. See `docs/design/build.md` for the setup, and the `biodivine-py`
+repository for building the extension and running the Python test suite.
 
 ## 8. Known gaps
 

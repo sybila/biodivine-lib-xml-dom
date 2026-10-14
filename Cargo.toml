@@ -11,31 +11,31 @@ readme = "README.md"
 keywords = ["xml", "dom", "namespace", "parser", "serialization"]
 categories = ["parser-implementations", "text-processing"]
 # Keep the published crate to the files the build needs: the rule summaries, three design documents
-# and the model diagram are `include_str!`-ed; the W3C specification HTML, the book sources and the
-# development tooling are not.
+# and the model diagram are `include_str!`-ed; the W3C specification HTML and the development tooling
+# are not.
 exclude = [
     ".rustfmt.toml",
     "AGENTS.md",
     "clippy.toml",
     "specification/*.html",
-    "docs/book",
     "docs/design/build.md",
     "docs/assets/layers.svg",
     "docs/*.py",
     "docs/build_docs.sh",
-    "docs/requirements.txt",
     "scripts",
     ".github",
     "Makefile",
 ]
 
-# The Python bindings live in a separate crate, so the core crate contains no PyO3 code at all.
+# The thin PyO3 wrappers live in a separate crate, so the core crate contains no PyO3 code at all.
+# The wrapper crate is not published: the `biodivine-sys` Python extension (in the `biodivine-py`
+# repository) depends on it through git and links it together with the wrappers of the other
+# Biodivine libraries.
 [workspace]
 members = ["biodivine-lib-xml-dom-py-sys"]
 
-# Single source of truth for the release numbers: both crates inherit these, the Python package
-# reads its version from the built extension (`biodivine_lib_xml_dom.__version__`) and maturin takes
-# the wheel version from `[package] version` via `dynamic = ["version"]`.
+# Single source of truth for the release numbers: both crates inherit these, and the Python module
+# `biodivine.xml_dom` reports the same number as its `__version__`.
 [workspace.package]
 version = "0.1.0"
 # `cargo +1.88.0 test --workspace` is part of `make verify`, and the CI workflow's

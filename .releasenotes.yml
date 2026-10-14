@@ -1,0 +1,13 @@
+project_type: library
+
+public_api_command: "cargo public-api -sss"
+
+# LLM endpoint (any OpenAI-compatible chat completions API). Required: model, max_context_tokens.
+base_url: https://openrouter.ai/api/v1   # omit for api.openai.com
+model: google/gemini-4-argon
+max_context_tokens: 1048576              # context window of the model, see your provider's model page
+
+# Exclude irrelevant paths from the diff (git pathspecs, passed as :!path)
+diff_exclude_paths:
+  - specification/**
+  - Cargo.lock

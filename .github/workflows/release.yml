@@ -12,5 +12,5 @@ jobs:
       min-rust-version: "1.88.0"
       repository-url: "https://github.com/sybila/biodivine-lib-xml-dom.git"
     secrets:
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       CRATES_IO_API_TOKEN: ${{ secrets.CRATES_IO_API_TOKEN }}

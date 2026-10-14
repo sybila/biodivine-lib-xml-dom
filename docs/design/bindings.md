@@ -104,10 +104,11 @@ These exist in the Python layer only, and each one is a convenience rather than 
 | `XmlError::Validation` | `XmlValidationError`, whose `errors` attribute (and `args[1]`) is a `ValidationErrors` list |
 | anything else | `XmlError` |
 
-All of these derive from `XmlError`, and the message text is the Rust `Display`. The mapping lives
-in exactly one function (`error::to_py_err`), and each subclass is exercised by a pytest case. An
-interrupted operation is not an error of this library: the exception the signal handler raised
-(`KeyboardInterrupt` for Ctrl+C) is propagated unchanged.
+All of these derive from `XmlError`, and the message text is the Rust `Display`. The dispatch lives
+in exactly one function (`error::to_py_err`); the one case with a payload, `XmlValidationError`,
+gets its problem list from a helper (`validation::validation_failure`). Each subclass is exercised
+by a pytest case. An interrupted operation is not an error of this library: the exception the
+signal handler raised (`KeyboardInterrupt` for Ctrl+C) is propagated unchanged.
 
 ## 3. GIL policy and interruption
 
@@ -162,8 +163,8 @@ the Python test suite moves a `Document` and a `Node` between Python threads.
 
 ## 6. Boundary hygiene
 
-* **No panics on input.** Every failure path goes through `error::to_py_err`; the few `expect`
-  calls in `biodivine-lib-xml-dom-py-sys/src/` are on conversions that cannot fail.
+* **No panics on input.** Every failure path goes through `error::to_py_err`; the one `expect`
+  call in `biodivine-lib-xml-dom-py-sys/src/` is on a conversion that cannot fail.
 * **No `panic = "abort"`.** No profile in the workspace sets it, so a panic in the bindings surfaces
   as PyO3's `PanicException` rather than aborting the interpreter.
 * **The mirror is callable from Rust too.** The `#[pymethods]` bodies are `pub`, so this crate's own

@@ -14,6 +14,8 @@ repository.workspace = true
 # and the model diagram are `include_str!`-ed; the W3C specification HTML and the development tooling
 # are not.
 exclude = [
+    ".pr_agent.toml",
+    ".releasenotes.yml",
     ".rustfmt.toml",
     "AGENTS.md",
     "specification/*.html",

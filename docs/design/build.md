@@ -63,9 +63,10 @@ make verify        # or: bash scripts/verify.sh
 
 The script runs every check and prints each command with its exit code: formatting, clippy in both
 profiles, the test suites in debug and release, the declared minimum Rust version and the CI-pinned
-toolchain, Miri, every example, the rustdoc build (of each crate on its own and of the workspace)
-with warnings denied, and the documentation checkers. It is the command to run before opening a pull
-request. The repository scripts need only a plain `python3`.
+toolchain, Miri, every example, the rustdoc build (of the core crate on its own, as docs.rs builds
+it, and of the whole workspace, with and without private items) with warnings denied, and the
+documentation checkers. It is the command to run before opening a pull request. The repository
+scripts need only a plain `python3`.
 
 Narrower targets:
 

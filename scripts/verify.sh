@@ -93,9 +93,9 @@ for example in $(ls examples/*.rs | sed 's|examples/||; s|\.rs||'); do
 done
 
 # --- documentation ----------------------------------------------------------------------------
-# Each crate is documented on its own as well as in the workspace: a workspace build unifies the
-# features of shared dependencies, which can hide a link that only resolves with another crate's
-# features (docs.rs builds the core crate on its own).
+# The core crate is documented on its own as well as in the workspace: a workspace build unifies
+# the features of shared dependencies, which can hide a link that only resolves with another
+# crate's features (docs.rs builds the core crate on its own).
 run env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p biodivine-lib-xml-dom
 run env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 run env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace --document-private-items

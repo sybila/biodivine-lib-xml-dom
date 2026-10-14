@@ -7,10 +7,9 @@ name: Publish to crates.io and generate release info
 
 jobs:
   deploy:
-    uses: sybila/github-workflows/.github/workflows/rust-release-and-publish.yml@main
+    uses: sybila/github-workflows/.github/workflows/rust-release-and-publish.yml@2026-10-14
     with:
       min-rust-version: "1.95.0"
-      repository-url: "https://github.com/sybila/biodivine-lib-xml-dom.git"
     secrets:
       LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       CRATES_IO_API_TOKEN: ${{ secrets.CRATES_IO_API_TOKEN }}

@@ -38,6 +38,17 @@ impl From<Document> for PyDocument {
     }
 }
 
+impl PyDocument {
+    /// The Rust document this handle wraps.
+    ///
+    /// The same bridge as [`PyElement::rust_element`](crate::PyElement::rust_element): the Rust
+    /// APIs of the other Biodivine libraries take a `Document`, and a wrapper crate of one of them
+    /// needs the handle behind the Python class.
+    pub fn rust_document(&self) -> &Document {
+        &self.inner
+    }
+}
+
 impl Default for PyDocument {
     /// An empty document, the same as [`PyDocument::new`].
     fn default() -> Self {

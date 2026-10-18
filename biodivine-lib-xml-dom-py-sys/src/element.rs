@@ -33,6 +33,18 @@ impl From<Element> for PyElement {
     }
 }
 
+impl PyElement {
+    /// The Rust element this handle wraps.
+    ///
+    /// This is the bridge the `_sys` crates of the other Biodivine libraries use: their Rust APIs
+    /// take and return an `Element`, so a wrapper crate that stores one in a Python class of its
+    /// own has to be able to read it back. It is Rust API only -- Python sees the class, never this
+    /// method.
+    pub fn rust_element(&self) -> &Element {
+        &self.inner
+    }
+}
+
 /// Parses an optional prefix given as a Python string.
 fn optional_prefix(prefix: Option<&str>) -> PyResult<Option<NCName>> {
     prefix
